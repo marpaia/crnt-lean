@@ -39,6 +39,25 @@ theorem massActionMonomial_differentiable (y : Complex S) :
 def massActionMonomialGrad (y : Complex S) (x : Concentration S) (j : S) : ℝ :=
   (y j : ℝ) * x j ^ (y j - 1) * ∏ s ∈ Finset.univ.erase j, x s ^ (y s)
 
+/-- The source-monomial gradient, multiplied by the differentiated concentration, reconstructs the
+source stoichiometric coefficient times the source monomial.  This cross-multiplied form avoids a
+division and therefore remains valid even on the boundary. -/
+theorem massActionMonomialGrad_mul_coord (y : Complex S) (x : Concentration S) (j : S) :
+    massActionMonomialGrad y x j * x j = (y j : ℝ) * y.massActionMonomial x := by
+  classical
+  by_cases hj : y j = 0
+  · simp [massActionMonomialGrad, Complex.massActionMonomial, hj]
+  · have hj1 : 1 ≤ y j := Nat.one_le_iff_ne_zero.mpr hj
+    have hmem : j ∈ (Finset.univ : Finset S) := Finset.mem_univ j
+    have hsplit : y.massActionMonomial x =
+        x j ^ y j * ∏ s ∈ Finset.univ.erase j, x s ^ y s := by
+      exact (Finset.mul_prod_erase Finset.univ (fun s => x s ^ y s) hmem).symm
+    have hpow : x j ^ y j = x j ^ (y j - 1) * x j := by
+      conv_lhs => rw [show y j = (y j - 1) + 1 by omega]
+      rw [pow_succ]
+    rw [massActionMonomialGrad, hsplit, hpow]
+    ring
+
 /-- The Fréchet derivative of the source monomial is the dot product with its gradient:
 `∑ j, (∂_j monomial) • proj_j`. -/
 theorem massActionMonomial_hasFDerivAt (y : Complex S) (x : Concentration S) :

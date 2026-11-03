@@ -1,7 +1,15 @@
 import CRNT.Geometry.ZeroSeparatingSurface
 import CRNT.Geometry.FaithfulCurve2D
+import CRNT.Geometry.LogProjectiveFaceCompatibility
+import CRNT.Geometry.ProjectedFaceDimensionCode
+import Mathlib.Algebra.Group.Pointwise.Set.Basic
+import Mathlib.Algebra.Order.Floor.Semiring
 import Mathlib.LinearAlgebra.Dimension.Constructions
 import Mathlib.Analysis.InnerProductSpace.Projection.Submodule
+import Mathlib.Data.Set.Finite.List
+import Mathlib.Topology.Algebra.Module.FiniteDimension
+import Mathlib.Topology.TietzeExtension
+import Mathlib.Topology.UniformSpace.HeineCantor
 
 /-!
 # The dimension induction of the zero-separating surface
@@ -22,12 +30,12 @@ exists is a homogeneous linear feasibility question with a sharp threshold at `f
 than `finrank` active directions always leave a normal; once they span the ambient space, only the
 zero vector is orthogonal to all of them. Consequently the **naive** construction — a single patch
 aligned simultaneously to several attracting directions — becomes over-determined once the active
-directions span, which first occurs in dimension four. This over-determination is not an obstruction
-to the surface's existence: a codimension-1 hypersurface always admits a normal (its tangent is
-`(n−1)`-dimensional), and the over-determination is avoided by *refining the fan* so each patch
-crosses a single uncertainty region, keeping its constraint count below `finrank` (the planar angular
-chaining, lifted to `n` dimensions). The refinement's faithful-transfer engine — admissibility for a
-finer cell carries to the containing coarse cell — is in `CRNT.Geometry.FanRefinement`.
+directions span, which first occurs in dimension four. A codimension-1 hypersurface still has a
+normal at each smooth point. Craciun's construction controls which fan cones constrain that normal
+through its faithful blueprint. The refinement module proves admissibility transfer once a fine
+cell contained in a coarse cell is supplied; it does not yet construct the subdivision or show that
+the resulting surface patches satisfy the normal constraints. That distinction matters in
+dimensions where the active directions may span the ambient space.
 
 ## The ruled-surface step
 
@@ -101,8 +109,8375 @@ namespace CRNT
 
 namespace ZeroSeparatingInduction
 
+open scoped Pointwise
+
 open scoped InnerProductSpace
 open ZeroSeparatingCurve2D
+
+/-- Craciun v3, §8 Step 1: a nonzero ray in the nonnegative orthant has a first positive
+intersection with the outer boundary of any coordinate box with positive side lengths. The ray
+segment up to that point stays in the box, and the endpoint lies on at least one box face. This is
+the pointwise radial operation used to extend lower-dimensional boundary tiles to the blue box. -/
+theorem exists_radial_box_exit {n : ℕ} (x upper : Fin n → ℝ)
+    (hx : ∀ i, 0 ≤ x i) (hxne : x ≠ 0) (hupper : ∀ i, 0 < upper i) :
+    ∃ q : ℝ × Fin n, 0 < q.1 ∧ 0 < x q.2 ∧ q.1 * x q.2 = upper q.2 ∧
+      ∀ s, 0 ≤ s → s ≤ q.1 → ∀ j, 0 ≤ s * x j ∧ s * x j ≤ upper j := by
+  classical
+  let active : Finset (Fin n) := Finset.univ.filter (fun i => 0 < x i)
+  have hactive : active.Nonempty := by
+    by_contra h
+    have hxzero : ∀ i, x i = 0 := by
+      intro i
+      have hnot : ¬ 0 < x i := by
+        intro hi
+        exact h ⟨i, Finset.mem_filter.mpr ⟨Finset.mem_univ i, hi⟩⟩
+      exact le_antisymm (le_of_not_gt hnot) (hx i)
+    exact hxne (funext hxzero)
+  let ratios : Finset ℝ := active.image (fun i => upper i / x i)
+  have hratios : ratios.Nonempty := Finset.image_nonempty.mpr hactive
+  let t : ℝ := ratios.min' hratios
+  obtain ⟨i, hiActive, hti⟩ := Finset.mem_image.mp
+    (Finset.min'_mem ratios hratios)
+  have hxi : 0 < x i := (Finset.mem_filter.mp hiActive).2
+  have htiPos : 0 < t := by
+    change 0 < ratios.min' hratios
+    rw [← hti]
+    exact div_pos (hupper i) hxi
+  have hface : t * x i = upper i := by
+    change ratios.min' hratios * x i = upper i
+    rw [← hti]
+    field_simp [ne_of_gt hxi]
+  refine ⟨(t, i), htiPos, hxi, hface, ?_⟩
+  intro s hs0 hst j
+  have hbox : t * x j ≤ upper j := by
+    by_cases hxj : 0 < x j
+    · have hjActive : j ∈ active :=
+        Finset.mem_filter.mpr ⟨Finset.mem_univ j, hxj⟩
+      have hjRatio : upper j / x j ∈ ratios :=
+        Finset.mem_image.mpr ⟨j, hjActive, rfl⟩
+      have hmin := Finset.min'_le ratios (upper j / x j) hjRatio
+      exact (le_div_iff₀ hxj).mp hmin
+    · have hxj0 : x j = 0 := le_antisymm (le_of_not_gt hxj) (hx j)
+      simpa [hxj0] using (hupper j).le
+  refine ⟨mul_nonneg hs0 (hx j), ?_⟩
+  exact (mul_le_mul_of_nonneg_right hst (hx j)).trans hbox
+
+/-- The selected first-exit scale and active box face for a nonnegative ray. -/
+noncomputable def radialBoxExitData {n : ℕ} (x upper : Fin n → ℝ)
+    (hx : ∀ i, 0 ≤ x i) (hxne : x ≠ 0) (hupper : ∀ i, 0 < upper i) : ℝ × Fin n :=
+  Classical.choose (exists_radial_box_exit x upper hx hxne hupper)
+
+/-- The selected radial exit certificate retains positivity, face incidence, and containment of
+the entire ray segment in the blue box. -/
+theorem radialBoxExitData_spec {n : ℕ} (x upper : Fin n → ℝ)
+    (hx : ∀ i, 0 ≤ x i) (hxne : x ≠ 0) (hupper : ∀ i, 0 < upper i) :
+    0 < (radialBoxExitData x upper hx hxne hupper).1 ∧
+      0 < x (radialBoxExitData x upper hx hxne hupper).2 ∧
+      (radialBoxExitData x upper hx hxne hupper).1 *
+        x (radialBoxExitData x upper hx hxne hupper).2 =
+          upper (radialBoxExitData x upper hx hxne hupper).2 ∧
+      ∀ s, 0 ≤ s → s ≤ (radialBoxExitData x upper hx hxne hupper).1 →
+        ∀ j, 0 ≤ s * x j ∧ s * x j ≤ upper j :=
+  Classical.choose_spec (exists_radial_box_exit x upper hx hxne hupper)
+
+/-- The endpoint of the selected ray segment on the outer boundary of the coordinate blue box. -/
+noncomputable def radialBoxEndpoint {n : ℕ} (x upper : Fin n → ℝ)
+    (hx : ∀ i, 0 ≤ x i) (hxne : x ≠ 0) (hupper : ∀ i, 0 < upper i) : Fin n → ℝ :=
+  (radialBoxExitData x upper hx hxne hupper).1 • x
+
+/-- The selected radial endpoint lies in the blue box and on one of its outer faces. -/
+theorem radialBoxEndpoint_mem_box_boundary {n : ℕ} (x upper : Fin n → ℝ)
+    (hx : ∀ i, 0 ≤ x i) (hxne : x ≠ 0) (hupper : ∀ i, 0 < upper i) :
+    (∀ j, 0 ≤ radialBoxEndpoint x upper hx hxne hupper j ∧
+      radialBoxEndpoint x upper hx hxne hupper j ≤ upper j) ∧
+      radialBoxEndpoint x upper hx hxne hupper
+        (radialBoxExitData x upper hx hxne hupper).2 =
+          upper (radialBoxExitData x upper hx hxne hupper).2 := by
+  obtain ⟨ht, hi, hface, hsegment⟩ := radialBoxExitData_spec x upper hx hxne hupper
+  constructor
+  · intro j
+    simpa [radialBoxEndpoint, Pi.smul_apply] using
+      hsegment (radialBoxExitData x upper hx hxne hupper).1 (le_of_lt ht) le_rfl j
+  · simpa [radialBoxEndpoint, Pi.smul_apply] using hface
+
+/-- The radial extension of one diagram point is the segment from the origin to its selected
+first intersection with the boundary of the blue box. -/
+def radialBoxRaySegment {n : ℕ} (x upper : Fin n → ℝ)
+    (hx : ∀ i, 0 ≤ x i) (hxne : x ≠ 0) (hupper : ∀ i, 0 < upper i) :
+    Set (Fin n → ℝ) :=
+  {p | ∃ s, 0 ≤ s ∧ s ≤ (radialBoxExitData x upper hx hxne hupper).1 ∧ p = s • x}
+
+/-- Every point on a radial boundary segment remains in the blue box. -/
+theorem radialBoxRaySegment_subset_box {n : ℕ} (x upper : Fin n → ℝ)
+    (hx : ∀ i, 0 ≤ x i) (hxne : x ≠ 0) (hupper : ∀ i, 0 < upper i) :
+    radialBoxRaySegment x upper hx hxne hupper ⊆
+      {p | ∀ j, 0 ≤ p j ∧ p j ≤ upper j} := by
+  rintro p ⟨s, hs0, hst, rfl⟩
+  intro j
+  have hsegment := (radialBoxExitData_spec x upper hx hxne hupper).2.2.2 s hs0 hst j
+  simpa [Pi.smul_apply] using hsegment
+
+/-- The ray segment contains every nonnegative multiple of its source that lies inside the blue
+box. The selected active face of the first-exit point bounds the scale of any such box point. -/
+theorem radialBoxRaySegment_contains_of_ray_in_box {n : ℕ}
+    (x upper : Fin n → ℝ) (hx : ∀ i, 0 ≤ x i) (hxne : x ≠ 0)
+    (hupper : ∀ i, 0 < upper i) {p : Fin n → ℝ} {s : ℝ}
+    (hs : 0 ≤ s) (hp : p = s • x)
+    (hpupper : ∀ i, p i ≤ upper i) :
+    p ∈ radialBoxRaySegment x upper hx hxne hupper := by
+  obtain ⟨_, hi, hface, _⟩ := radialBoxExitData_spec x upper hx hxne hupper
+  have hbound : s * x (radialBoxExitData x upper hx hxne hupper).2 ≤
+      upper (radialBoxExitData x upper hx hxne hupper).2 := by
+    simpa [hp, Pi.smul_apply] using
+      hpupper (radialBoxExitData x upper hx hxne hupper).2
+  have hscale : s * x (radialBoxExitData x upper hx hxne hupper).2 ≤
+      (radialBoxExitData x upper hx hxne hupper).1 *
+        x (radialBoxExitData x upper hx hxne hupper).2 := by
+    simpa [hface] using hbound
+  have hsle : s ≤ (radialBoxExitData x upper hx hxne hupper).1 :=
+    le_of_mul_le_mul_right hscale hi
+  exact ⟨s, hs, hsle, hp⟩
+
+/-- The selected outer-boundary endpoint belongs to its radial boundary segment. -/
+theorem radialBoxEndpoint_mem_radialBoxRaySegment {n : ℕ} (x upper : Fin n → ℝ)
+    (hx : ∀ i, 0 ≤ x i) (hxne : x ≠ 0) (hupper : ∀ i, 0 < upper i) :
+    radialBoxEndpoint x upper hx hxne hupper ∈ radialBoxRaySegment x upper hx hxne hupper := by
+  refine ⟨(radialBoxExitData x upper hx hxne hupper).1,
+    (radialBoxExitData_spec x upper hx hxne hupper).1.le, le_rfl, ?_⟩
+  rfl
+
+/-- Radially extend every point of a lower-dimensional diagram tile from the origin to the blue
+box boundary. The nonnegativity and nonzero hypotheses describe the projective ray chart on which
+Craciun v3 constructs its boundary tiles. -/
+def radialBoxDiagramTile {n : ℕ} (diagramTile : Set (Fin n → ℝ))
+    (upper : Fin n → ℝ)
+    (hdiagramNonnegative : ∀ x ∈ diagramTile, ∀ i, 0 ≤ x i)
+    (hdiagramNonzero : ∀ x ∈ diagramTile, x ≠ 0)
+    (hupper : ∀ i, 0 < upper i) : Set (Fin n → ℝ) :=
+  {p | ∃ x, ∃ hx : x ∈ diagramTile,
+    p ∈ radialBoxRaySegment x upper (hdiagramNonnegative x hx)
+      (hdiagramNonzero x hx) hupper}
+
+/-- A projective source in a diagram tile lifts to the radial boundary tile at every point of its
+ray that remains inside the blue box. This is the reverse inclusion used to turn a covered
+direction diagram into an actual cover of its bounded radial region. -/
+theorem radialBoxDiagramTile_contains_of_ray_in_box {n : ℕ}
+    (diagramTile : Set (Fin n → ℝ)) (upper : Fin n → ℝ)
+    (hdiagramNonnegative : ∀ x ∈ diagramTile, ∀ i, 0 ≤ x i)
+    (hdiagramNonzero : ∀ x ∈ diagramTile, x ≠ 0)
+    (hupper : ∀ i, 0 < upper i) {x p : Fin n → ℝ} {s : ℝ}
+    (hx : x ∈ diagramTile) (hs : 0 ≤ s) (hp : p = s • x)
+    (hpupper : ∀ i, p i ≤ upper i) :
+    p ∈ radialBoxDiagramTile diagramTile upper hdiagramNonnegative hdiagramNonzero hupper :=
+  ⟨x, hx, radialBoxRaySegment_contains_of_ray_in_box x upper
+    (hdiagramNonnegative x hx) (hdiagramNonzero x hx) hupper hs hp hpupper⟩
+
+/-- A positive-coordinate point whose normalized projective source lies in a diagram patch
+belongs to that patch's radial tile, provided the point lies in the blue box. This is the chartwise
+lifting form of the radial construction in Craciun v3, §8 Step 1. -/
+theorem radialBoxDiagramTile_contains_of_normalized_source {n : ℕ}
+    (diagramTile : Set (Fin n → ℝ)) (upper : Fin n → ℝ) (anchor : Fin n)
+    (hdiagramNonnegative : ∀ x ∈ diagramTile, ∀ i, 0 ≤ x i)
+    (hdiagramNonzero : ∀ x ∈ diagramTile, x ≠ 0)
+    (hupper : ∀ i, 0 < upper i) {p : Fin n → ℝ}
+    (hpanchor : 0 < p anchor)
+    (hsource : (fun i => p i / p anchor) ∈ diagramTile)
+    (hpupper : ∀ i, p i ≤ upper i) :
+    p ∈ radialBoxDiagramTile diagramTile upper hdiagramNonnegative hdiagramNonzero hupper := by
+  let x : Fin n → ℝ := fun i => p i / p anchor
+  have hanchor : x anchor = 1 := by
+    simp [x, ne_of_gt hpanchor]
+  have hscale : p = p anchor • x := by
+    funext i
+    change p i = p anchor * (p i / p anchor)
+    field_simp [ne_of_gt hpanchor]
+  exact radialBoxDiagramTile_contains_of_ray_in_box diagramTile upper
+    hdiagramNonnegative hdiagramNonzero hupper hsource hpanchor.le hscale hpupper
+
+/-- A cover of normalized projective directions lifts to a cover of the corresponding
+positive-anchor part of the blue box by radial boundary tiles. This is the chartwise cover transfer
+used when assembling Craciun v3's restricted boundary blueprint. -/
+theorem radialBoxDiagramTiles_cover_of_normalized_source {ι : Sort*} {n : ℕ}
+    (diagramTile : ι → Set (Fin n → ℝ)) (upper : Fin n → ℝ) (anchor : Fin n)
+    (hdiagramNonnegative : ∀ k x, x ∈ diagramTile k → ∀ i, 0 ≤ x i)
+    (hdiagramNonzero : ∀ k x, x ∈ diagramTile k → x ≠ 0)
+    (hupper : ∀ i, 0 < upper i) {p : Fin n → ℝ}
+    (hpanchor : 0 < p anchor) (hpupper : ∀ i, p i ≤ upper i)
+    (hsource : (fun i => p i / p anchor) ∈ ⋃ k, diagramTile k) :
+    p ∈ ⋃ k, radialBoxDiagramTile (diagramTile k) upper
+      (hdiagramNonnegative k) (hdiagramNonzero k) hupper := by
+  obtain ⟨k, hk⟩ := Set.mem_iUnion.mp hsource
+  exact Set.mem_iUnion.mpr ⟨k,
+    radialBoxDiagramTile_contains_of_normalized_source (diagramTile k) upper anchor
+      (hdiagramNonnegative k) (hdiagramNonzero k) hupper hpanchor hk hpupper⟩
+
+/-- Exact ray description of a radial boundary tile: its points are exactly the in-box points on
+rays through its projective source diagram. This is the membership form used to transfer a cover
+or an overlap statement from the projective diagram to the blue box. -/
+theorem mem_radialBoxDiagramTile_iff_exists_source_ray {n : ℕ}
+    (diagramTile : Set (Fin n → ℝ)) (upper : Fin n → ℝ)
+    (hdiagramNonnegative : ∀ x ∈ diagramTile, ∀ i, 0 ≤ x i)
+    (hdiagramNonzero : ∀ x ∈ diagramTile, x ≠ 0)
+    (hupper : ∀ i, 0 < upper i) {p : Fin n → ℝ} :
+    p ∈ radialBoxDiagramTile diagramTile upper hdiagramNonnegative hdiagramNonzero hupper ↔
+      ∃ x ∈ diagramTile, ∃ s : ℝ, 0 ≤ s ∧ p = s • x ∧ ∀ i, p i ≤ upper i := by
+  constructor
+  · rintro ⟨x, hx, hsegment⟩
+    rcases hsegment with ⟨s, hs, hst, hp⟩
+    have hbox := radialBoxRaySegment_subset_box x upper
+      (hdiagramNonnegative x hx) (hdiagramNonzero x hx) hupper
+      ⟨s, hs, hst, hp⟩
+    refine ⟨x, hx, ?_⟩
+    refine ⟨s, ?_⟩
+    exact ⟨hs, hp, fun i => (hbox i).2⟩
+  · rintro ⟨x, hx, hsourceRay⟩
+    rcases hsourceRay with ⟨s, hs, hp, hbox⟩
+    exact radialBoxDiagramTile_contains_of_ray_in_box diagramTile upper
+      hdiagramNonnegative hdiagramNonzero hupper hx hs hp hbox
+
+/-- A radially extended diagram tile lies wholly inside the blue box. -/
+theorem radialBoxDiagramTile_subset_box {n : ℕ} (diagramTile : Set (Fin n → ℝ))
+    (upper : Fin n → ℝ)
+    (hdiagramNonnegative : ∀ x ∈ diagramTile, ∀ i, 0 ≤ x i)
+    (hdiagramNonzero : ∀ x ∈ diagramTile, x ≠ 0)
+    (hupper : ∀ i, 0 < upper i) :
+    radialBoxDiagramTile diagramTile upper hdiagramNonnegative hdiagramNonzero hupper ⊆
+      {p | ∀ j, 0 ≤ p j ∧ p j ≤ upper j} := by
+  rintro p ⟨x, hx, hp⟩
+  exact radialBoxRaySegment_subset_box x upper (hdiagramNonnegative x hx)
+    (hdiagramNonzero x hx) hupper hp
+
+/-- A radial boundary tile is compact when its projective source patch is compact and has a fixed
+coordinate normalized to one. The normalized coordinate bounds the ray parameter by the matching
+blue-box side; the admissible source-scale pairs form a closed subset of a compact product. -/
+theorem isCompact_radialBoxDiagramTile_of_isCompact {n : ℕ}
+    (diagramTile : Set (Fin n → ℝ)) (upper : Fin n → ℝ) (anchor : Fin n)
+    (hdiagramNonnegative : ∀ x ∈ diagramTile, ∀ i, 0 ≤ x i)
+    (hdiagramNonzero : ∀ x ∈ diagramTile, x ≠ 0)
+    (hdiagramAnchor : ∀ x ∈ diagramTile, x anchor = 1)
+    (hupper : ∀ i, 0 < upper i) (hdiagramCompact : IsCompact diagramTile) :
+    IsCompact
+      (radialBoxDiagramTile diagramTile upper hdiagramNonnegative hdiagramNonzero hupper) := by
+  let constraints : Set ((Fin n → ℝ) × ℝ) :=
+    {q | ∀ i, q.2 * q.1 i ≤ upper i}
+  have hconstraints : IsClosed constraints := by
+    have hclosed : IsClosed
+        (⋂ i : Fin n, {q : (Fin n → ℝ) × ℝ | q.2 * q.1 i ≤ upper i}) := by
+      apply isClosed_iInter
+      intro i
+      exact isClosed_Iic.preimage
+        (continuous_snd.mul ((continuous_apply i).comp continuous_fst))
+    have heq : constraints =
+        ⋂ i : Fin n, {q : (Fin n → ℝ) × ℝ | q.2 * q.1 i ≤ upper i} := by
+      ext q
+      simp [constraints]
+    rw [heq]
+    exact hclosed
+  let parameters : Set ((Fin n → ℝ) × ℝ) :=
+    (diagramTile ×ˢ Set.Icc (0 : ℝ) (upper anchor)) ∩ constraints
+  have hparametersClosed : IsClosed parameters := by
+    change IsClosed ((diagramTile ×ˢ Set.Icc (0 : ℝ) (upper anchor)) ∩ constraints)
+    exact hdiagramCompact.isClosed.prod isClosed_Icc |>.inter hconstraints
+  have hparameters : IsCompact parameters := by
+    apply IsCompact.of_isClosed_subset (hdiagramCompact.prod isCompact_Icc)
+      hparametersClosed
+    intro q hq
+    exact hq.1
+  let radial : (Fin n → ℝ) × ℝ → (Fin n → ℝ) := fun q => q.2 • q.1
+  have hradeq :
+      radialBoxDiagramTile diagramTile upper hdiagramNonnegative hdiagramNonzero hupper =
+        radial '' parameters := by
+    ext p
+    constructor
+    · intro hp
+      obtain ⟨x, hx, s, hs, hpeq, hpbox⟩ :=
+        (mem_radialBoxDiagramTile_iff_exists_source_ray diagramTile upper
+          hdiagramNonnegative hdiagramNonzero hupper).mp hp
+      have hsval : p anchor = s := by
+        have h := congrArg (fun z : Fin n → ℝ => z anchor) hpeq
+        simpa [Pi.smul_apply, hdiagramAnchor x hx] using h
+      refine ⟨(x, s), ?_, ?_⟩
+      · change (x, s) ∈
+          (diagramTile ×ˢ Set.Icc (0 : ℝ) (upper anchor)) ∩ constraints
+        refine ⟨⟨hx, hs, ?_⟩, ?_⟩
+        · rw [← hsval]
+          exact hpbox anchor
+        · intro i
+          have hi := hpbox i
+          rw [hpeq, Pi.smul_apply] at hi
+          simpa [smul_eq_mul] using hi
+      · simpa [radial] using hpeq.symm
+    · rintro ⟨q, hq, rfl⟩
+      rcases q with ⟨x, s⟩
+      change (x, s) ∈
+        (diagramTile ×ˢ Set.Icc (0 : ℝ) (upper anchor)) ∩ constraints at hq
+      rcases hq with ⟨⟨hx, hs, _⟩, hcoord⟩
+      apply (mem_radialBoxDiagramTile_iff_exists_source_ray diagramTile upper
+        hdiagramNonnegative hdiagramNonzero hupper).2
+      refine ⟨x, hx, s, hs, rfl, ?_⟩
+      intro i
+      change s * x i ≤ upper i
+      exact hcoord i
+  rw [hradeq]
+  exact hparameters.image (continuous_snd.smul continuous_fst)
+
+/-- Every point of the lower-dimensional diagram tile reaches the outer boundary as part of its
+radial extension. The endpoint's active coordinate records the specific blue-box face incidence. -/
+theorem radialBoxDiagramTile_endpoint_incidence {n : ℕ}
+    (diagramTile : Set (Fin n → ℝ)) (upper : Fin n → ℝ)
+    (hdiagramNonnegative : ∀ x ∈ diagramTile, ∀ i, 0 ≤ x i)
+    (hdiagramNonzero : ∀ x ∈ diagramTile, x ≠ 0)
+    (hupper : ∀ i, 0 < upper i) {x : Fin n → ℝ} (hx : x ∈ diagramTile) :
+    let endpoint := radialBoxEndpoint x upper (hdiagramNonnegative x hx)
+      (hdiagramNonzero x hx) hupper
+    endpoint ∈ radialBoxDiagramTile diagramTile upper
+        hdiagramNonnegative hdiagramNonzero hupper ∧
+      (∀ j, 0 ≤ endpoint j ∧ endpoint j ≤ upper j) ∧
+      endpoint (radialBoxExitData x upper (hdiagramNonnegative x hx)
+        (hdiagramNonzero x hx) hupper).2 =
+          upper (radialBoxExitData x upper (hdiagramNonnegative x hx)
+            (hdiagramNonzero x hx) hupper).2 := by
+  dsimp
+  refine ⟨⟨x, hx, radialBoxEndpoint_mem_radialBoxRaySegment x upper
+    (hdiagramNonnegative x hx) (hdiagramNonzero x hx) hupper⟩, ?_⟩
+  exact radialBoxEndpoint_mem_box_boundary x upper
+    (hdiagramNonnegative x hx) (hdiagramNonzero x hx) hupper
+
+/-- Any point of a radial boundary tile that lies on a coordinate face of the blue box is the
+selected first-exit endpoint of its source ray. This incidence statement sends outer-boundary
+pieces back to their lower-dimensional projective source in Craciun v3, §8 Step 1. -/
+theorem radialBoxDiagramTile_boxFace_incidence {n : ℕ}
+    (diagramTile : Set (Fin n → ℝ)) (upper : Fin n → ℝ)
+    (hdiagramNonnegative : ∀ x ∈ diagramTile, ∀ i, 0 ≤ x i)
+    (hdiagramNonzero : ∀ x ∈ diagramTile, x ≠ 0)
+    (hupper : ∀ i, 0 < upper i) {p : Fin n → ℝ}
+    (hp : p ∈ radialBoxDiagramTile diagramTile upper
+      hdiagramNonnegative hdiagramNonzero hupper)
+    (i : Fin n) (hface : p i = upper i) :
+    ∃ x, ∃ hx : x ∈ diagramTile,
+      p = radialBoxEndpoint x upper (hdiagramNonnegative x hx)
+        (hdiagramNonzero x hx) hupper ∧ 0 < x i := by
+  rcases hp with ⟨x, hx, ⟨s, hs, hsle, hpx⟩⟩
+  have hfaceRay : s * x i = upper i := by
+    calc
+      s * x i = p i := by
+        have hi := congrArg (fun z : Fin n → ℝ => z i) hpx
+        simpa [Pi.smul_apply] using hi.symm
+      _ = upper i := hface
+  have hxi : 0 < x i := by
+    by_contra hnot
+    have hxiZero : x i = 0 := le_antisymm (le_of_not_gt hnot)
+      (hdiagramNonnegative x hx i)
+    rw [hxiZero] at hfaceRay
+    have hupperZero : (0 : ℝ) = upper i := by simpa using hfaceRay
+    exact (ne_of_gt (hupper i)) hupperZero.symm
+  have hspec := radialBoxExitData_spec x upper (hdiagramNonnegative x hx)
+    (hdiagramNonzero x hx) hupper
+  have hexitFaceBound := hspec.2.2.2
+    (radialBoxExitData x upper (hdiagramNonnegative x hx) (hdiagramNonzero x hx) hupper).1
+    hspec.1.le le_rfl i
+  have hscaleBound :
+      (radialBoxExitData x upper (hdiagramNonnegative x hx) (hdiagramNonzero x hx) hupper).1 *
+          x i ≤ s * x i :=
+    hexitFaceBound.2.trans_eq hfaceRay.symm
+  have hexitLe :
+      (radialBoxExitData x upper (hdiagramNonnegative x hx) (hdiagramNonzero x hx) hupper).1 ≤ s :=
+    le_of_mul_le_mul_right hscaleBound hxi
+  have hscale : s =
+      (radialBoxExitData x upper (hdiagramNonnegative x hx) (hdiagramNonzero x hx) hupper).1 :=
+    le_antisymm hsle hexitLe
+  refine ⟨x, hx, ?_, hxi⟩
+  rw [hpx, radialBoxEndpoint]
+  exact congrArg (fun t : ℝ => t • x) hscale
+
+/-- In a fixed affine projective chart, two radial boundary tiles can intersect away from the
+origin only along a ray whose normalized source point lies in both lower-dimensional diagram
+patches. This is the ray-incidence compatibility required when the lower diagram is assembled
+from neighboring tiles. -/
+theorem radialBoxDiagramTile_overlap_source {n : ℕ}
+    (tileA tileB : Set (Fin n → ℝ)) (upper : Fin n → ℝ) (anchor : Fin n)
+    (hA_nonnegative : ∀ x ∈ tileA, ∀ i, 0 ≤ x i)
+    (hA_nonzero : ∀ x ∈ tileA, x ≠ 0)
+    (hA_anchor : ∀ x ∈ tileA, x anchor = 1)
+    (hB_nonnegative : ∀ x ∈ tileB, ∀ i, 0 ≤ x i)
+    (hB_nonzero : ∀ x ∈ tileB, x ≠ 0)
+    (hB_anchor : ∀ x ∈ tileB, x anchor = 1)
+    (hupper : ∀ i, 0 < upper i) :
+    ∀ p, p ∈ radialBoxDiagramTile tileA upper hA_nonnegative hA_nonzero hupper ∩
+        radialBoxDiagramTile tileB upper hB_nonnegative hB_nonzero hupper →
+      p = 0 ∨ ∃ x, ∃ hxA : x ∈ tileA, ∃ hxB : x ∈ tileB, ∃ s, 0 < s ∧
+        s ≤ (radialBoxExitData x upper (hA_nonnegative x hxA)
+          (hA_nonzero x hxA) hupper).1 ∧ p = s • x := by
+  intro p hp
+  rcases hp.1 with ⟨x, hxA, hxRadA⟩
+  rcases hp.2 with ⟨y, hyB, hyRadB⟩
+  rcases hxRadA with ⟨s, hs0, hst, hpx⟩
+  rcases hyRadB with ⟨t, ht0, hut, hpy⟩
+  by_cases hpzero : p = 0
+  · exact Or.inl hpzero
+  · have hspos : 0 < s := by
+      by_contra hnot
+      have hsEq : s = 0 := le_antisymm (le_of_not_gt hnot) hs0
+      apply hpzero
+      rw [hpx, hsEq]
+      simp
+    have hsAnchor : p anchor = s := by
+      have h := congrArg (fun z : Fin n → ℝ => z anchor) hpx
+      simpa [Pi.smul_apply, hA_anchor x hxA] using h
+    have htAnchor : p anchor = t := by
+      have h := congrArg (fun z : Fin n → ℝ => z anchor) hpy
+      simpa [Pi.smul_apply, hB_anchor y hyB] using h
+    have hscale : s = t := by linarith
+    have hxy : x = y := by
+      funext j
+      have hjx := congrArg (fun z : Fin n → ℝ => z j) hpx
+      have hjy := congrArg (fun z : Fin n → ℝ => z j) hpy
+      have hmul : s * x j = s * y j := by
+        calc
+          s * x j = p j := by simpa [Pi.smul_apply] using hjx.symm
+          _ = t * y j := by simpa [Pi.smul_apply] using hjy
+          _ = s * y j := by rw [hscale]
+      exact mul_left_cancel₀ (ne_of_gt hspos) hmul
+    refine Or.inr ⟨x, hxA, hxy ▸ hyB, s, hspos, ?_, hpx⟩
+    simpa [hxy] using hst
+
+/-- Craciun v3, §8 Step 1: radial extensions of two boundary-diagram tiles overlap exactly on
+the radial extension of their common diagram, together with the origin. The origin is shared by
+all radial tiles; away from it, the affine chart normalization makes the source ray unique. This
+is the exact seam identity needed to glue neighboring boundary tiles after their extension to the
+blue-box boundary. -/
+theorem radialBoxDiagramTile_intersection_eq {n : ℕ}
+    (tileA tileB : Set (Fin n → ℝ)) (upper : Fin n → ℝ) (anchor : Fin n)
+    (hA_nonnegative : ∀ x ∈ tileA, ∀ i, 0 ≤ x i)
+    (hA_nonzero : ∀ x ∈ tileA, x ≠ 0)
+    (hA_anchor : ∀ x ∈ tileA, x anchor = 1)
+    (hB_nonnegative : ∀ x ∈ tileB, ∀ i, 0 ≤ x i)
+    (hB_nonzero : ∀ x ∈ tileB, x ≠ 0)
+    (hB_anchor : ∀ x ∈ tileB, x anchor = 1)
+    (hupper : ∀ i, 0 < upper i)
+    (hA_nonempty : tileA.Nonempty) (hB_nonempty : tileB.Nonempty) :
+    radialBoxDiagramTile tileA upper hA_nonnegative hA_nonzero hupper ∩
+      radialBoxDiagramTile tileB upper hB_nonnegative hB_nonzero hupper =
+    radialBoxDiagramTile (tileA ∩ tileB) upper
+      (fun x hx i => hA_nonnegative x hx.1 i)
+      (fun x hx => hA_nonzero x hx.1) hupper ∪ {0} := by
+  ext p
+  constructor
+  · intro hp
+    rcases radialBoxDiagramTile_overlap_source tileA tileB upper anchor
+        hA_nonnegative hA_nonzero hA_anchor hB_nonnegative hB_nonzero hB_anchor
+        hupper p hp with hpzero | ⟨x, hxA, hxB, s, hspos, hst, rfl⟩
+    · exact Set.mem_union_right _ (Set.mem_singleton_iff.mpr hpzero)
+    · apply Set.mem_union_left
+      refine ⟨x, ⟨hxA, hxB⟩, ?_⟩
+      change ∃ r, 0 ≤ r ∧
+        r ≤ (radialBoxExitData x upper
+          (hA_nonnegative x hxA) (hA_nonzero x hxA) hupper).1 ∧
+          s • x = r • x
+      -- The segment scale and source are unchanged; proof arguments are proposition-valued.
+      refine ⟨s, hspos.le, ?_, rfl⟩
+      simpa using hst
+  · intro hp
+    simp only [Set.mem_union, Set.mem_singleton_iff] at hp
+    rcases hp with hpcommon | hpzero
+    · rcases hpcommon with ⟨x, hx, hpsegment⟩
+      have hpA : p ∈ radialBoxDiagramTile tileA upper hA_nonnegative hA_nonzero hupper := by
+        refine ⟨x, hx.1, ?_⟩
+        simpa [radialBoxRaySegment] using hpsegment
+      have hpB : p ∈ radialBoxDiagramTile tileB upper hB_nonnegative hB_nonzero hupper := by
+        refine ⟨x, hx.2, ?_⟩
+        simpa [radialBoxRaySegment] using hpsegment
+      exact ⟨hpA, hpB⟩
+    · have hp0 : p = 0 := hpzero
+      subst p
+      rcases hA_nonempty with ⟨x, hxA⟩
+      rcases hB_nonempty with ⟨y, hyB⟩
+      constructor
+      · refine ⟨x, hxA, ?_⟩
+        exact ⟨0, le_rfl, (radialBoxExitData_spec x upper
+          (hA_nonnegative x hxA) (hA_nonzero x hxA) hupper).1.le, by simp⟩
+      · refine ⟨y, hyB, ?_⟩
+        exact ⟨0, le_rfl, (radialBoxExitData_spec y upper
+          (hB_nonnegative y hyB) (hB_nonzero y hyB) hupper).1.le, by simp⟩
+
+/-- Clipping radial boundary tiles to a projective domain that avoids the origin preserves their
+exact common-source seam. This is the overlap identity after the restriction to `D^P_n` in
+Craciun v3, §8 Step 1; the origin term disappears because that domain lies away from zero. -/
+theorem radialBoxDiagramTile_intersection_clip_eq {n : ℕ}
+    (tileA tileB : Set (Fin n → ℝ)) (upper : Fin n → ℝ) (anchor : Fin n)
+    (domain : Set (Fin n → ℝ))
+    (hA_nonnegative : ∀ x ∈ tileA, ∀ i, 0 ≤ x i)
+    (hA_nonzero : ∀ x ∈ tileA, x ≠ 0)
+    (hA_anchor : ∀ x ∈ tileA, x anchor = 1)
+    (hB_nonnegative : ∀ x ∈ tileB, ∀ i, 0 ≤ x i)
+    (hB_nonzero : ∀ x ∈ tileB, x ≠ 0)
+    (hB_anchor : ∀ x ∈ tileB, x anchor = 1)
+    (hupper : ∀ i, 0 < upper i)
+    (horigin : (0 : Fin n → ℝ) ∉ domain) :
+    (radialBoxDiagramTile tileA upper hA_nonnegative hA_nonzero hupper ∩ domain) ∩
+      (radialBoxDiagramTile tileB upper hB_nonnegative hB_nonzero hupper ∩ domain) =
+    radialBoxDiagramTile (tileA ∩ tileB) upper
+      (fun x hx i => hA_nonnegative x hx.1 i)
+      (fun x hx => hA_nonzero x hx.1) hupper ∩ domain := by
+  ext p
+  constructor
+  · intro hp
+    obtain hpzero | ⟨x, hxA, hxB, s, hspos, _, hpx⟩ :=
+      radialBoxDiagramTile_overlap_source tileA tileB upper anchor
+        hA_nonnegative hA_nonzero hA_anchor hB_nonnegative hB_nonzero hB_anchor
+        hupper p ⟨hp.1.1, hp.2.1⟩
+    · subst p
+      exact False.elim (horigin hp.1.2)
+    · have hbox := radialBoxDiagramTile_subset_box tileA upper hA_nonnegative
+        hA_nonzero hupper hp.1.1
+      have hpcommon : p ∈ radialBoxDiagramTile (tileA ∩ tileB) upper
+          (fun x hx i => hA_nonnegative x hx.1 i)
+          (fun x hx => hA_nonzero x hx.1) hupper :=
+        radialBoxDiagramTile_contains_of_ray_in_box (tileA ∩ tileB) upper
+          (fun x hx i => hA_nonnegative x hx.1 i)
+          (fun x hx => hA_nonzero x hx.1) hupper
+          (x := x) (p := p) (s := s) ⟨hxA, hxB⟩ hspos.le hpx
+          (fun i => (hbox i).2)
+      exact ⟨hpcommon, hp.1.2⟩
+  · intro hp
+    rcases hp.1 with ⟨x, hx, hsegment⟩
+    have hpA : p ∈ radialBoxDiagramTile tileA upper hA_nonnegative hA_nonzero hupper := by
+      refine ⟨x, hx.1, ?_⟩
+      simpa [radialBoxRaySegment] using hsegment
+    have hpB : p ∈ radialBoxDiagramTile tileB upper hB_nonnegative hB_nonzero hupper := by
+      refine ⟨x, hx.2, ?_⟩
+      simpa [radialBoxRaySegment] using hsegment
+    exact ⟨⟨hpA, hp.2⟩, ⟨hpB, hp.2⟩⟩
+
+/-- A shared point of two clipped radial tiles has a unique common lower-dimensional source
+point. Clipping away the origin turns the seam identity into the tile-to-face incidence datum
+used when passing overlaps from the blue-box boundary back to the restricted projective diagram
+(Craciun v3, §8 Step 1). -/
+theorem radialBoxDiagramTile_clip_overlap_source {n : ℕ}
+    (tileA tileB : Set (Fin n → ℝ)) (upper : Fin n → ℝ) (anchor : Fin n)
+    (domain : Set (Fin n → ℝ))
+    (hA_nonnegative : ∀ x ∈ tileA, ∀ i, 0 ≤ x i)
+    (hA_nonzero : ∀ x ∈ tileA, x ≠ 0)
+    (hA_anchor : ∀ x ∈ tileA, x anchor = 1)
+    (hB_nonnegative : ∀ x ∈ tileB, ∀ i, 0 ≤ x i)
+    (hB_nonzero : ∀ x ∈ tileB, x ≠ 0)
+    (hB_anchor : ∀ x ∈ tileB, x anchor = 1)
+    (hupper : ∀ i, 0 < upper i)
+    (horigin : (0 : Fin n → ℝ) ∉ domain) :
+    ∀ p, p ∈ radialBoxDiagramTile tileA upper hA_nonnegative hA_nonzero hupper ∩ domain ∩
+        (radialBoxDiagramTile tileB upper hB_nonnegative hB_nonzero hupper ∩ domain) →
+      ∃ x, x ∈ tileA ∩ tileB ∧ ∃ s : ℝ, 0 < s ∧ p = s • x ∧ p ∈ domain := by
+  intro p hp
+  have hpAB : p ∈
+      radialBoxDiagramTile tileA upper hA_nonnegative hA_nonzero hupper ∩
+        radialBoxDiagramTile tileB upper hB_nonnegative hB_nonzero hupper :=
+    ⟨hp.1.1, hp.2.1⟩
+  obtain hpzero | ⟨x, hxA, hxB, s, hspos, _, hpx⟩ :=
+    radialBoxDiagramTile_overlap_source tileA tileB upper anchor
+      hA_nonnegative hA_nonzero hA_anchor hB_nonnegative hB_nonzero hB_anchor
+      hupper p hpAB
+  · subst p
+    exact False.elim (horigin hp.1.2)
+  · exact ⟨x, ⟨hxA, hxB⟩, s, hspos, hpx, hp.1.2⟩
+
+/-- Craciun v3, §8 Step 1's projective domain `D^P_n`, with coordinate `i` representing
+`X_(i+2)`. The manuscript conditions `X_(n+1) ≥ ... ≥ X_2 ≥ 1` become coordinatewise lower
+bounds by one and monotonicity with the `Fin n` index. -/
+def craciunProjectiveDomain {n : ℕ} : Set (Fin n → ℝ) :=
+  {x | (∀ i, 1 ≤ x i) ∧ ∀ i j, i.val ≤ j.val → x i ≤ x j}
+
+/-- Craciun's projective domain is closed, so intersecting blueprint tiles with it preserves the
+compact restricted patches required by the next finite-cover construction. -/
+theorem isClosed_craciunProjectiveDomain {n : ℕ} :
+    IsClosed (craciunProjectiveDomain (n := n)) := by
+  change IsClosed ({x : Fin n → ℝ | ∀ i, 1 ≤ x i} ∩
+    {x : Fin n → ℝ | ∀ i j, i.val ≤ j.val → x i ≤ x j})
+  have hcoords : IsClosed {x : Fin n → ℝ | ∀ i, 1 ≤ x i} := by
+    rw [Set.setOf_forall]
+    exact isClosed_iInter fun i => isClosed_le continuous_const (continuous_apply i)
+  have hordered : IsClosed {x : Fin n → ℝ | ∀ i j, i.val ≤ j.val → x i ≤ x j} := by
+    rw [Set.setOf_forall]
+    apply isClosed_iInter
+    intro i
+    rw [Set.setOf_forall]
+    apply isClosed_iInter
+    intro j
+    by_cases hij : i.val ≤ j.val
+    · have heq : {x : Fin n → ℝ | i.val ≤ j.val → x i ≤ x j} =
+          {x | x i ≤ x j} := by
+        ext x
+        simp [hij]
+      rw [heq]
+      exact isClosed_le (continuous_apply i) (continuous_apply j)
+    · have heq : {x : Fin n → ℝ | i.val ≤ j.val → x i ≤ x j} = Set.univ := by
+        ext x
+        simp [hij]
+      rw [heq]
+      exact isClosed_univ
+  exact hcoords.inter hordered
+
+/-- A compact radial tile remains compact after restriction to `D^P_n`; this is the compactness
+certificate for the restricted boundary tiles in Craciun v3, §8 Step 1. -/
+theorem isCompact_radialBoxDiagramTile_projectiveDomain {n : ℕ}
+    (diagramTile : Set (Fin n → ℝ)) (upper : Fin n → ℝ) (anchor : Fin n)
+    (hdiagramNonnegative : ∀ x ∈ diagramTile, ∀ i, 0 ≤ x i)
+    (hdiagramNonzero : ∀ x ∈ diagramTile, x ≠ 0)
+    (hdiagramAnchor : ∀ x ∈ diagramTile, x anchor = 1)
+    (hupper : ∀ i, 0 < upper i) (hdiagramCompact : IsCompact diagramTile) :
+    IsCompact
+      (radialBoxDiagramTile diagramTile upper hdiagramNonnegative hdiagramNonzero hupper ∩
+        craciunProjectiveDomain) := by
+  exact (isCompact_radialBoxDiagramTile_of_isCompact diagramTile upper anchor
+    hdiagramNonnegative hdiagramNonzero hdiagramAnchor hupper hdiagramCompact).inter_right
+      isClosed_craciunProjectiveDomain
+
+/-- The origin is outside Craciun's projective domain because its coordinates are all at least
+one. This discharges the exceptional common-origin term in the radial seam identity. -/
+theorem craciunProjectiveDomain_origin_not_mem {n : ℕ} [NeZero n] :
+    (0 : Fin n → ℝ) ∉ craciunProjectiveDomain := by
+  intro h
+  have hcoord := h.1 (0 : Fin n)
+  norm_num at hcoord
+
+/-- Dividing a point of `D^P_n` by its least coordinate returns a point of the same projective
+domain on the chart `X_2 = 1`. This is the normalization used to identify the section
+`{X_1 = 1} ∩ (-C)` with a subdivision of `D^P_n` in Craciun v3, §8 Step 1. -/
+theorem craciunProjectiveDomain_normalized_source_mem {n : ℕ} [NeZero n]
+    {p : Fin n → ℝ} (hp : p ∈ craciunProjectiveDomain) :
+    (fun i => p i / p 0) ∈ craciunProjectiveDomain ∧
+      (fun i => p i / p 0) 0 = 1 := by
+  have hp0 : 0 < p 0 := lt_of_lt_of_le zero_lt_one (hp.1 0)
+  let source : Fin n → ℝ := fun i => p i / p 0
+  have hsourceDomain : source ∈ craciunProjectiveDomain := by
+    constructor
+    · intro i
+      have h0i : (0 : Fin n).val ≤ i.val := Nat.zero_le _
+      have hmono := hp.2 0 i h0i
+      change 1 ≤ p i / p 0
+      rw [le_div_iff₀ hp0]
+      simpa using hmono
+    · intro i j hij
+      change p i / p 0 ≤ p j / p 0
+      exact div_le_div_of_nonneg_right (hp.2 i j hij) hp0.le
+  have hsourceAnchor : source 0 = 1 := by
+    simp [source, ne_of_gt hp0]
+  exact ⟨hsourceDomain, hsourceAnchor⟩
+
+/-- A projective diagram covering the normalized slice of `D^P_n` induces a cover of its
+intersection with the coordinate blue box by radial boundary tiles. This is Craciun v3, §8 Step 1:
+the projective subdivision is lifted along rays and clipped by the blue box. -/
+theorem radialBoxDiagramTiles_cover_projectiveDomain_box {ι : Sort*} {n : ℕ} [NeZero n]
+    (diagramTile : ι → Set (Fin n → ℝ)) (upper : Fin n → ℝ)
+    (hdiagramNonnegative : ∀ k x, x ∈ diagramTile k → ∀ i, 0 ≤ x i)
+    (hdiagramNonzero : ∀ k x, x ∈ diagramTile k → x ≠ 0)
+    (hupper : ∀ i, 0 < upper i)
+    (hdiagramCoversNormalizedDomain : ∀ x,
+      x ∈ craciunProjectiveDomain → x 0 = 1 → (∀ i, x i ≤ upper i) → x ∈ ⋃ k, diagramTile k)
+    {p : Fin n → ℝ} (hp : p ∈ craciunProjectiveDomain)
+    (hpupper : ∀ i, p i ≤ upper i) :
+    p ∈ ⋃ k, radialBoxDiagramTile (diagramTile k) upper
+      (hdiagramNonnegative k) (hdiagramNonzero k) hupper := by
+  have hp0 : 0 < p 0 := lt_of_lt_of_le zero_lt_one (hp.1 0)
+  obtain ⟨hsourceDomain, hsourceAnchor⟩ :=
+    craciunProjectiveDomain_normalized_source_mem hp
+  let source : Fin n → ℝ := fun i => p i / p 0
+  have hsourceUpper : ∀ i, source i ≤ upper i := by
+    intro i
+    change p i / p 0 ≤ upper i
+    apply (div_le_iff₀ hp0).2
+    calc
+      p i ≤ upper i := hpupper i
+      _ ≤ upper i * p 0 := by
+        nlinarith [mul_le_mul_of_nonneg_left (hp.1 0) (hupper i).le]
+  have hcover : source ∈ ⋃ k, diagramTile k :=
+    hdiagramCoversNormalizedDomain source hsourceDomain hsourceAnchor hsourceUpper
+  exact radialBoxDiagramTiles_cover_of_normalized_source diagramTile upper 0
+    hdiagramNonnegative hdiagramNonzero hupper hp0 hpupper hcover
+
+/-- Craciun v3, §8 Step 1: after clipping to the ordered projective domain, the union of all
+radially extended diagram tiles is exactly the part of that domain inside the coordinate blue box.
+The reverse inclusion is the cover-transfer theorem above; the forward inclusion is radial
+containment in the box. Keeping this as an equality makes the restricted blueprint cover exactly
+the intended bounded projective region, rather than merely a family of patches known to lie in it.
+-/
+theorem radialBoxDiagramTiles_projectiveDomain_box_eq {ι : Type*} {n : ℕ} [NeZero n]
+    (diagramTile : ι → Set (Fin n → ℝ)) (upper : Fin n → ℝ)
+    (hdiagramNonnegative : ∀ k x, x ∈ diagramTile k → ∀ i, 0 ≤ x i)
+    (hdiagramNonzero : ∀ k x, x ∈ diagramTile k → x ≠ 0)
+    (hupper : ∀ i, 0 < upper i)
+    (hdiagramCoversNormalizedDomain : ∀ x,
+      x ∈ craciunProjectiveDomain → x 0 = 1 → (∀ i, x i ≤ upper i) → x ∈ ⋃ k, diagramTile k) :
+    (⋃ k, radialBoxDiagramTile (diagramTile k) upper
+      (hdiagramNonnegative k) (hdiagramNonzero k) hupper ∩ craciunProjectiveDomain) =
+      craciunProjectiveDomain ∩ {p | ∀ i, p i ≤ upper i} := by
+  ext p
+  constructor
+  · intro hp
+    obtain ⟨k, hk⟩ := Set.mem_iUnion.mp hp
+    refine ⟨hk.2, ?_⟩
+    intro i
+    exact (radialBoxDiagramTile_subset_box (diagramTile k) upper
+      (hdiagramNonnegative k) (hdiagramNonzero k) hupper hk.1 i).2
+  · rintro ⟨hp, hpupper⟩
+    have htile := radialBoxDiagramTiles_cover_projectiveDomain_box diagramTile upper
+      hdiagramNonnegative hdiagramNonzero hupper hdiagramCoversNormalizedDomain hp hpupper
+    obtain ⟨k, hk⟩ := Set.mem_iUnion.mp htile
+    exact Set.mem_iUnion.mpr ⟨k, ⟨hk, hp⟩⟩
+
+/-- Craciun's restricted projective domain removes the common origin, so two radial boundary
+tiles clipped to `D^P_n` meet exactly in the radial extension of the common lower-dimensional
+diagram tile, clipped to that same domain (§8 Step 1). -/
+theorem radialBoxDiagramTile_projectiveDomain_intersection_eq {n : ℕ} [NeZero n]
+    (tileA tileB : Set (Fin n → ℝ)) (upper : Fin n → ℝ) (anchor : Fin n)
+    (hA_nonnegative : ∀ x ∈ tileA, ∀ i, 0 ≤ x i)
+    (hA_nonzero : ∀ x ∈ tileA, x ≠ 0)
+    (hA_anchor : ∀ x ∈ tileA, x anchor = 1)
+    (hB_nonnegative : ∀ x ∈ tileB, ∀ i, 0 ≤ x i)
+    (hB_nonzero : ∀ x ∈ tileB, x ≠ 0)
+    (hB_anchor : ∀ x ∈ tileB, x anchor = 1)
+    (hupper : ∀ i, 0 < upper i) :
+    (radialBoxDiagramTile tileA upper hA_nonnegative hA_nonzero hupper ∩
+      craciunProjectiveDomain) ∩
+        (radialBoxDiagramTile tileB upper hB_nonnegative hB_nonzero hupper ∩
+          craciunProjectiveDomain) =
+      radialBoxDiagramTile (tileA ∩ tileB) upper
+        (fun x hx i => hA_nonnegative x hx.1 i)
+        (fun x hx => hA_nonzero x hx.1) hupper ∩ craciunProjectiveDomain := by
+  exact radialBoxDiagramTile_intersection_clip_eq tileA tileB upper anchor
+    craciunProjectiveDomain hA_nonnegative hA_nonzero hA_anchor
+    hB_nonnegative hB_nonzero hB_anchor hupper craciunProjectiveDomain_origin_not_mem
+
+/-- A shared point of radial tiles clipped to `D^P_n` comes from a shared source point in the
+same normalized projective domain. With the chart anchor `X_2 = 1`, the order inequalities on the
+lifted point force the common source itself to satisfy `X_(n+1) ≥ ... ≥ X_2 ≥ 1`. This is the
+projected-basepoint compatibility needed to pass clipped tile seams to the lower-dimensional
+boundary diagram (Craciun v3, §8 Step 1). -/
+theorem radialBoxDiagramTile_projectiveDomain_overlap_source {n : ℕ} [NeZero n]
+    (tileA tileB : Set (Fin n → ℝ)) (upper : Fin n → ℝ)
+    (hA_nonnegative : ∀ x ∈ tileA, ∀ i, 0 ≤ x i)
+    (hA_nonzero : ∀ x ∈ tileA, x ≠ 0)
+    (hA_anchor : ∀ x ∈ tileA, x 0 = 1)
+    (hB_nonnegative : ∀ x ∈ tileB, ∀ i, 0 ≤ x i)
+    (hB_nonzero : ∀ x ∈ tileB, x ≠ 0)
+    (hB_anchor : ∀ x ∈ tileB, x 0 = 1)
+    (hupper : ∀ i, 0 < upper i) :
+    ∀ p, p ∈
+        (radialBoxDiagramTile tileA upper hA_nonnegative hA_nonzero hupper ∩
+          craciunProjectiveDomain) ∩
+        (radialBoxDiagramTile tileB upper hB_nonnegative hB_nonzero hupper ∩
+          craciunProjectiveDomain) →
+      ∃ x, x ∈ tileA ∩ tileB ∧ x ∈ craciunProjectiveDomain ∧
+        ∃ s : ℝ, 0 < s ∧ p = s • x := by
+  intro p hp
+  obtain ⟨x, hx, s, hs, hpx, hpDomain⟩ :=
+    radialBoxDiagramTile_clip_overlap_source tileA tileB upper 0
+      craciunProjectiveDomain hA_nonnegative hA_nonzero hA_anchor
+      hB_nonnegative hB_nonzero hB_anchor hupper
+      craciunProjectiveDomain_origin_not_mem p hp
+  have hcoord : ∀ i, p i = s * x i := by
+    intro i
+    have h := congrArg (fun z : Fin n → ℝ => z i) hpx
+    simpa [Pi.smul_apply] using h
+  have hsEq : p 0 = s := by
+    have h := congrArg (fun z : Fin n → ℝ => z 0) hpx
+    simpa [Pi.smul_apply, hA_anchor x hx.1] using h
+  have hsp : 0 < s := by
+    rw [← hsEq]
+    exact lt_of_lt_of_le zero_lt_one (hpDomain.1 0)
+  have hxDomain : x ∈ craciunProjectiveDomain := by
+    constructor
+    · intro i
+      have h0i : (0 : Fin n).val ≤ i.val := Nat.zero_le _
+      have hordered := hpDomain.2 0 i h0i
+      have hscaled : s * 1 ≤ s * x i := by
+        rw [← hcoord i, mul_one, ← hsEq]
+        exact hordered
+      exact le_of_mul_le_mul_left hscaled hsp
+    · intro i j hij
+      have hordered := hpDomain.2 i j hij
+      have hscaled : s * x i ≤ s * x j := by
+        calc
+          s * x i = p i := (hcoord i).symm
+          _ ≤ p j := hordered
+          _ = s * x j := hcoord j
+      exact le_of_mul_le_mul_left hscaled hsp
+  exact ⟨x, hx, hxDomain, s, hs, hpx⟩
+
+/-- Exact chart characterization of a radial tile after restriction to `D^P_n`: its point lies
+under the blue-box ceiling and its normalization by `X_2` belongs to the source diagram tile.
+This identifies each restricted tile with the projective tile data it must carry into the later
+face-filling induction (Craciun v3, §8 Step 1). -/
+theorem mem_radialBoxDiagramTile_projectiveDomain_iff {n : ℕ} [NeZero n]
+    (diagramTile : Set (Fin n → ℝ)) (upper : Fin n → ℝ)
+    (hdiagramNonnegative : ∀ x ∈ diagramTile, ∀ i, 0 ≤ x i)
+    (hdiagramNonzero : ∀ x ∈ diagramTile, x ≠ 0)
+    (hdiagramAnchor : ∀ x ∈ diagramTile, x 0 = 1)
+    (hupper : ∀ i, 0 < upper i) {p : Fin n → ℝ} :
+    p ∈ radialBoxDiagramTile diagramTile upper hdiagramNonnegative hdiagramNonzero hupper ∩
+        craciunProjectiveDomain ↔
+      p ∈ craciunProjectiveDomain ∧ (∀ i, p i ≤ upper i) ∧
+        (fun i => p i / p 0) ∈ diagramTile := by
+  constructor
+  · rintro ⟨hpTile, hpDomain⟩
+    rcases hpTile with ⟨x, hx, ⟨s, hs, hsle, hpx⟩⟩
+    have hbox := radialBoxRaySegment_subset_box x upper
+      (hdiagramNonnegative x hx) (hdiagramNonzero x hx) hupper
+      ⟨s, hs, hsle, hpx⟩
+    have hcoord : ∀ i, p i = s * x i := by
+      intro i
+      have h := congrArg (fun z : Fin n → ℝ => z i) hpx
+      simpa [Pi.smul_apply] using h
+    have hsEq : p 0 = s := by
+      have h := congrArg (fun z : Fin n → ℝ => z 0) hpx
+      simpa [Pi.smul_apply, hdiagramAnchor x hx] using h
+    have hspos : 0 < s := by
+      rw [← hsEq]
+      exact lt_of_lt_of_le zero_lt_one (hpDomain.1 0)
+    have hsourceEq : (fun i => p i / p 0) = x := by
+      funext i
+      rw [hcoord i, hsEq]
+      field_simp [ne_of_gt hspos]
+    refine ⟨hpDomain, ?_, ?_⟩
+    · intro i
+      exact (hbox i).2
+    · rw [hsourceEq]
+      exact hx
+  · rintro ⟨hpDomain, hpupper, hsource⟩
+    have hp0 : 0 < p 0 := lt_of_lt_of_le zero_lt_one (hpDomain.1 0)
+    exact ⟨radialBoxDiagramTile_contains_of_normalized_source diagramTile upper 0
+      hdiagramNonnegative hdiagramNonzero hupper hp0 hsource hpupper, hpDomain⟩
+
+/-- On the normalized chart `X_2 = 1`, an overlap of two restricted radial tiles projects exactly
+to the overlap of their source diagram tiles. This is the seam-to-face incidence required when
+the lower-dimensional boundary diagram is assembled from adjacent patches (Craciun v3, §8 Step 1).
+-/
+theorem radialBoxDiagramTile_projectiveDomain_overlap_normalized_source {n : ℕ} [NeZero n]
+    (tileA tileB : Set (Fin n → ℝ)) (upper : Fin n → ℝ)
+    (hA_nonnegative : ∀ x ∈ tileA, ∀ i, 0 ≤ x i)
+    (hA_nonzero : ∀ x ∈ tileA, x ≠ 0)
+    (hA_anchor : ∀ x ∈ tileA, x 0 = 1)
+    (hB_nonnegative : ∀ x ∈ tileB, ∀ i, 0 ≤ x i)
+    (hB_nonzero : ∀ x ∈ tileB, x ≠ 0)
+    (hB_anchor : ∀ x ∈ tileB, x 0 = 1)
+    (hupper : ∀ i, 0 < upper i) {p : Fin n → ℝ}
+    (hp : p ∈
+      (radialBoxDiagramTile tileA upper hA_nonnegative hA_nonzero hupper ∩
+        craciunProjectiveDomain) ∩
+      (radialBoxDiagramTile tileB upper hB_nonnegative hB_nonzero hupper ∩
+        craciunProjectiveDomain)) :
+    (fun i => p i / p 0) ∈ tileA ∩ tileB := by
+  rw [radialBoxDiagramTile_projectiveDomain_intersection_eq tileA tileB upper 0
+    hA_nonnegative hA_nonzero hA_anchor hB_nonnegative hB_nonzero hB_anchor hupper] at hp
+  exact (mem_radialBoxDiagramTile_projectiveDomain_iff (tileA ∩ tileB) upper
+    (fun x hx i => hA_nonnegative x hx.1 i)
+    (fun x hx => hA_nonzero x hx.1)
+    (fun x hx => hA_anchor x hx.1) hupper).mp hp |>.2.2
+
+/-- Craciun v3, §8 Step 1: extending a lower-dimensional diagram covered by patches gives the
+union of the radial boundary tiles obtained from those patches. This is the cover-assembly
+identity paired with `radialBoxDiagramTile_intersection_eq`, which describes their seams. -/
+theorem radialBoxDiagramTile_iUnion {ι : Sort*} {n : ℕ}
+    (diagramTile : ι → Set (Fin n → ℝ)) (upper : Fin n → ℝ)
+    (hdiagramNonnegative : ∀ i x, x ∈ diagramTile i → ∀ j, 0 ≤ x j)
+    (hdiagramNonzero : ∀ i x, x ∈ diagramTile i → x ≠ 0)
+    (hupper : ∀ i, 0 < upper i) :
+    radialBoxDiagramTile (⋃ i, diagramTile i) upper
+      (fun x hx j => by
+        obtain ⟨i, hi⟩ := Set.mem_iUnion.mp hx
+        exact hdiagramNonnegative i x hi j)
+      (fun x hx => by
+        obtain ⟨i, hi⟩ := Set.mem_iUnion.mp hx
+        exact hdiagramNonzero i x hi) hupper =
+      ⋃ i, radialBoxDiagramTile (diagramTile i) upper
+        (hdiagramNonnegative i) (hdiagramNonzero i) hupper := by
+  ext p
+  constructor
+  · rintro ⟨x, hx, hsegment⟩
+    obtain ⟨i, hi⟩ := Set.mem_iUnion.mp hx
+    apply Set.mem_iUnion.mpr
+    refine ⟨i, x, hi, ?_⟩
+    simpa [radialBoxRaySegment] using hsegment
+  · intro hp
+    obtain ⟨i, hi⟩ := Set.mem_iUnion.mp hp
+    rcases hi with ⟨x, hx, hsegment⟩
+    refine ⟨x, Set.mem_iUnion.mpr ⟨i, hx⟩, ?_⟩
+    simpa [radialBoxRaySegment] using hsegment
+
+/-- Clipping the radial extension of an assembled lower-dimensional diagram is the union of
+the individually clipped tiles. This is Craciun v3, §8 Step 1's cover assembly after restriction
+to the projective domain. -/
+theorem radialBoxDiagramTile_iUnion_clip {ι : Sort*} {n : ℕ}
+    (diagramTile : ι → Set (Fin n → ℝ)) (upper : Fin n → ℝ)
+    (domain : Set (Fin n → ℝ))
+    (hdiagramNonnegative : ∀ i x, x ∈ diagramTile i → ∀ j, 0 ≤ x j)
+    (hdiagramNonzero : ∀ i x, x ∈ diagramTile i → x ≠ 0)
+    (hupper : ∀ i, 0 < upper i) :
+    radialBoxDiagramTile (⋃ i, diagramTile i) upper
+        (fun x hx j => by
+          obtain ⟨i, hi⟩ := Set.mem_iUnion.mp hx
+          exact hdiagramNonnegative i x hi j)
+        (fun x hx => by
+          obtain ⟨i, hi⟩ := Set.mem_iUnion.mp hx
+          exact hdiagramNonzero i x hi) hupper ∩ domain =
+      ⋃ i, radialBoxDiagramTile (diagramTile i) upper
+        (hdiagramNonnegative i) (hdiagramNonzero i) hupper ∩ domain := by
+  rw [radialBoxDiagramTile_iUnion diagramTile upper hdiagramNonnegative
+    hdiagramNonzero hupper]
+  ext p
+  simp only [Set.mem_inter_iff, Set.mem_iUnion]
+  constructor
+  · rintro ⟨⟨i, hi⟩, hdomain⟩
+    exact ⟨i, hi, hdomain⟩
+  · rintro ⟨i, hi, hdomain⟩
+    exact ⟨⟨i, hi⟩, hdomain⟩
+
+/-- The assembled radial cover of the lower-dimensional diagram remains an exact cover after
+restriction to Craciun's projective domain `D^P_n` (§8 Step 1). -/
+theorem radialBoxDiagramTile_projectiveDomain_iUnion_clip {ι : Sort*} {n : ℕ}
+    (diagramTile : ι → Set (Fin n → ℝ)) (upper : Fin n → ℝ)
+    (hdiagramNonnegative : ∀ i x, x ∈ diagramTile i → ∀ j, 0 ≤ x j)
+    (hdiagramNonzero : ∀ i x, x ∈ diagramTile i → x ≠ 0)
+    (hupper : ∀ i, 0 < upper i) :
+    radialBoxDiagramTile (⋃ i, diagramTile i) upper
+        (fun x hx j => by
+          obtain ⟨i, hi⟩ := Set.mem_iUnion.mp hx
+          exact hdiagramNonnegative i x hi j)
+        (fun x hx => by
+          obtain ⟨i, hi⟩ := Set.mem_iUnion.mp hx
+          exact hdiagramNonzero i x hi) hupper ∩ craciunProjectiveDomain =
+      ⋃ i, radialBoxDiagramTile (diagramTile i) upper
+        (hdiagramNonnegative i) (hdiagramNonzero i) hupper ∩ craciunProjectiveDomain := by
+  exact radialBoxDiagramTile_iUnion_clip diagramTile upper craciunProjectiveDomain
+    hdiagramNonnegative hdiagramNonzero hupper
+
+/-- Craciun v3, §8 Step 1: a finite compact family of normalized projective diagram tiles yields
+a compact family of restricted radial boundary tiles covering `D^P_n` inside the blue box. The
+source cover is the lower-dimensional input; compactness, radial extension, clipping, and cover
+transfer are proved here. -/
+theorem isCompact_and_covers_projectiveRadialTiles {ι : Type*} [Fintype ι]
+    {n : ℕ} [NeZero n]
+    (diagramTile : ι → Set (Fin n → ℝ)) (upper : Fin n → ℝ)
+    (hdiagramNonnegative : ∀ k x, x ∈ diagramTile k → ∀ i, 0 ≤ x i)
+    (hdiagramAnchor : ∀ k x, x ∈ diagramTile k → x 0 = 1)
+    (hdiagramCompact : ∀ k, IsCompact (diagramTile k))
+    (hupper : ∀ i, 0 < upper i)
+    (hdiagramCoversNormalizedDomain : ∀ x,
+      x ∈ craciunProjectiveDomain → x 0 = 1 → (∀ i, x i ≤ upper i) → x ∈ ⋃ k, diagramTile k) :
+    IsCompact (⋃ k, radialBoxDiagramTile (diagramTile k) upper
+      (hdiagramNonnegative k)
+      (fun x hx => by
+        intro hzero
+        have hzeroCoord : x 0 = (0 : ℝ) := congrFun hzero 0
+        rw [hdiagramAnchor k x hx] at hzeroCoord
+        exact one_ne_zero hzeroCoord)
+      hupper ∩ craciunProjectiveDomain) ∧
+    (∀ p, p ∈ craciunProjectiveDomain → (∀ i, p i ≤ upper i) →
+      p ∈ ⋃ k, radialBoxDiagramTile (diagramTile k) upper
+        (hdiagramNonnegative k)
+        (fun x hx => by
+          intro hzero
+          have hzeroCoord : x 0 = (0 : ℝ) := congrFun hzero 0
+          rw [hdiagramAnchor k x hx] at hzeroCoord
+          exact one_ne_zero hzeroCoord)
+        hupper ∩ craciunProjectiveDomain) := by
+  let hdiagramNonzero : ∀ k x, x ∈ diagramTile k → x ≠ 0 := by
+    intro k x hx hzero
+    have hzeroCoord : x 0 = (0 : ℝ) := congrFun hzero 0
+    rw [hdiagramAnchor k x hx] at hzeroCoord
+    exact one_ne_zero hzeroCoord
+  refine ⟨isCompact_iUnion (fun k => ?_), ?_⟩
+  · exact isCompact_radialBoxDiagramTile_projectiveDomain (diagramTile k) upper 0
+      (hdiagramNonnegative k) (hdiagramNonzero k) (hdiagramAnchor k) hupper
+      (hdiagramCompact k)
+  · intro p hp hpupper
+    have htile := radialBoxDiagramTiles_cover_projectiveDomain_box diagramTile upper
+      hdiagramNonnegative hdiagramNonzero hupper hdiagramCoversNormalizedDomain hp hpupper
+    obtain ⟨k, hk⟩ := Set.mem_iUnion.mp htile
+    exact Set.mem_iUnion.mpr ⟨k, hk, hp⟩
+
+/-- A finite compact patch cover whose pieces have controlled diameter and pairwise disjoint
+interiors. -/
+structure CompactFinitePatchCover {n : ℕ} (base : Set (Fin n → ℝ)) (radius : ℝ) where
+  Index : Type
+  fintypeIndex : Fintype Index
+  patch : Index → Set (Fin n → ℝ)
+  patchCenter : Index → Fin n → ℝ
+  patchCenter_mem_base : ∀ i, patchCenter i ∈ base
+  patch_subset_closedBall : ∀ i,
+    patch i ⊆ Metric.closedBall (patchCenter i) radius
+  cover : base = ⋃ i, patch i
+  patch_subset : ∀ i, patch i ⊆ base
+  patch_compact : ∀ i, IsCompact (patch i)
+  patch_diameter : ∀ i x, x ∈ patch i → ∀ y, y ∈ patch i →
+    dist x y ≤ radius + radius
+  patch_interiors_disjoint : ∀ i j, i ≠ j →
+    interior (patch i) ∩ interior (patch j) = ∅
+
+/-- Every compact projected face has a finite compact cover by patches of controlled diameter
+whose interiors are pairwise disjoint. The patches come from a finite open-ball cover: assign each
+point to the first ball containing it and remove earlier open balls from each closed ball. This is
+the finite patch extraction used when refining projected faces in Craciun v3, §7.4.3. -/
+noncomputable def compactFinitePatchCover_of_compact {n : ℕ}
+    (base : Set (Fin n → ℝ)) (hbase : IsCompact base) {radius : ℝ}
+    (hradius : 0 < radius) : CompactFinitePatchCover base radius := by
+  classical
+  let U : {x : Fin n → ℝ // x ∈ base} → Set (Fin n → ℝ) :=
+    fun x => Metric.ball x.1 radius
+  have hUopen : ∀ x, IsOpen (U x) := fun _ => Metric.isOpen_ball
+  have hUcover : base ⊆ ⋃ x : {x : Fin n → ℝ // x ∈ base}, U x := by
+    intro x hx
+    rw [Set.mem_iUnion]
+    refine ⟨⟨x, hx⟩, ?_⟩
+    change dist x x < radius
+    simpa using hradius
+  let hfiniteCover := hbase.elim_finite_subcover U hUopen hUcover
+  let centers : Finset {x : Fin n → ℝ // x ∈ base} := Classical.choose hfiniteCover
+  have hcenters : base ⊆ ⋃ x ∈ centers, U x := Classical.choose_spec hfiniteCover
+  let ι := {x : {y : Fin n → ℝ // y ∈ base} // x ∈ centers}
+  letI : Fintype ι := FinsetCoe.fintype centers
+  let rank : ι ≃ Fin (Fintype.card ι) := Fintype.equivFin ι
+  let center : ι → (Fin n → ℝ) := fun i => i.1.1
+  let prior (i : Fin (Fintype.card ι)) : Set (Fin n → ℝ) :=
+    ⋃ j : Fin (Fintype.card ι),
+      if j < i then Metric.ball (center (rank.symm j)) radius else ∅
+  let patch (i : Fin (Fintype.card ι)) : Set (Fin n → ℝ) :=
+    base ∩ (Metric.closedBall (center (rank.symm i)) radius ∩ (prior i)ᶜ)
+  have hpriorOpen (i : Fin (Fintype.card ι)) : IsOpen (prior i) := by
+    apply isOpen_iUnion
+    intro j
+    by_cases hji : j < i
+    · simpa [prior, hji] using (Metric.isOpen_ball : IsOpen (Metric.ball
+        (center (rank.symm j)) radius))
+    · simp [prior, hji]
+  have hpatchClosed (i : Fin (Fintype.card ι)) : IsClosed (patch i) := by
+    apply hbase.isClosed.inter
+    exact Metric.isClosed_closedBall.inter (hpriorOpen i).isClosed_compl
+  have hpatchBase (i : Fin (Fintype.card ι)) : patch i ⊆ base :=
+    Set.inter_subset_left
+  have hpatchCompact (i : Fin (Fintype.card ι)) : IsCompact (patch i) :=
+    hbase.of_isClosed_subset (hpatchClosed i) (hpatchBase i)
+  have hpatchDiameter (i : Fin (Fintype.card ι)) (x : Fin n → ℝ)
+      (hx : x ∈ patch i) (y : Fin n → ℝ) (hy : y ∈ patch i) :
+      dist x y ≤ radius + radius := by
+    change x ∈ base ∩ (Metric.closedBall (center (rank.symm i)) radius ∩ (prior i)ᶜ) at hx
+    change y ∈ base ∩ (Metric.closedBall (center (rank.symm i)) radius ∩ (prior i)ᶜ) at hy
+    have hxi := hx.2.1
+    have hyi := hy.2.1
+    have hxc : dist x (center (rank.symm i)) ≤ radius :=
+      Metric.mem_closedBall.mp hxi
+    have hyc : dist y (center (rank.symm i)) ≤ radius :=
+      Metric.mem_closedBall.mp hyi
+    calc
+      dist x y ≤ dist x (center (rank.symm i)) +
+          dist (center (rank.symm i)) y := dist_triangle _ _ _
+      _ ≤ radius + radius := add_le_add hxc (by simpa [dist_comm] using hyc)
+  have hordered (i j : Fin (Fintype.card ι)) (hij : i < j) :
+      interior (patch i) ∩ interior (patch j) = ∅ := by
+    ext x
+    constructor
+    · intro hx
+      rcases hx with ⟨hxi, hxj⟩
+      have hxball : x ∈ Metric.ball (center (rank.symm i)) radius := by
+        have hpatchBall : patch i ⊆ Metric.closedBall (center (rank.symm i)) radius := by
+          intro y hy
+          change y ∈ base ∩ (Metric.closedBall (center (rank.symm i)) radius ∩ (prior i)ᶜ) at hy
+          exact hy.2.1
+        have hsub : interior (patch i) ⊆
+            interior (Metric.closedBall (center (rank.symm i)) radius) := interior_mono hpatchBall
+        rw [interior_closedBall _ (ne_of_gt hradius)] at hsub
+        exact hsub hxi
+      have hxprior : x ∈ prior j := by
+        rw [Set.mem_iUnion]
+        refine ⟨i, ?_⟩
+        simp [prior, hij, hxball]
+      have hxjPatch : x ∈ patch j := interior_subset hxj
+      change x ∈ base ∩ (Metric.closedBall (center (rank.symm j)) radius ∩ (prior j)ᶜ)
+        at hxjPatch
+      exact hxjPatch.2.2 hxprior
+    · simp
+  have hpatchInteriorsDisjoint : ∀ i j, i ≠ j →
+      interior (patch i) ∩ interior (patch j) = ∅ := by
+    intro i j hij
+    rcases lt_or_gt_of_ne hij with hij' | hji'
+    · exact hordered i j hij'
+    · rw [Set.inter_comm]
+      exact hordered j i hji'
+  have hpatchCover : base = ⋃ i, patch i := by
+    apply Set.Subset.antisymm
+    · intro x hx
+      have hxcenters := hcenters hx
+      simp only [Set.mem_iUnion] at hxcenters
+      obtain ⟨c, hc, hxc⟩ := hxcenters
+      let i₀ : ι := ⟨c, hc⟩
+      have hbaseball : x ∈ Metric.ball (center i₀) radius := by
+        simpa [U, center] using hxc
+      let active : Finset (Fin (Fintype.card ι)) :=
+        Finset.univ.filter fun j =>
+          x ∈ Metric.ball (center (rank.symm j)) radius
+      have hactive : rank i₀ ∈ active := by
+        apply Finset.mem_filter.mpr
+        refine ⟨Finset.mem_univ _, ?_⟩
+        simpa [center] using hbaseball
+      have hactiveNonempty : active.Nonempty := ⟨rank i₀, hactive⟩
+      let i := active.min' hactiveNonempty
+      have hiActive : i ∈ active := Finset.min'_mem active hactiveNonempty
+      have hxball : x ∈ Metric.ball (center (rank.symm i)) radius :=
+        (Finset.mem_filter.mp hiActive).2
+      have hxnotprior : x ∉ prior i := by
+        intro hxprior
+        simp only [prior, Set.mem_iUnion] at hxprior
+        obtain ⟨j, hj⟩ := hxprior
+        by_cases hji : j < i
+        · have hjball : x ∈ Metric.ball (center (rank.symm j)) radius := by
+            simpa [hji] using hj
+          have hjActive : j ∈ active := Finset.mem_filter.mpr
+            ⟨Finset.mem_univ j, hjball⟩
+          have hmin : i ≤ j := Finset.min'_le active j hjActive
+          exact (not_le_of_gt hji) hmin
+        · simp [hji] at hj
+      have hxin : x ∈ patch i := by
+        refine ⟨hx, Metric.ball_subset_closedBall hxball, hxnotprior⟩
+      exact Set.mem_iUnion.mpr ⟨i, hxin⟩
+    · apply Set.iUnion_subset
+      intro i x hx
+      change x ∈ base ∩ (Metric.closedBall (center (rank.symm i)) radius ∩ (prior i)ᶜ) at hx
+      exact hx.1
+  exact {
+    Index := Fin (Fintype.card ι)
+    fintypeIndex := inferInstance
+    patch := patch
+    patchCenter := fun i => center (rank.symm i)
+    patchCenter_mem_base := fun i => (rank.symm i).1.2
+    patch_subset_closedBall := by
+      intro i x hx
+      change x ∈ base ∩ (Metric.closedBall (center (rank.symm i)) radius ∩ (prior i)ᶜ)
+        at hx
+      exact hx.2.1
+    cover := hpatchCover
+    patch_subset := hpatchBase
+    patch_compact := hpatchCompact
+    patch_diameter := hpatchDiameter
+    patch_interiors_disjoint := hpatchInteriorsDisjoint }
+
+/-- A finite open cover of a compact projected face has a uniform positive radius such that the
+ball of that radius around every face point lies in one member of the cover. This is the
+Lebesgue-number step used to make each refined tile belong to one fan chamber. -/
+theorem exists_uniform_openCover_ball_radius {n : ℕ}
+    (base : Set (Fin n → ℝ)) (hbase : IsCompact base)
+    {κ : Type*} [Fintype κ] (region : κ → Set (Fin n → ℝ))
+    (hregionOpen : ∀ i, IsOpen (region i))
+    (hregionCover : base ⊆ ⋃ i, region i) :
+    ∃ radius : ℝ, 0 < radius ∧
+      ∀ x ∈ base, ∃ i, Metric.ball x radius ⊆ region i := by
+  classical
+  by_cases hnonempty : base.Nonempty
+  · let Base := {x : Fin n → ℝ // x ∈ base}
+    have hregionAt (x : Base) : ∃ i, x.1 ∈ region i :=
+      Set.mem_iUnion.mp (hregionCover x.2)
+    let labelAt (x : Base) : κ := Classical.choose (hregionAt x)
+    have hlabelAt (x : Base) : x.1 ∈ region (labelAt x) :=
+      Classical.choose_spec (hregionAt x)
+    let rawRadius (x : Base) : ℝ := Classical.choose
+      ((Metric.isOpen_iff.mp (hregionOpen (labelAt x))) x.1 (hlabelAt x))
+    have hrawRadius (x : Base) : 0 < rawRadius x :=
+      (Classical.choose_spec
+        ((Metric.isOpen_iff.mp (hregionOpen (labelAt x))) x.1 (hlabelAt x))).1
+    have hrawBall (x : Base) :
+        Metric.ball x.1 (rawRadius x) ⊆ region (labelAt x) :=
+      (Classical.choose_spec
+        ((Metric.isOpen_iff.mp (hregionOpen (labelAt x))) x.1 (hlabelAt x))).2
+    let localRadius (x : Base) : ℝ := rawRadius x / 2
+    have hlocalPositive (x : Base) : 0 < localRadius x :=
+      half_pos (hrawRadius x)
+    let U (x : Base) : Set (Fin n → ℝ) := Metric.ball x.1 (localRadius x)
+    have hUopen : ∀ x, IsOpen (U x) := fun _ => Metric.isOpen_ball
+    have hUcover : base ⊆ ⋃ x : Base, U x := by
+      intro x hx
+      rw [Set.mem_iUnion]
+      refine ⟨⟨x, hx⟩, ?_⟩
+      simp [U, hlocalPositive]
+    let hfiniteCover := hbase.elim_finite_subcover U hUopen hUcover
+    let centers : Finset Base := Classical.choose hfiniteCover
+    have hcenters : base ⊆ ⋃ x ∈ centers, U x := Classical.choose_spec hfiniteCover
+    have hcentersNonempty : centers.Nonempty := by
+      by_contra h
+      have hempty : centers = ∅ := Finset.not_nonempty_iff_eq_empty.mp h
+      obtain ⟨x, hx⟩ := hnonempty
+      have hxcover := hcenters hx
+      simp [hempty] at hxcover
+    obtain ⟨x₀, hx₀, hmin⟩ :=
+      Finset.exists_mem_eq_inf' hcentersNonempty (fun x : Base => localRadius x / 2)
+    let radius := centers.inf' hcentersNonempty (fun x : Base => localRadius x / 2)
+    have hradius : 0 < radius := by
+      dsimp [radius]
+      rw [hmin]
+      exact half_pos (hlocalPositive x₀)
+    have hradius_le (x : Base) (hx : x ∈ centers) :
+        radius ≤ localRadius x / 2 := by
+      dsimp [radius]
+      exact Finset.inf'_le _ hx
+    refine ⟨radius, hradius, ?_⟩
+    intro x hx
+    have hxcover := hcenters hx
+    simp only [Set.mem_iUnion] at hxcover
+    obtain ⟨c, hc, hxc⟩ := hxcover
+    have hxcball : dist x c.1 < localRadius c := by
+      simpa [U, Metric.mem_ball] using hxc
+    have hsum : radius + localRadius c < rawRadius c := by
+      have hradius' : radius ≤ rawRadius c / 4 := by
+        calc
+          radius ≤ localRadius c / 2 := hradius_le c hc
+          _ = rawRadius c / 4 := by dsimp [localRadius]; ring
+      change radius + rawRadius c / 2 < rawRadius c
+      linarith [hrawRadius c]
+    refine ⟨labelAt c, ?_⟩
+    intro y hy
+    have hyball : dist y x < radius := Metric.mem_ball.mp hy
+    have hyc : dist y c.1 < rawRadius c := by
+      calc
+        dist y c.1 ≤ dist y x + dist x c.1 := dist_triangle _ _ _
+        _ < radius + localRadius c := add_lt_add hyball hxcball
+        _ < rawRadius c := hsum
+    exact hrawBall c (Metric.mem_ball.mpr hyc)
+  · refine ⟨1, by norm_num, ?_⟩
+    intro x hx
+    exact (hnonempty ⟨x, hx⟩).elim
+
+/-- A compact face has an arbitrarily fine finite compact patch cover, with disjoint interiors and
+each patch assigned to one member of a prescribed finite open cover. -/
+structure CompactLabeledPatchCover {n : ℕ} (base : Set (Fin n → ℝ)) (mesh : ℝ)
+    {κ : Type*} [Fintype κ] (region : κ → Set (Fin n → ℝ)) where
+  cover : CompactFinitePatchCover base mesh
+  label : cover.Index → κ
+  patch_subset_region : ∀ i, cover.patch i ⊆ region (label i)
+
+/-- Refine a finite open cover of a compact projected face into arbitrarily fine compact patches
+with disjoint interiors, assigning each patch to one open chamber. -/
+theorem compactLabeledPatchCover_of_finiteOpenCover {n : ℕ}
+    (base : Set (Fin n → ℝ)) (hbase : IsCompact base)
+    {κ : Type*} [Fintype κ] (region : κ → Set (Fin n → ℝ))
+    (hregionOpen : ∀ i, IsOpen (region i))
+    (hregionCover : base ⊆ ⋃ i, region i)
+    (maxMesh : ℝ) (hmaxMesh : 0 < maxMesh) :
+    ∃ mesh : ℝ, 0 < mesh ∧ mesh ≤ maxMesh ∧
+      Nonempty (CompactLabeledPatchCover base mesh region) := by
+  obtain ⟨radius, hradius, hball⟩ :=
+    exists_uniform_openCover_ball_radius base hbase region hregionOpen hregionCover
+  let mesh := min maxMesh (radius / 2)
+  have hmesh : 0 < mesh := lt_min hmaxMesh (half_pos hradius)
+  have hmeshBound : mesh ≤ maxMesh := min_le_left _ _
+  have hmeshSmall : mesh < radius := by
+    calc
+      mesh ≤ radius / 2 := min_le_right _ _
+      _ < radius := by linarith
+  let cover := compactFinitePatchCover_of_compact base hbase hmesh
+  let label (i : cover.Index) : κ := Classical.choose
+    (hball (cover.patchCenter i) (cover.patchCenter_mem_base i))
+  have hlabel (i : cover.Index) :
+      Metric.ball (cover.patchCenter i) radius ⊆ region (label i) :=
+    Classical.choose_spec (hball (cover.patchCenter i) (cover.patchCenter_mem_base i))
+  have hpatch (i : cover.Index) : cover.patch i ⊆ region (label i) := by
+    intro x hx
+    have hclosed := cover.patch_subset_closedBall i hx
+    have hdist : dist x (cover.patchCenter i) ≤ mesh := Metric.mem_closedBall.mp hclosed
+    exact hlabel i (Metric.mem_ball.mpr (lt_of_le_of_lt hdist hmeshSmall))
+  refine ⟨mesh, hmesh, hmeshBound, ?_⟩
+  exact ⟨⟨cover, label, hpatch⟩⟩
+
+/-- A compact face can be tiled so each tile receives a simultaneous label from every one of a
+finite family of open chamber covers. This packages the cross-dimension chamber choices required
+for an n-faithful blueprint: a single refined patch lies in one selected chamber at each level. -/
+theorem compactLabeledPatchCover_of_finiteOpenCoverFamily {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (hbase : IsCompact base)
+    (κ : Fin m → Type*) [∀ j, Fintype (κ j)]
+    (region : ∀ j, κ j → Set (Fin n → ℝ))
+    (hregionOpen : ∀ j i, IsOpen (region j i))
+    (hregionCover : ∀ j, base ⊆ ⋃ i, region j i)
+    (maxMesh : ℝ) (hmaxMesh : 0 < maxMesh) :
+    ∃ mesh : ℝ, 0 < mesh ∧ mesh ≤ maxMesh ∧
+      Nonempty (@CompactLabeledPatchCover n base mesh (∀ j, κ j)
+        (inferInstance) (fun choice => ⋂ j, region j (choice j))) := by
+  classical
+  let jointRegion : (∀ j, κ j) → Set (Fin n → ℝ) :=
+    fun choice => ⋂ j, region j (choice j)
+  have hjointOpen (choice : ∀ j, κ j) : IsOpen (jointRegion choice) := by
+    apply isOpen_iInter_of_finite
+    intro j
+    exact hregionOpen j (choice j)
+  have hjointCover : base ⊆ ⋃ choice, jointRegion choice := by
+    intro x hx
+    have hhas : ∀ j, ∃ i, x ∈ region j i := by
+      intro j
+      exact Set.mem_iUnion.mp (hregionCover j hx)
+    let choice : ∀ j, κ j := fun j => Classical.choose (hhas j)
+    have hchoice : ∀ j, x ∈ region j (choice j) := by
+      intro j
+      exact Classical.choose_spec (hhas j)
+    apply Set.mem_iUnion.mpr ⟨choice, ?_⟩
+    exact Set.mem_iInter.mpr hchoice
+  obtain ⟨mesh, hmesh, hmeshBound, labeled⟩ :=
+    compactLabeledPatchCover_of_finiteOpenCover base hbase jointRegion hjointOpen
+      hjointCover maxMesh hmaxMesh
+  exact ⟨mesh, hmesh, hmeshBound, labeled⟩
+
+/-- An open map sends interiors into the interior of the image. -/
+theorem image_interior_subset_interior_image_of_isOpenMap
+    {α β : Type*} [TopologicalSpace α] [TopologicalSpace β]
+    (f : α → β) (hf : IsOpenMap f) (s : Set α) :
+    f '' interior s ⊆ interior (f '' s) := by
+  rintro y ⟨x, hx, rfl⟩
+  rw [mem_interior]
+  exact ⟨f '' interior s, Set.image_mono interior_subset,
+    hf (interior s) isOpen_interior, ⟨x, hx, rfl⟩⟩
+
+/-- Deleting the final coordinate is an open surjection, since it is a surjective linear map
+between finite-dimensional real vector spaces. -/
+theorem forgetLastCoordinate_isOpenMap (n : ℕ) :
+    IsOpenMap (forgetLastCoordinate n) :=
+  LinearMap.isOpenMap_of_finiteDimensional (forgetLastCoordinate n)
+    (forgetLastCoordinate_surjective n)
+
+/-- The coordinatewise box with symmetric fiber widths. This is the Cartesian product factor
+`fiber(α)` in Craciun v3, §7.3, once the widths are assigned from the prefixes of a binary word. -/
+def coordinateFiberBox {n : ℕ} (radius : Fin n → ℝ) : Set (Fin n → ℝ) :=
+  Set.pi Set.univ (fun i => Set.Icc (-radius i) (radius i))
+
+/-- Membership in a coordinate fiber box is the coordinatewise absolute-value bound. -/
+theorem mem_coordinateFiberBox_iff {n : ℕ} (radius : Fin n → ℝ) (x : Fin n → ℝ) :
+    x ∈ coordinateFiberBox radius ↔ ∀ i, |x i| ≤ radius i := by
+  simp [coordinateFiberBox, abs_le, Pi.le_def, forall_and]
+
+/-- Increasing every coordinate radius can only enlarge the binary-prefix fiber box. -/
+theorem coordinateFiberBox_subset_of_radius_le {n : ℕ}
+    {radius₁ radius₂ : Fin n → ℝ} (hwidth : ∀ i, radius₁ i ≤ radius₂ i) :
+    coordinateFiberBox radius₁ ⊆ coordinateFiberBox radius₂ := by
+  intro x hx
+  rw [mem_coordinateFiberBox_iff] at hx ⊢
+  intro i
+  exact (hx i).trans (hwidth i)
+
+/-- A coordinate fiber box whose widths are bounded by `radius` lies in the closed norm ball of
+that radius. The function-space norm is the finite-product supremum norm. -/
+theorem coordinateFiberBox_norm_le_of_radius_le {n : ℕ} (width : Fin n → ℝ)
+    {radius : ℝ} (hradius : 0 ≤ radius) (hwidth : ∀ i, width i ≤ radius)
+    {x : Fin n → ℝ} (hx : x ∈ coordinateFiberBox width) :
+    ‖x‖ ≤ radius := by
+  rw [pi_norm_le_iff_of_nonneg hradius]
+  intro i
+  have hi := (mem_coordinateFiberBox_iff width x).mp hx i
+  calc
+    ‖x i‖ = |x i| := Real.norm_eq_abs _
+    _ ≤ width i := hi
+    _ ≤ radius := hwidth i
+
+/-- Coordinate fiber boxes are compact, including the degenerate zero-width factors used for
+binary prefixes ending in `1`. -/
+theorem isCompact_coordinateFiberBox {n : ℕ} (radius : Fin n → ℝ) :
+    IsCompact (coordinateFiberBox radius) := by
+  unfold coordinateFiberBox
+  exact isCompact_univ_pi (fun i => isCompact_Icc)
+
+/-- The origin belongs to every coordinate fiber box with nonnegative widths. -/
+theorem zero_mem_coordinateFiberBox {n : ℕ} (radius : Fin n → ℝ)
+    (hradius : ∀ i, 0 ≤ radius i) :
+    (0 : Fin n → ℝ) ∈ coordinateFiberBox radius := by
+  rw [mem_coordinateFiberBox_iff]
+  intro i
+  simpa using hradius i
+
+/-- Deleting the final coordinate projects a coordinate fiber box exactly onto the box of its
+remaining widths. A nonnegative final width supplies the zero coordinate needed for surjectivity. -/
+theorem forgetLastCoordinate_image_coordinateFiberBox {n : ℕ}
+    (radius : Fin (n + 1) → ℝ) (hradius : ∀ i, 0 ≤ radius i) :
+    forgetLastCoordinate n '' coordinateFiberBox radius =
+      coordinateFiberBox (fun i => radius i.castSucc) := by
+  ext y
+  constructor
+  · rintro ⟨x, hx, rfl⟩
+    rw [mem_coordinateFiberBox_iff] at hx ⊢
+    intro i
+    exact hx i.castSucc
+  · intro hy
+    rw [mem_coordinateFiberBox_iff] at hy
+    refine ⟨Fin.snoc y 0, ?_, ?_⟩
+    · rw [mem_coordinateFiberBox_iff]
+      intro i
+      refine Fin.lastCases ?_ (fun j => ?_) i
+      · simpa using hradius (Fin.last n)
+      · simpa using hy j
+    · funext i
+      simp [forgetLastCoordinate]
+
+/-- The product fiber assigned to a binary word: coordinate `i` uses the width of its prefix of
+length `i + 1`, as in Craciun v3, §7.3. -/
+def binaryWordFiberBox {n : ℕ} (epsilon : List Bool → ℝ) (word : List Bool) :
+    Set (Fin n → ℝ) :=
+  coordinateFiberBox (fun i => epsilon (word.take (i.val + 1)))
+
+/-- Prefixwise ordered word scales induce nested binary-word fiber boxes. -/
+theorem binaryWordFiberBox_subset_of_prefix_width_le {n : ℕ}
+    (epsilon₁ epsilon₂ : List Bool → ℝ) (word : List Bool)
+    (hwidth : ∀ i : Fin n,
+      epsilon₁ (word.take (i.val + 1)) ≤ epsilon₂ (word.take (i.val + 1))) :
+    binaryWordFiberBox (n := n) epsilon₁ word ⊆
+      binaryWordFiberBox (n := n) epsilon₂ word := by
+  exact coordinateFiberBox_subset_of_radius_le hwidth
+
+/-- Deleting the final coordinate of a binary-word fiber box gives exactly the fiber box for the
+first `n` bits. -/
+theorem forgetLastCoordinate_image_binaryWordFiberBox {n : ℕ}
+    (epsilon : List Bool → ℝ) (word : List Bool) (hepsilon : ∀ p, 0 ≤ epsilon p) :
+    forgetLastCoordinate n '' binaryWordFiberBox epsilon word =
+      binaryWordFiberBox epsilon (word.take n) := by
+  change forgetLastCoordinate n '' coordinateFiberBox
+      (fun i => epsilon (word.take (i.val + 1))) =
+    coordinateFiberBox (fun i => epsilon ((word.take n).take (i.val + 1)))
+  rw [forgetLastCoordinate_image_coordinateFiberBox
+    (hradius := by intro i; exact hepsilon _)]
+  congr 1
+  funext i
+  have hi : i.val + 1 ≤ n := by omega
+  simp [List.take_take]
+
+/-- Coordinate projection commutes with Minkowski addition of sets. -/
+theorem forgetLastCoordinate_image_add {n : ℕ}
+    (A B : Set (Fin (n + 1) → ℝ)) :
+    forgetLastCoordinate n '' (A + B) =
+      (forgetLastCoordinate n '' A) + (forgetLastCoordinate n '' B) := by
+  ext y
+  constructor
+  · rintro ⟨x, hx, rfl⟩
+    rcases Set.mem_add.mp hx with ⟨a, ha, b, hb, rfl⟩
+    exact Set.mem_add.mpr ⟨forgetLastCoordinate n a, ⟨a, ha, rfl⟩,
+      forgetLastCoordinate n b, ⟨b, hb, rfl⟩,
+      (forgetLastCoordinate n).map_add a b⟩
+  · intro hy
+    rcases Set.mem_add.mp hy with ⟨a, ha, b, hb, hab⟩
+    rcases ha with ⟨x, hx, rfl⟩
+    rcases hb with ⟨z, hz, rfl⟩
+    refine ⟨x + z, Set.mem_add.mpr ⟨x, hx, z, hz, rfl⟩, ?_⟩
+    rw [(forgetLastCoordinate n).map_add, hab]
+
+/-- Adding a set of norm-bounded perturbations to a set already outside a ball preserves a
+smaller ball-avoidance margin. -/
+theorem set_add_subset_compl_ball_of_norm_le {E : Type*} [NormedAddCommGroup E]
+    (A B : Set E) (margin radius : ℝ)
+    (hA : A ⊆ (Metric.ball (0 : E) margin)ᶜ)
+    (hB : ∀ b ∈ B, ‖b‖ ≤ radius) :
+    A + B ⊆ (Metric.ball (0 : E) (margin - radius))ᶜ := by
+  intro x hx
+  change x ∉ Metric.ball (0 : E) (margin - radius)
+  intro hxball
+  rcases Set.mem_add.mp hx with ⟨a, ha, b, hb, rfl⟩
+  have haMargin : margin ≤ ‖a‖ := by
+    by_contra hnot
+    have haLt : ‖a‖ < margin := lt_of_not_ge hnot
+    have haball : a ∈ Metric.ball (0 : E) margin := by
+      simpa [Metric.mem_ball, dist_eq_norm] using haLt
+    exact hA ha haball
+  have hsumNorm : ‖a‖ ≤ ‖a + b‖ + ‖b‖ := by
+    calc
+      ‖a‖ = ‖(a + b) - b‖ := by rw [add_sub_cancel_right]
+      _ ≤ ‖a + b‖ + ‖b‖ := norm_sub_le _ _
+  have hbRadius := hB b hb
+  have hballNorm : ‖a + b‖ < margin - radius := by
+    simpa [Metric.mem_ball, dist_eq_norm] using hxball
+  linarith
+
+/-- If two compact sets meet inside an open set, sufficiently small neighborhoods of both sets
+can intersect only inside that open set. The proof isolates the part of the first compact set
+away from the actual intersection and separates that compact remainder from the second set. -/
+theorem isCompact_inter_thickenings_subset_open {α : Type*} [MetricSpace α]
+    {A B U : Set α} (hA : IsCompact A) (hB : IsCompact B) (hU : IsOpen U)
+    (hAB : A ∩ B ⊆ U) :
+    ∃ δ : ℝ, 0 < δ ∧ Metric.thickening δ A ∩ Metric.thickening δ B ⊆ U := by
+  obtain ⟨epsilon, hepsilon, hF⟩ := (hA.inter hB).exists_thickening_subset_open hU hAB
+  let F : Set α := A ∩ B
+  let far : Set α := A \ Metric.thickening (epsilon / 2) F
+  have hfarCompact : IsCompact far := by
+    apply hA.diff
+    exact Metric.isOpen_thickening
+  have hfarDisjoint : Disjoint far B := by
+    apply Set.disjoint_left.mpr
+    intro x hxFar hxB
+    have hxF : x ∈ F := ⟨hxFar.1, hxB⟩
+    have hxNear : x ∈ Metric.thickening (epsilon / 2) F := by
+      apply Metric.mem_thickening_iff.mpr
+      exact ⟨x, hxF, by simpa using half_pos hepsilon⟩
+    exact hxFar.2 hxNear
+  obtain ⟨delta₀, hdelta₀, hseparated⟩ :=
+    hfarDisjoint.exists_thickenings hfarCompact hB.isClosed
+  let delta := min delta₀ (epsilon / 2)
+  have hdelta : 0 < delta := lt_min hdelta₀ (by linarith)
+  have hdeltaFar : delta ≤ delta₀ := min_le_left _ _
+  have hdeltaFace : delta ≤ epsilon / 2 := min_le_right _ _
+  refine ⟨delta, hdelta, ?_⟩
+  intro x hx
+  rcases hx with ⟨hxA, hxB⟩
+  obtain ⟨a, haA, hxa⟩ := Metric.mem_thickening_iff.mp hxA
+  have haNotFar : a ∉ far := by
+    intro haFar
+    have hxFar : x ∈ Metric.thickening delta₀ far := by
+      apply Metric.thickening_mono hdeltaFar far
+      exact Metric.mem_thickening_iff.mpr ⟨a, haFar, hxa⟩
+    have hxB₀ : x ∈ Metric.thickening delta₀ B :=
+      (Metric.thickening_mono hdeltaFar B) hxB
+    exact (Set.disjoint_left.mp hseparated) hxFar hxB₀
+  have haNearF : a ∈ Metric.thickening (epsilon / 2) F := by
+    by_contra hnot
+    exact haNotFar ⟨haA, hnot⟩
+  obtain ⟨z, hzF, haz⟩ := Metric.mem_thickening_iff.mp haNearF
+  have hxNearF : x ∈ Metric.thickening epsilon F := by
+    apply Metric.mem_thickening_iff.mpr
+    refine ⟨z, hzF, ?_⟩
+    calc
+      dist x z ≤ dist x a + dist a z := dist_triangle x a z
+      _ < delta + epsilon / 2 := add_lt_add hxa haz
+      _ ≤ epsilon := by linarith [hdeltaFace]
+  exact hF hxNearF
+
+/-- The zero-bit neighborhood from Craciun v3, §7.3: thicken a face by its binary-prefix fiber,
+then restrict to the previously constructed neighborhood of its projection. -/
+def zeroBitPreBlueprintNeighborhood {n : ℕ}
+    (face : Set (Fin (n + 1) → ℝ)) (baseNeighborhood : Set (Fin n → ℝ))
+    (epsilon : List Bool → ℝ) (word : List Bool) : Set (Fin (n + 1) → ℝ) :=
+  (face + binaryWordFiberBox (n := n + 1) epsilon word) ∩
+    {x | forgetLastCoordinate n x ∈ baseNeighborhood}
+
+/-- If every coordinate-prefix width in a binary fiber box is at most `q`, then adding that box
+to a face lies in the open `2q`-thickening of the face. This turns the paper's coordinatewise
+Craciun widths into one ambient metric estimate, uniformly over all binary words. -/
+theorem face_add_binaryWordFiberBox_subset_thickening_of_width_le {n : ℕ}
+    (face : Set (Fin n → ℝ)) (epsilon : List Bool → ℝ) (word : List Bool)
+    {q : ℝ} (hq : 0 < q)
+    (hwidth : ∀ i : Fin n, epsilon (word.take (i.val + 1)) ≤ q) :
+    face + binaryWordFiberBox (n := n) epsilon word ⊆ Metric.thickening (2 * q) face := by
+  intro x hx
+  rcases Set.mem_add.mp hx with ⟨a, ha, b, hb, rfl⟩
+  have hnorm : ‖b‖ ≤ q := by
+    apply coordinateFiberBox_norm_le_of_radius_le
+    · exact hq.le
+    · exact hwidth
+    · change b ∈ coordinateFiberBox (fun i => epsilon (word.take (i.val + 1))) at hb
+      exact hb
+  apply Metric.mem_thickening_iff.mpr
+  refine ⟨a, ha, ?_⟩
+  calc
+    dist (a + b) a = ‖b‖ := by simp [dist_eq_norm]
+    _ ≤ q := hnorm
+    _ < 2 * q := by linarith
+
+/-- The projected zero-bit neighborhood is exactly the sum of the projected face and the
+lower-dimensional prefix fiber, restricted to the supplied projected neighborhood. -/
+theorem forgetLastCoordinate_image_zeroBitPreBlueprintNeighborhood {n : ℕ}
+    (face : Set (Fin (n + 1) → ℝ)) (baseNeighborhood : Set (Fin n → ℝ))
+    (epsilon : List Bool → ℝ) (word : List Bool) (hepsilon : ∀ p, 0 ≤ epsilon p) :
+    forgetLastCoordinate n ''
+        zeroBitPreBlueprintNeighborhood face baseNeighborhood epsilon word =
+      ((forgetLastCoordinate n '' face) +
+          binaryWordFiberBox (n := n) epsilon (word.take n)) ∩ baseNeighborhood := by
+  have himage : forgetLastCoordinate n '' (face + binaryWordFiberBox epsilon word) =
+      (forgetLastCoordinate n '' face) + binaryWordFiberBox (n := n) epsilon (word.take n) := by
+    rw [forgetLastCoordinate_image_add,
+      forgetLastCoordinate_image_binaryWordFiberBox epsilon word hepsilon]
+  ext y
+  constructor
+  · rintro ⟨x, ⟨hthick, hbase⟩, rfl⟩
+    have hprojected : forgetLastCoordinate n x ∈
+        (forgetLastCoordinate n '' face) + binaryWordFiberBox epsilon (word.take n) := by
+      rw [← himage]
+      exact ⟨x, hthick, rfl⟩
+    exact ⟨hprojected, hbase⟩
+  · rintro ⟨hthick, hbase⟩
+    rw [← himage] at hthick
+    rcases hthick with ⟨x, hx, hxy⟩
+    refine ⟨x, ⟨hx, ?_⟩, hxy⟩
+    simpa [hxy] using hbase
+
+/-- Craciun v3, §7.3, Theorem 7.1: if two projected lower-dimensional neighborhoods have
+disjoint interiors, then the corresponding zero-bit pre-blueprint neighborhoods also have
+disjoint ambient interiors. This is the first induction case in the pre-blueprint separation
+argument: distinct projections are separated downstairs, and openness of coordinate projection
+transfers that separation upstairs. The equal-projection case requires the separate scale-order
+argument from §7.3. -/
+theorem zeroBitPreBlueprintNeighborhood_interiors_disjoint_of_projected_interiors_disjoint
+    {n : ℕ} (faceA faceB : Set (Fin (n + 1) → ℝ))
+    (baseA baseB : Set (Fin n → ℝ)) (epsilon : List Bool → ℝ) (word : List Bool)
+    (hepsilon : ∀ p, 0 ≤ epsilon p)
+    (hbaseDisjoint : interior baseA ∩ interior baseB = ∅) :
+    interior (zeroBitPreBlueprintNeighborhood faceA baseA epsilon word) ∩
+      interior (zeroBitPreBlueprintNeighborhood faceB baseB epsilon word) = ∅ := by
+  have himageA : forgetLastCoordinate n ''
+      zeroBitPreBlueprintNeighborhood faceA baseA epsilon word ⊆ baseA := by
+    rw [forgetLastCoordinate_image_zeroBitPreBlueprintNeighborhood
+      faceA baseA epsilon word hepsilon]
+    exact Set.inter_subset_right
+  have himageB : forgetLastCoordinate n ''
+      zeroBitPreBlueprintNeighborhood faceB baseB epsilon word ⊆ baseB := by
+    rw [forgetLastCoordinate_image_zeroBitPreBlueprintNeighborhood
+      faceB baseB epsilon word hepsilon]
+    exact Set.inter_subset_right
+  have hinteriorA : forgetLastCoordinate n ''
+      interior (zeroBitPreBlueprintNeighborhood faceA baseA epsilon word) ⊆ interior baseA :=
+    (image_interior_subset_interior_image_of_isOpenMap (forgetLastCoordinate n)
+      (forgetLastCoordinate_isOpenMap n)
+      (zeroBitPreBlueprintNeighborhood faceA baseA epsilon word)).trans
+        (interior_mono himageA)
+  have hinteriorB : forgetLastCoordinate n ''
+      interior (zeroBitPreBlueprintNeighborhood faceB baseB epsilon word) ⊆ interior baseB :=
+    (image_interior_subset_interior_image_of_isOpenMap (forgetLastCoordinate n)
+      (forgetLastCoordinate_isOpenMap n)
+      (zeroBitPreBlueprintNeighborhood faceB baseB epsilon word)).trans
+        (interior_mono himageB)
+  apply Set.eq_empty_iff_forall_notMem.mpr
+  intro x hx
+  have hprojected : forgetLastCoordinate n x ∈ interior baseA ∩ interior baseB := by
+    exact ⟨hinteriorA ⟨x, hx.1, rfl⟩, hinteriorB ⟨x, hx.2, rfl⟩⟩
+  rw [hbaseDisjoint] at hprojected
+  exact hprojected
+
+/-- The distinct-projection part of Craciun v3, §7.3, Theorem 7.1 for an entire finite
+subdivision: pairwise interior-disjoint projected cells induce pairwise interior-disjoint
+zero-bit neighborhoods. The only remaining pair type in the full theorem is when two faces have
+the same projection, handled by the manuscript's dimension and binary-scale argument. -/
+theorem pairwise_zeroBitPreBlueprintNeighborhood_interiors_disjoint_of_projected
+    {n : ℕ} {ι : Type*} (face : ι → Set (Fin (n + 1) → ℝ))
+    (base : ι → Set (Fin n → ℝ))
+    (epsilon : List Bool → ℝ) (word : List Bool) (hepsilon : ∀ p, 0 ≤ epsilon p)
+    (hbase : ∀ i j, i ≠ j → interior (base i) ∩ interior (base j) = ∅) :
+    ∀ i j, i ≠ j →
+      interior (zeroBitPreBlueprintNeighborhood (face i) (base i) epsilon word) ∩
+        interior (zeroBitPreBlueprintNeighborhood (face j) (base j) epsilon word) = ∅ := by
+  intro i j hij
+  exact zeroBitPreBlueprintNeighborhood_interiors_disjoint_of_projected_interiors_disjoint
+    (face i) (face j) (base i) (base j) epsilon word hepsilon (hbase i j hij)
+
+/-- Minkowski addition preserves compactness for compact subsets of the finite-dimensional
+coordinate spaces used by the pre-blueprint. -/
+theorem isCompact_set_add_of_isCompact {n : ℕ}
+    (A B : Set (Fin n → ℝ)) (hA : IsCompact A) (hB : IsCompact B) :
+    IsCompact (A + B) := by
+  have hadd : A + B =
+      (fun p : (Fin n → ℝ) × (Fin n → ℝ) => p.1 + p.2) '' (A ×ˢ B) := by
+    ext x
+    simp [Set.mem_add]
+  rw [hadd]
+  exact (hA.prod hB).image (continuous_fst.add continuous_snd)
+
+/-- The zero-bit neighborhood contains the whole face when its projection lies in the supplied
+lower-dimensional neighborhood. The zero vector in the fiber box witnesses the Minkowski sum. -/
+theorem subset_zeroBitPreBlueprintNeighborhood_of_projection {n : ℕ}
+    (face : Set (Fin (n + 1) → ℝ)) (baseNeighborhood : Set (Fin n → ℝ))
+    (epsilon : List Bool → ℝ) (word : List Bool) (hepsilon : ∀ p, 0 ≤ epsilon p)
+    (hproject : ∀ x ∈ face, forgetLastCoordinate n x ∈ baseNeighborhood) :
+    face ⊆ zeroBitPreBlueprintNeighborhood face baseNeighborhood epsilon word := by
+  intro x hx
+  have hzero :
+      (0 : Fin (n + 1) → ℝ) ∈ binaryWordFiberBox (n := n + 1) epsilon word := by
+    apply zero_mem_coordinateFiberBox
+    intro i
+    exact hepsilon _
+  refine ⟨Set.mem_add.mpr ⟨x, hx, 0, hzero, by simp⟩, hproject x hx⟩
+
+/-- A larger projected neighborhood and wider prefix fibers produce a larger zero-bit
+pre-blueprint. This is the nesting law needed when the binary-word scale hierarchy orders parent
+and child neighborhoods in Craciun v3, §7.3. -/
+theorem zeroBitPreBlueprintNeighborhood_mono {n : ℕ}
+    (face : Set (Fin (n + 1) → ℝ))
+    {base₁ base₂ : Set (Fin n → ℝ)} (hbase : base₁ ⊆ base₂)
+    (epsilon₁ epsilon₂ : List Bool → ℝ) (word : List Bool)
+    (hbox : binaryWordFiberBox (n := n + 1) epsilon₁ word ⊆
+      binaryWordFiberBox (n := n + 1) epsilon₂ word) :
+    zeroBitPreBlueprintNeighborhood face base₁ epsilon₁ word ⊆
+      zeroBitPreBlueprintNeighborhood face base₂ epsilon₂ word := by
+  rintro x ⟨hthick, hprojected⟩
+  rcases Set.mem_add.mp hthick with ⟨a, ha, b, hb, rfl⟩
+  exact ⟨Set.mem_add.mpr ⟨a, ha, b, hbox hb, rfl⟩, hbase hprojected⟩
+
+/-- The zero-bit nesting law specialized to scale functions ordered at every prefix of the chosen
+word. -/
+theorem zeroBitPreBlueprintNeighborhood_mono_of_prefix_width_le {n : ℕ}
+    (face : Set (Fin (n + 1) → ℝ))
+    {base₁ base₂ : Set (Fin n → ℝ)} (hbase : base₁ ⊆ base₂)
+    (epsilon₁ epsilon₂ : List Bool → ℝ) (word : List Bool)
+    (hwidth : ∀ i : Fin (n + 1),
+      epsilon₁ (word.take (i.val + 1)) ≤ epsilon₂ (word.take (i.val + 1))) :
+    zeroBitPreBlueprintNeighborhood face base₁ epsilon₁ word ⊆
+      zeroBitPreBlueprintNeighborhood face base₂ epsilon₂ word := by
+  apply zeroBitPreBlueprintNeighborhood_mono face hbase epsilon₁ epsilon₂ word
+  exact binaryWordFiberBox_subset_of_prefix_width_le epsilon₁ epsilon₂ word hwidth
+
+/-- If the face and lower-dimensional neighborhood are compact, so is the zero-bit neighborhood:
+the fiber-thickened face is compact, and the projection restriction is closed. -/
+theorem isCompact_zeroBitPreBlueprintNeighborhood {n : ℕ}
+    (face : Set (Fin (n + 1) → ℝ)) (baseNeighborhood : Set (Fin n → ℝ))
+    (epsilon : List Bool → ℝ) (word : List Bool)
+    (hface : IsCompact face) (hbase : IsCompact baseNeighborhood) :
+    IsCompact (zeroBitPreBlueprintNeighborhood face baseNeighborhood epsilon word) := by
+  have hbox : IsCompact (binaryWordFiberBox (n := n + 1) epsilon word) :=
+    isCompact_coordinateFiberBox _
+  have hthick : IsCompact (face + binaryWordFiberBox epsilon word) :=
+    isCompact_set_add_of_isCompact face _ hface hbox
+  have hprojection : Continuous (forgetLastCoordinate n :
+      (Fin (n + 1) → ℝ) → (Fin n → ℝ)) :=
+    (forgetLastCoordinate n).continuous_of_finiteDimensional
+  have hclosed : IsClosed {x | forgetLastCoordinate n x ∈ baseNeighborhood} :=
+    hbase.isClosed.preimage hprojection
+  exact hthick.inter_right hclosed
+
+/-- The recursively assembled zero-bit pre-blueprint along every projection stage of a face
+chain. At each step it thickens the current face by the binary-prefix fiber and restricts it to
+the previously constructed neighborhood of its projection, exactly as in Craciun v3, §7.3. -/
+def CoordinateProjectedFaceChain.preBlueprintNeighborhood {n : ℕ}
+    (chain : CoordinateProjectedFaceChain n) (epsilon : List Bool → ℝ)
+    (word : List Bool) : (k : ℕ) → Set (Fin k → ℝ)
+  | 0 => chain.face 0
+  | k + 1 => if hk : k + 1 ≤ n then
+      let j : Fin n := ⟨k, by omega⟩
+      zeroBitPreBlueprintNeighborhood (chain.face j.succ)
+        (chain.preBlueprintNeighborhood epsilon word k) epsilon
+        (word.take (k + 1))
+    else Set.univ
+termination_by k => k
+
+/-- Every projected face lies inside its recursively assembled pre-blueprint when all widths are
+nonnegative. This is the containment invariant passed from one projection dimension to the next. -/
+theorem CoordinateProjectedFaceChain.face_subset_preBlueprintNeighborhood {n : ℕ}
+    (chain : CoordinateProjectedFaceChain n) (epsilon : List Bool → ℝ)
+    (word : List Bool) (hepsilon : ∀ p, 0 ≤ epsilon p) :
+    ∀ k (hk : k ≤ n),
+      chain.face ⟨k, by omega⟩ ⊆ chain.preBlueprintNeighborhood epsilon word k := by
+  intro k
+  induction k with
+  | zero =>
+      intro hk
+      simp only [CoordinateProjectedFaceChain.preBlueprintNeighborhood]
+      exact Set.Subset.rfl
+  | succ k ih =>
+      intro hk
+      let j : Fin n := ⟨k, by omega⟩
+      have hproject : ∀ x ∈ chain.face j.succ,
+          forgetLastCoordinate k x ∈ chain.face j.castSucc := by
+        intro x hx
+        have hximage : forgetLastAffine k x ∈
+            forgetLastAffine k '' chain.face j.succ := ⟨x, hx, rfl⟩
+        rw [chain.projectedFace j] at hximage
+        simpa [forgetLastAffine] using hximage
+      have hbase : chain.face j.castSucc ⊆
+          chain.preBlueprintNeighborhood epsilon word k := by
+        simpa [j] using ih (by omega)
+      have hface : chain.face j.succ ⊆
+          zeroBitPreBlueprintNeighborhood (chain.face j.succ)
+            (chain.preBlueprintNeighborhood epsilon word k) epsilon (word.take (k + 1)) :=
+        subset_zeroBitPreBlueprintNeighborhood_of_projection
+        (chain.face j.succ) (chain.preBlueprintNeighborhood epsilon word k)
+        epsilon (word.take (k + 1)) hepsilon
+        (fun x hx => hbase (hproject x hx))
+      simpa [CoordinateProjectedFaceChain.preBlueprintNeighborhood, hk, j] using hface
+
+/-- The projection of each recursively built zero-bit neighborhood is exactly the projected face
+thickened by the lower-dimensional fiber, then restricted to the preceding neighborhood. This is
+the projection-compatibility equation in Craciun v3, §7.3, and is the datum needed when adjacent
+dimension stages are assembled. -/
+theorem CoordinateProjectedFaceChain.preBlueprintNeighborhood_projected {n : ℕ}
+    (chain : CoordinateProjectedFaceChain n) (epsilon : List Bool → ℝ)
+    (word : List Bool) (hepsilon : ∀ p, 0 ≤ epsilon p)
+    (k : ℕ) (hk : k < n) :
+    forgetLastCoordinate k '' chain.preBlueprintNeighborhood epsilon word (k + 1) =
+      (chain.face ⟨k, by omega⟩ + binaryWordFiberBox (n := k) epsilon (word.take k)) ∩
+        chain.preBlueprintNeighborhood epsilon word k := by
+  let j : Fin n := ⟨k, hk⟩
+  have hprojectedFace :
+      forgetLastCoordinate k '' chain.face j.succ = chain.face j.castSucc := by
+    simpa [forgetLastAffine] using chain.projectedFace j
+  have hrec : chain.preBlueprintNeighborhood epsilon word (k + 1) =
+      zeroBitPreBlueprintNeighborhood (chain.face j.succ)
+        (chain.preBlueprintNeighborhood epsilon word k) epsilon (word.take (k + 1)) := by
+    simp [CoordinateProjectedFaceChain.preBlueprintNeighborhood, hk, j]
+  rw [hrec]
+  rw [forgetLastCoordinate_image_zeroBitPreBlueprintNeighborhood _ _ _ _ hepsilon,
+    hprojectedFace]
+  congr 1
+  simp [List.take_take, j]
+
+/-- Compact faces give compact recursively assembled pre-blueprints stage by stage. This is the
+compactness input for taking finite chart subcovers of a bounded restricted blueprint. -/
+theorem CoordinateProjectedFaceChain.isCompact_preBlueprintNeighborhood {n : ℕ}
+    (chain : CoordinateProjectedFaceChain n) (epsilon : List Bool → ℝ)
+    (word : List Bool) (hface : ∀ j, IsCompact (chain.face j)) :
+    ∀ k (hk : k ≤ n), IsCompact (chain.preBlueprintNeighborhood epsilon word k) := by
+  intro k
+  induction k with
+  | zero =>
+      intro hk
+      simp only [CoordinateProjectedFaceChain.preBlueprintNeighborhood]
+      change IsCompact (chain.face (⟨0, by omega⟩ : Fin (n + 1)))
+      exact hface _
+  | succ k ih =>
+      intro hk
+      let j : Fin n := ⟨k, by omega⟩
+      have hbase : IsCompact (chain.preBlueprintNeighborhood epsilon word k) := ih (by omega)
+      have hcompact := isCompact_zeroBitPreBlueprintNeighborhood
+        (chain.face j.succ) (chain.preBlueprintNeighborhood epsilon word k)
+        epsilon (word.take (k + 1)) (hface j.succ) hbase
+      have hrec : chain.preBlueprintNeighborhood epsilon word (k + 1) =
+          zeroBitPreBlueprintNeighborhood (chain.face j.succ)
+            (chain.preBlueprintNeighborhood epsilon word k) epsilon (word.take (k + 1)) := by
+        simp [CoordinateProjectedFaceChain.preBlueprintNeighborhood, hk, j]
+      rw [hrec]
+      exact hcompact
+
+/-- The full zero-bit pre-blueprint neighborhood retains the reduced origin-avoidance margin
+whenever every coordinate width in its binary-prefix fiber is bounded by a smaller radius. -/
+theorem zeroBitPreBlueprintNeighborhood_separated {n : ℕ}
+    (face : Set (Fin (n + 1) → ℝ)) (baseNeighborhood : Set (Fin n → ℝ))
+    (epsilon : List Bool → ℝ) (word : List Bool) (margin radius : ℝ)
+    (hfaceSeparated : face ⊆ (Metric.ball (0 : Fin (n + 1) → ℝ) margin)ᶜ)
+    (hradius : 0 ≤ radius) (hwidth : ∀ i : Fin (n + 1),
+      epsilon (word.take (i.val + 1)) ≤ radius) (hsmall : radius < margin) :
+    0 < margin - radius ∧
+      zeroBitPreBlueprintNeighborhood face baseNeighborhood epsilon word ⊆
+        (Metric.ball (0 : Fin (n + 1) → ℝ) (margin - radius))ᶜ := by
+  refine ⟨sub_pos.mpr hsmall, ?_⟩
+  intro x hx
+  apply set_add_subset_compl_ball_of_norm_le face
+    (binaryWordFiberBox (n := n + 1) epsilon word) margin radius hfaceSeparated
+    (fun b hb => by
+      apply coordinateFiberBox_norm_le_of_radius_le
+      · exact hradius
+      · exact hwidth
+      · change b ∈ coordinateFiberBox
+          (fun i => epsilon (word.take (i.val + 1))) at hb
+        exact hb)
+  exact hx.1
+
+/-- If a length-`n + 1` word ends in `1`, its final coordinate has zero width in the associated
+fiber box. This is the dimension-dropping case of the prefix rule in §7.3. -/
+theorem binaryWordFiberBox_lastCoordinate_eq_zero {n : ℕ}
+    (epsilon : List Bool → ℝ) (word : List Bool) (p : List Bool)
+    (hword : word = p ++ [true]) (hlen : word.length = n + 1)
+    (hepsilon : epsilon (p ++ [true]) = 0) {x : Fin (n + 1) → ℝ}
+    (hx : x ∈ binaryWordFiberBox epsilon word) :
+    x (Fin.last n) = 0 := by
+  have hcoordinates : ∀ i, |x i| ≤ epsilon (word.take (i.val + 1)) := by
+    change x ∈ coordinateFiberBox (fun i => epsilon (word.take (i.val + 1))) at hx
+    rw [mem_coordinateFiberBox_iff] at hx
+    exact hx
+  have htake : word.take (n + 1) = word :=
+    List.take_of_length_le (by omega)
+  have hbound : |x (Fin.last n)| ≤ epsilon (word.take (n + 1)) := by
+    simpa [Fin.val_last] using hcoordinates (Fin.last n)
+  rw [htake, hword, hepsilon] at hbound
+  exact abs_eq_zero.mp (le_antisymm hbound (abs_nonneg _))
+
+/-! ## Finite interpolation of tile scales
+
+Section 7.4.3 of Craciun's general-dimensional construction inserts tile scales along finite chains
+between prescribed endpoint scales. The lemmas here formalize that scalar interpolation, including
+a common order-of-magnitude factor for any finite family once each chain's endpoint order is known.
+The projection-dimension encoding of face words is formalized in
+`CRNT.Geometry.ProjectedFaceDimensionCode`, and the last-zero decomposition used to index scale
+chains is formalized below. Pre-blueprints and geometric tiling remain open.
+`LogProjectiveSection.existsUnique_sectionPoint_with_coordinates` and
+`LogProjectiveSection.exists_contDiff_local_sectionScale` supply the pointwise and smooth local
+inverse for one affine face plane of the logarithmic projective chart.
+`LogProjectiveFaceCompatibility.existsUnique_common_sectionScale` gives an exact sufficient
+condition for two such sections to share a ray point. The module also proves a first-moment
+criterion for matching directional derivatives of the scalar level equations, and exhibits a
+two-species failure of C¹ gluing under fiber balance alone. Craciun's v3 ZSH construction requires
+piecewise smoothness and checks the non-crossing condition at smooth points; the first-jet mismatch
+is therefore a diagnostic for stronger C¹ gluing, not by itself an obstruction to that construction.
+Pointwise balance, seam topology, and the required normal condition on smooth pieces remain
+separate obligations.
+https://arxiv.org/html/1501.02860v3
+-/
+
+/-- Linear interpolation across a finite tile-scale chain. The `n + 2` values include both
+endpoints and `n` strict intermediate scales. -/
+noncomputable def tileScaleInterpolation {n : ℕ} (lo hi : ℝ) (i : Fin (n + 2)) : ℝ :=
+  lo + (hi - lo) * ((i.val : ℝ) / ((n + 1 : ℕ) : ℝ))
+
+/-- The two endpoints of the interpolated tile-scale chain are the prescribed scales. -/
+theorem tileScaleInterpolation_endpoints {n : ℕ} {lo hi : ℝ} :
+    tileScaleInterpolation lo hi (0 : Fin (n + 2)) = lo ∧
+      tileScaleInterpolation lo hi (Fin.last (n + 1)) = hi := by
+  constructor
+  · simp [tileScaleInterpolation]
+  · change lo + (hi - lo) *
+      (((n + 1 : ℕ) : ℝ) / ((n + 1 : ℕ) : ℝ)) = hi
+    rw [div_self (by positivity : ((n + 1 : ℕ) : ℝ) ≠ 0)]
+    ring
+
+/-- Between any two strictly ordered endpoint scales, a finite chain admits arbitrarily many
+strictly ordered intermediate scales. This is the scale-insertion step used when refining a tile
+chain in the general-dimensional zero-separating construction. -/
+theorem strictMono_tileScaleInterpolation {n : ℕ} {lo hi : ℝ} (hlohi : lo < hi) :
+    StrictMono (tileScaleInterpolation lo hi : Fin (n + 2) → ℝ) := by
+  intro i j hij
+  dsimp [tileScaleInterpolation]
+  have hval : (i.val : ℝ) < j.val := by exact_mod_cast hij
+  have hden : (0 : ℝ) < ((n + 1 : ℕ) : ℝ) := by positivity
+  have hfrac :
+      (i.val : ℝ) / ((n + 1 : ℕ) : ℝ) <
+        (j.val : ℝ) / ((n + 1 : ℕ) : ℝ) :=
+    div_lt_div_of_pos_right hval hden
+  exact add_lt_add_right (mul_lt_mul_of_pos_left hfrac (sub_pos.mpr hlohi)) lo
+
+/-- Interpolated scales stay nonnegative when the lower endpoint is nonnegative and the endpoint
+order is increasing. -/
+theorem tileScaleInterpolation_nonneg {n : ℕ} {lo hi : ℝ} (hlo : 0 ≤ lo)
+    (hlohi : lo ≤ hi) (i : Fin (n + 2)) : 0 ≤ tileScaleInterpolation lo hi i := by
+  dsimp [tileScaleInterpolation]
+  apply add_nonneg hlo
+  apply mul_nonneg
+  · exact sub_nonneg.mpr hlohi
+  · apply div_nonneg
+    · exact Nat.cast_nonneg _
+    · positivity
+
+/-- A nonnegative lower endpoint and a larger upper endpoint admit a single strict scale factor for
+every adjacent pair in the finite interpolation. In the paper's order-of-magnitude notation, this
+gives one `q < 1` with `lower < q * upper` throughout the chain. -/
+theorem exists_separated_tileScaleInterpolation {n : ℕ} {lo hi : ℝ}
+    (hlo : 0 ≤ lo) (hlohi : lo < hi) :
+    ∃ q : ℝ, 0 < q ∧ q < 1 ∧
+      ∀ i : Fin (n + 1),
+        tileScaleInterpolation lo hi i.castSucc <
+          q * tileScaleInterpolation lo hi i.succ := by
+  let den : ℝ := ((n + 1 : ℕ) : ℝ)
+  let step : ℝ := (hi - lo) / den
+  let a : ℝ := step / (2 * hi)
+  let q : ℝ := 1 - a
+  have hden : 0 < den := by positivity
+  have hden1 : 1 ≤ den := by
+    dsimp [den]
+    exact_mod_cast Nat.succ_le_succ (Nat.zero_le n)
+  have hgap : 0 < hi - lo := sub_pos.mpr hlohi
+  have hstep : 0 < step := div_pos hgap hden
+  have hstep_le_gap : step ≤ hi - lo := by
+    dsimp [step]
+    exact div_le_self hgap.le hden1
+  have hstep_le_hi : step ≤ hi := le_trans hstep_le_gap (by linarith)
+  have hhi : 0 < hi := lt_of_le_of_lt hlo hlohi
+  have htwohi : 0 < 2 * hi := mul_pos (by norm_num) hhi
+  have ha : 0 < a := div_pos hstep htwohi
+  have ha_le_half : a ≤ 1 / 2 := by
+    dsimp [a]
+    calc
+      step / (2 * hi) ≤ hi / (2 * hi) := div_le_div_of_nonneg_right hstep_le_hi (le_of_lt htwohi)
+      _ = 1 / 2 := by field_simp [ne_of_gt hhi]
+  refine ⟨q, ?_, ?_, ?_⟩
+  · dsimp [q]
+    linarith
+  · dsimp [q]
+    linarith
+  · intro i
+    let lower := tileScaleInterpolation lo hi i.castSucc
+    let upper := tileScaleInterpolation lo hi i.succ
+    have hinc : upper - lower = step := by
+      dsimp [upper, lower, tileScaleInterpolation, step, den]
+      push_cast
+      field_simp
+      ring
+    have hupper : upper ≤ hi := by
+      have hmono := strictMono_tileScaleInterpolation (n := n) hlohi
+      have hle : i.succ ≤ Fin.last (n + 1) := Fin.le_last _
+      calc
+        upper = tileScaleInterpolation lo hi i.succ := rfl
+        _ ≤ tileScaleInterpolation lo hi (Fin.last (n + 1)) := hmono.monotone hle
+        _ = hi := (tileScaleInterpolation_endpoints (n := n) (lo := lo) (hi := hi)).2
+    have hmul : a * upper ≤ step / 2 := by
+      have hmul' : a * upper ≤ a * hi := mul_le_mul_of_nonneg_left hupper (le_of_lt ha)
+      have hahi : a * hi = step / 2 := by
+        dsimp [a]
+        field_simp [ne_of_gt hhi]
+      linarith
+    have hdiff : q * upper - lower = (step - a * upper) := by
+      dsimp [q]
+      rw [← hinc]
+      ring
+    have hpos : 0 < q * upper - lower := by
+      rw [hdiff]
+      linarith
+    linarith
+
+/-- A finite family of ordered endpoint pairs has one common strict separation factor for all its
+interpolated chains. The finite maximum of the chainwise factors remains below `1`; this is the
+scalar compatibility statement needed for a common order-of-magnitude constant. -/
+theorem exists_uniformly_separated_tileScaleInterpolations {ι : Type*} [Fintype ι]
+    (n : ι → ℕ) (lo hi : ι → ℝ) (hlo : ∀ c, 0 ≤ lo c)
+    (hlohi : ∀ c, lo c < hi c) :
+    ∃ q : ℝ, 0 < q ∧ q < 1 ∧
+      ∀ c (i : Fin (n c + 1)),
+        tileScaleInterpolation (lo c) (hi c) i.castSucc <
+          q * tileScaleInterpolation (lo c) (hi c) i.succ := by
+  classical
+  let qc : ι → ℝ := fun c =>
+    Classical.choose (exists_separated_tileScaleInterpolation (n := n c) (hlo c) (hlohi c))
+  have hqc (c : ι) : 0 < qc c ∧ qc c < 1 ∧
+      ∀ i : Fin (n c + 1),
+        tileScaleInterpolation (lo c) (hi c) i.castSucc <
+          qc c * tileScaleInterpolation (lo c) (hi c) i.succ := by
+    exact Classical.choose_spec
+      (exists_separated_tileScaleInterpolation (n := n c) (hlo c) (hlohi c))
+  by_cases hI : (Finset.univ : Finset ι).Nonempty
+  · let Q : Finset ℝ := Finset.univ.image qc
+    have hQ : Q.Nonempty := by
+      obtain ⟨c, hc⟩ := hI
+      exact ⟨qc c, Finset.mem_image.mpr ⟨c, hc, rfl⟩⟩
+    let q : ℝ := Q.max' hQ
+    have hqmax (c : ι) : qc c ≤ q := by
+      dsimp [q]
+      exact Finset.le_max' _ _ (Finset.mem_image.mpr ⟨c, Finset.mem_univ c, rfl⟩)
+    have hqpos : 0 < q := by
+      obtain ⟨c, hc⟩ := hI
+      exact lt_of_lt_of_le (hqc c).1 (hqmax c)
+    have hq_lt : q < 1 := by
+      have hmem := Q.max'_mem hQ
+      obtain ⟨c, _, hval⟩ := Finset.mem_image.mp hmem
+      dsimp [q]
+      rw [← hval]
+      exact (hqc c).2.1
+    refine ⟨q, hqpos, hq_lt, ?_⟩
+    intro c i
+    have hupperpos : 0 < tileScaleInterpolation (lo c) (hi c) i.succ := by
+      have hmono := strictMono_tileScaleInterpolation (n := n c) (hlohi c)
+      have hfirst := (tileScaleInterpolation_endpoints (n := n c)
+        (lo := lo c) (hi := hi c)).1
+      have hlt : (0 : Fin (n c + 2)) < i.succ :=
+        Fin.pos_iff_ne_zero.mpr (Fin.succ_ne_zero _)
+      have hstrict := hmono hlt
+      rw [hfirst] at hstrict
+      linarith [hlo c]
+    have hsep := (hqc c).2.2 i
+    exact lt_of_lt_of_le hsep
+      (mul_le_mul_of_nonneg_right (hqmax c) (le_of_lt hupperpos))
+  · refine ⟨1 / 2, by norm_num, by norm_num, ?_⟩
+    intro c
+    exact (hI ⟨c, Finset.mem_univ c⟩).elim
+
+/-- Finitely many independent refinement chains can be interpolated at once. Each chain keeps its
+own prescribed endpoints, and its inserted tile scales are strictly ordered. Since chains are
+represented separately here, the theorem imposes no cross-chain constraints; the word-to-chain map
+and its compatibility with blueprint geometry are separate obligations. -/
+theorem exists_simultaneous_tileScaleInterpolations {ι : Type*} [Fintype ι]
+    (n : ι → ℕ) (lo hi : ι → ℝ) (hlohi : ∀ c, lo c < hi c) :
+    ∃ σ : ∀ c, Fin (n c + 2) → ℝ,
+      ∀ c, σ c 0 = lo c ∧ σ c (Fin.last (n c + 1)) = hi c ∧ StrictMono (σ c) := by
+  refine ⟨fun c i => tileScaleInterpolation (lo c) (hi c) i, ?_⟩
+  intro c
+  exact ⟨(tileScaleInterpolation_endpoints).1,
+    (tileScaleInterpolation_endpoints).2, strictMono_tileScaleInterpolation (hlohi c)⟩
+
+/-! ## Binary-word indexing of independent scale chains
+
+Every finite binary word either consists entirely of ones, or has a unique last zero. In the latter
+case it is a prefix followed by that zero and a string of trailing ones. These are exactly the
+disjoint scale chains used in the scale inequalities of the general-dimensional blueprint
+construction. This is the scale-chain decomposition of a word; the face word itself is defined by
+the successive projection-dimension changes in `ProjectedFaceDimensionCode`.
+-/
+
+/-- Scan a word written from right to left. The option stores the prefix before its last zero;
+`none` marks the all-ones special chain. The natural number counts trailing ones. -/
+def binaryChainScan : List Bool → Option (List Bool) × ℕ
+  | [] => (none, 0)
+  | true :: xs =>
+      let d := binaryChainScan xs
+      (d.1, d.2 + 1)
+  | false :: xs => (some xs.reverse, 0)
+
+/-- If the scan finds no zero, its input consists entirely of ones. -/
+theorem binaryChainScan_reconstruct_none {w : List Bool}
+    (h : (binaryChainScan w).1 = none) :
+    w = List.replicate (binaryChainScan w).2 true := by
+  induction w with
+  | nil => simp [binaryChainScan]
+  | cons b w ih =>
+      cases b with
+      | false => simp [binaryChainScan] at h
+      | true =>
+          cases hs : binaryChainScan w with
+          | mk p k =>
+              have hp : p = none := by simpa only [binaryChainScan, hs] using h
+              have htail : (binaryChainScan w).1 = none := by rw [hs]; exact hp
+              have hrec : w = List.replicate k true := by
+                simpa only [hs] using ih htail
+              simp only [binaryChainScan, hs]
+              change true :: w = List.replicate (k + 1) true
+              calc
+                true :: w = true :: List.replicate k true := by rw [hrec]
+                _ = List.replicate (k + 1) true := by simp [List.replicate_succ]
+
+/-- If the scan finds a zero, its input is a string of trailing ones after the last zero. -/
+theorem binaryChainScan_reconstruct_some {w p : List Bool}
+    (h : (binaryChainScan w).1 = some p) :
+    w = List.replicate (binaryChainScan w).2 true ++ (p ++ [false]).reverse := by
+  induction w with
+  | nil => simp [binaryChainScan] at h
+  | cons b w ih =>
+      cases b with
+      | false =>
+          have hp : w.reverse = p := by simpa [binaryChainScan] using h
+          subst p
+          simp [binaryChainScan, List.reverse_append]
+      | true =>
+          cases hs : binaryChainScan w with
+          | mk p' k =>
+              have hp : p' = some p := by simpa only [binaryChainScan, hs] using h
+              have htail : (binaryChainScan w).1 = some p := by rw [hs]; exact hp
+              have hrec : w = List.replicate k true ++ (p ++ [false]).reverse := by
+                simpa only [hs] using ih htail
+              simp only [binaryChainScan, hs]
+              change true :: w = List.replicate (k + 1) true ++ (p ++ [false]).reverse
+              calc
+                true :: w = true ::
+                    (List.replicate k true ++ (p ++ [false]).reverse) := by rw [hrec]
+                _ = List.replicate (k + 1) true ++ (p ++ [false]).reverse := by
+                  simp [List.replicate_succ]
+
+/-- The binary-word chain index: prefix before the last zero, plus the number of trailing ones.
+The all-ones word is assigned to the exceptional `none` chain. -/
+def binaryWordChainIndex (w : List Bool) : Option (List Bool) × ℕ :=
+  binaryChainScan w.reverse
+
+/-- Reconstruct a binary word from its canonical chain index. -/
+theorem binaryWordChainIndex_reconstruct (w : List Bool) :
+    match (binaryWordChainIndex w).1 with
+    | none => w = List.replicate (binaryWordChainIndex w).2 true
+    | some p => w = p ++ [false] ++ List.replicate (binaryWordChainIndex w).2 true := by
+  dsimp [binaryWordChainIndex]
+  cases h : (binaryChainScan w.reverse).1 with
+  | none =>
+      simpa using congrArg List.reverse (binaryChainScan_reconstruct_none h)
+  | some p =>
+      simpa [List.reverse_append, List.append_assoc] using
+        congrArg List.reverse (binaryChainScan_reconstruct_some h)
+
+/-- The scanner recognizes the word represented by one ordinary scale chain. -/
+theorem binaryChainScan_trailingOnes (p : List Bool) (k : ℕ) :
+    binaryChainScan (List.replicate k true ++ false :: p.reverse) = (some p, k) := by
+  induction k with
+  | zero => simp [binaryChainScan]
+  | succ k ih => simp [List.replicate_succ, binaryChainScan, ih]
+
+/-- Each word on an ordinary chain maps back to that chain's unique prefix and tile index. -/
+theorem binaryWordChainIndex_of_chainWord (p : List Bool) (k : ℕ) :
+    binaryWordChainIndex (p ++ [false] ++ List.replicate k true) = (some p, k) := by
+  simp [binaryWordChainIndex, List.reverse_append, List.append_assoc,
+    binaryChainScan_trailingOnes]
+
+/-- A word with no zero belongs to the exceptional all-ones chain at its length. -/
+theorem binaryChainScan_replicate_true (k : ℕ) :
+    binaryChainScan (List.replicate k true) = (none, k) := by
+  induction k with
+  | zero => rfl
+  | succ k ih =>
+      rw [List.replicate_succ]
+      simp [binaryChainScan, ih]
+
+theorem binaryWordChainIndex_of_replicate_true (k : ℕ) :
+    binaryWordChainIndex (List.replicate k true) = (none, k) := by
+  simp only [binaryWordChainIndex, List.reverse_replicate]
+  exact binaryChainScan_replicate_true k
+
+/-- Chain ownership is unique: a word cannot lie on two different last-zero chains or at two
+different trailing-one positions. -/
+theorem binaryWordChainIndex_representation_unique {w p q : List Bool} {k m : ℕ}
+    (hp : w = p ++ [false] ++ List.replicate k true)
+    (hq : w = q ++ [false] ++ List.replicate m true) : p = q ∧ k = m := by
+  have h₁ : binaryWordChainIndex w = (some p, k) := by
+    rw [hp]
+    exact binaryWordChainIndex_of_chainWord p k
+  have h₂ : binaryWordChainIndex w = (some q, m) := by
+    rw [hq]
+    exact binaryWordChainIndex_of_chainWord q m
+  rw [h₁] at h₂
+  injection h₂ with hpq hkm
+  exact ⟨Option.some.inj hpq, hkm⟩
+
+/-- The all-ones chain index equals the word length. -/
+theorem binaryWordChainIndex_length_of_none {w : List Bool} {k : ℕ}
+    (hidx : binaryWordChainIndex w = (none, k)) : w.length = k := by
+  have hword : w = List.replicate k true := by
+    simpa [hidx] using binaryWordChainIndex_reconstruct w
+  have hlen := congrArg List.length hword
+  simpa using hlen
+
+/-- On an ordinary chain, prefix length plus the last zero and the trailing-one count equals the
+word length. -/
+theorem binaryWordChainIndex_length_of_some {w p : List Bool} {k : ℕ}
+    (hidx : binaryWordChainIndex w = (some p, k)) : p.length + 1 + k = w.length := by
+  have hword : w = p ++ [false] ++ List.replicate k true := by
+    simpa [hidx] using binaryWordChainIndex_reconstruct w
+  have hlen := congrArg List.length hword
+  simp only [List.length_append, List.length_cons, List.length_nil, List.length_replicate] at hlen
+  omega
+
+/-- For a word of length at most `n`, its chain index lies among the `n + 2` interpolation
+vertices: the ordinary chains have `n - (|prefix| + 1)` inserted tile positions. -/
+theorem binaryWordChainIndex_scaleIndex_lt {n : ℕ} {w : List Bool} (hw : w.length ≤ n) :
+    match binaryWordChainIndex w with
+    | (none, k) => k < n + 2
+    | (some p, k) => k < n - (p.length + 1) + 2 := by
+  cases hidx : binaryWordChainIndex w with
+  | mk chainPrefix k =>
+      cases chainPrefix with
+      | none =>
+          have hlen := binaryWordChainIndex_length_of_none hidx
+          omega
+      | some p =>
+          have hlen := binaryWordChainIndex_length_of_some hidx
+          have hbase : p.length + 1 ≤ n := by omega
+          have hsub : (n - (p.length + 1)) + (p.length + 1) = n :=
+            Nat.sub_add_cancel hbase
+          omega
+
+/-- A positional code for binary words, with later letters carrying larger powers of two. -/
+def binaryWordValue : List Bool → ℕ
+  | [] => 0
+  | b :: w => (if b then 1 else 0) + 2 * binaryWordValue w
+
+/-- Appending a bit adds its place value at the end of the word. -/
+theorem binaryWordValue_append_bit (w : List Bool) (b : Bool) :
+    binaryWordValue (w ++ [b]) =
+      binaryWordValue w + (if b then 2 ^ w.length else 0) := by
+  induction w with
+  | nil =>
+      cases b
+      · rfl
+      · rfl
+  | cons a w ih =>
+      cases b
+      · simp [binaryWordValue, ih]
+      · simp [binaryWordValue, ih, List.length_cons, Nat.pow_succ]
+        ring
+
+/-- A binary word containing a `true` bit has positive positional value. -/
+theorem binaryWordValue_pos_of_true_mem {w : List Bool} (htrue : true ∈ w) :
+    0 < binaryWordValue w := by
+  induction w with
+  | nil => simp at htrue
+  | cons b w ih =>
+      rcases List.mem_cons.mp htrue with hb | htail
+      · have hb' : b = true := hb.symm
+        subst b
+        simp [binaryWordValue]
+      · have htailpos := ih htail
+        cases b <;> simp [binaryWordValue] <;> omega
+
+/-- The longest child prefix on the ordinary chain rooted at `p ++ [false]`. -/
+def binaryWordMaxChildPrefix (n : ℕ) (p : List Bool) : List Bool :=
+  p ++ [false] ++ List.replicate (n - (p.length + 1)) true
+
+/-- Base epsilon value at the zero-ending word, padded by trailing ones to the common depth. -/
+noncomputable def binaryWordLowerEndpointScale (n : ℕ) (q : ℝ) (p : List Bool) : ℝ :=
+  q ^ binaryWordValue (p ++ [false] ++ List.replicate (n - p.length) true)
+
+/-- The paper's width function on a binary prefix: zero-ending prefixes use the lower scale of
+their last-zero chain, while prefixes ending in `1` have width zero. Words longer than the ambient
+dimension and the empty prefix are assigned zero, since they are not used as coordinates. -/
+noncomputable def craciunBinaryWordEpsilon (n : ℕ) (q : ℝ) (word : List Bool) : ℝ :=
+  if word.length ≤ n then
+    if word.getLast? = some false then
+      binaryWordLowerEndpointScale n q word.dropLast
+    else 0
+  else 0
+
+/-- Every Craciun prefix width is nonnegative when the geometric ratio parameter is positive. -/
+theorem craciunBinaryWordEpsilon_nonneg {n : ℕ} {q : ℝ} (hq : 0 < q)
+    (word : List Bool) : 0 ≤ craciunBinaryWordEpsilon n q word := by
+  unfold craciunBinaryWordEpsilon
+  by_cases hlen : word.length ≤ n
+  · simp [hlen]
+    split_ifs
+    · unfold binaryWordLowerEndpointScale
+      exact (pow_pos hq _).le
+    · exact le_rfl
+  · simp [hlen]
+
+/-- The manuscript's binary-prefix widths are monotone in their common ratio parameter on the
+nonnegative range. -/
+theorem craciunBinaryWordEpsilon_mono {n : ℕ} {q₁ q₂ : ℝ}
+    (hq₁ : 0 ≤ q₁) (hq₁₂ : q₁ ≤ q₂) (word : List Bool) :
+    craciunBinaryWordEpsilon n q₁ word ≤ craciunBinaryWordEpsilon n q₂ word := by
+  by_cases hlen : word.length ≤ n
+  · simp only [craciunBinaryWordEpsilon, if_pos hlen]
+    split_ifs
+    · unfold binaryWordLowerEndpointScale
+      exact pow_le_pow_left₀ hq₁ hq₁₂ _
+    · exact le_rfl
+  · simp [craciunBinaryWordEpsilon, hlen]
+
+/-- Enlarging Craciun's common scale ratio enlarges the zero-bit pre-blueprint neighborhood. -/
+theorem zeroBitPreBlueprintNeighborhood_mono_of_craciunRatio_le {n : ℕ}
+    (face : Set (Fin (n + 1) → ℝ))
+    {base₁ base₂ : Set (Fin n → ℝ)} (hbase : base₁ ⊆ base₂)
+    {q₁ q₂ : ℝ} (hq₁ : 0 ≤ q₁) (hq₁₂ : q₁ ≤ q₂) (word : List Bool) :
+    zeroBitPreBlueprintNeighborhood face base₁
+        (craciunBinaryWordEpsilon n q₁) word ⊆
+      zeroBitPreBlueprintNeighborhood face base₂
+        (craciunBinaryWordEpsilon n q₂) word := by
+  apply zeroBitPreBlueprintNeighborhood_mono_of_prefix_width_le
+    face hbase (craciunBinaryWordEpsilon n q₁) (craciunBinaryWordEpsilon n q₂) word
+  intro i
+  exact craciunBinaryWordEpsilon_mono (n := n) hq₁ hq₁₂ (word.take (i.val + 1))
+
+/-- The ratio-monotonicity fact when the Craciun profile depth is independent of the ambient
+face dimension. This is needed when a face in dimension `n + 1` is filled using the profile at
+the next recursive depth `n + 1`. -/
+theorem zeroBitPreBlueprintNeighborhood_mono_of_craciunRatio_le_at_depth
+    {ambient depth : ℕ} (face : Set (Fin (ambient + 1) → ℝ))
+    {base₁ base₂ : Set (Fin ambient → ℝ)} (hbase : base₁ ⊆ base₂)
+    {q₁ q₂ : ℝ} (hq₁ : 0 ≤ q₁) (hq₁₂ : q₁ ≤ q₂) (word : List Bool) :
+    zeroBitPreBlueprintNeighborhood face base₁
+        (craciunBinaryWordEpsilon depth q₁) word ⊆
+      zeroBitPreBlueprintNeighborhood face base₂
+        (craciunBinaryWordEpsilon depth q₂) word := by
+  apply zeroBitPreBlueprintNeighborhood_mono_of_prefix_width_le
+    face hbase (craciunBinaryWordEpsilon depth q₁) (craciunBinaryWordEpsilon depth q₂) word
+  intro i
+  exact craciunBinaryWordEpsilon_mono (n := depth) hq₁ hq₁₂ (word.take (i.val + 1))
+
+/-- A prefix ending in `1` contributes no width to the Craciun fiber box. -/
+theorem craciunBinaryWordEpsilon_eq_zero_of_getLast_true {n : ℕ} (q : ℝ)
+    (word : List Bool) (hlast : word.getLast? = some true) :
+    craciunBinaryWordEpsilon n q word = 0 := by
+  unfold craciunBinaryWordEpsilon
+  split_ifs with hlen hfalse
+  · rw [hlast] at hfalse
+    cases hfalse
+  · rfl
+  · rfl
+
+/-- A nonempty prefix ending in `0` has a strictly positive Craciun width whenever `q > 0`. -/
+theorem craciunBinaryWordEpsilon_pos_of_getLast_false {n : ℕ} {q : ℝ} (hq : 0 < q)
+    (word : List Bool) (hlen : word.length ≤ n)
+    (hlast : word.getLast? = some false) :
+    0 < craciunBinaryWordEpsilon n q word := by
+  simpa [craciunBinaryWordEpsilon, hlen, hlast, binaryWordLowerEndpointScale] using
+    (pow_pos hq (binaryWordValue
+      (word.dropLast ++ [false] ++ List.replicate (n - word.dropLast.length) true)))
+
+/-- A Craciun prefix has positive width exactly when it is in range and its final bit is `0`. -/
+theorem craciunBinaryWordEpsilon_pos_iff {n : ℕ} {q : ℝ} (hq : 0 < q)
+    (word : List Bool) :
+    0 < craciunBinaryWordEpsilon n q word ↔
+      word.length ≤ n ∧ word.getLast? = some false := by
+  constructor
+  · intro hpos
+    have hlen : word.length ≤ n := by
+      by_contra hlen
+      have hzero : craciunBinaryWordEpsilon n q word = 0 := by
+        simp [craciunBinaryWordEpsilon, hlen]
+      rw [hzero] at hpos
+      exact (lt_irrefl 0) hpos
+    have hlast : word.getLast? = some false := by
+      by_contra hlast
+      have hzero : craciunBinaryWordEpsilon n q word = 0 := by
+        simp [craciunBinaryWordEpsilon, hlen, hlast]
+      rw [hzero] at hpos
+      exact (lt_irrefl 0) hpos
+    exact ⟨hlen, hlast⟩
+  · rintro ⟨hlen, hlast⟩
+    exact craciunBinaryWordEpsilon_pos_of_getLast_false hq word hlen hlast
+
+/-- At a zero-ending word, the concrete prefix-width function is exactly the corresponding
+last-zero-chain lower endpoint scale. -/
+theorem craciunBinaryWordEpsilon_eq_lowerEndpoint {n : ℕ} (q : ℝ) (p : List Bool)
+    (hlen : (p ++ [false]).length ≤ n) :
+    craciunBinaryWordEpsilon n q (p ++ [false]) = binaryWordLowerEndpointScale n q p := by
+  have hlen' : p.length + 1 ≤ n := by simpa [List.length_append] using hlen
+  have hlast : (p ++ [false]).getLast? = some false := by simp
+  have hdrop : (p ++ [false]).dropLast = p := by simp
+  simp [craciunBinaryWordEpsilon, hlen', hlast, hdrop]
+
+/-- Every valid zero-ending prefix width is at most the geometric ratio `q`. The padded code
+always contains a trailing `true` because the prefix leaves at least one ambient coordinate. -/
+theorem binaryWordLowerEndpointScale_le_q {n : ℕ} {q : ℝ} (hq0 : 0 < q) (hq1 : q < 1)
+    (p : List Bool) (hp : p.length + 1 ≤ n) :
+    binaryWordLowerEndpointScale n q p ≤ q := by
+  have htail : 0 < n - p.length := by omega
+  have htrueTail : true ∈ List.replicate (n - p.length) true := by
+    cases hlen : n - p.length with
+    | zero => omega
+    | succ k => simp [List.replicate_succ]
+  have htrue : true ∈ p ++ [false] ++ List.replicate (n - p.length) true :=
+    List.mem_append_right (p ++ [false]) htrueTail
+  have hcode : 1 ≤ binaryWordValue
+      (p ++ [false] ++ List.replicate (n - p.length) true) := by
+    have hpos := binaryWordValue_pos_of_true_mem htrue
+    omega
+  unfold binaryWordLowerEndpointScale
+  exact pow_le_of_le_one hq0.le hq1.le (by omega)
+
+/-- All Craciun prefix widths in a fixed-depth construction are bounded by its ratio parameter. -/
+theorem craciunBinaryWordEpsilon_le_q {n : ℕ} {q : ℝ} (hq0 : 0 < q) (hq1 : q < 1)
+    (word : List Bool) : craciunBinaryWordEpsilon n q word ≤ q := by
+  unfold craciunBinaryWordEpsilon
+  split_ifs with hlen hlast
+  ·
+      have hlastmem : false ∈ word.getLast? := by rw [hlast]; simp
+      have hword : word.dropLast ++ [false] = word :=
+        List.dropLast_append_getLast? false hlastmem
+      have hdropLen : (word.dropLast ++ [false]).length ≤ n := by
+        rw [hword]
+        exact hlen
+      have hprefix : word.dropLast.length + 1 ≤ n := by
+        simpa [List.length_append] using hdropLen
+      exact binaryWordLowerEndpointScale_le_q hq0 hq1 word.dropLast hprefix
+  · exact hq0.le
+  · exact hq0.le
+
+/-- The concrete Craciun epsilon widths preserve any face-avoidance margin larger than `q`.
+This is the pre-blueprint separation estimate with the ratio parameter itself as the uniform box
+radius. -/
+theorem zeroBitPreBlueprintNeighborhood_craciunSeparated {n : ℕ}
+    (face : Set (Fin (n + 1) → ℝ)) (baseNeighborhood : Set (Fin n → ℝ))
+    (word : List Bool) {q margin : ℝ} (hq0 : 0 < q) (hq1 : q < 1)
+    (hfaceSeparated : face ⊆ (Metric.ball (0 : Fin (n + 1) → ℝ) margin)ᶜ)
+    (hsmall : q < margin) :
+    0 < margin - q ∧
+      zeroBitPreBlueprintNeighborhood face baseNeighborhood
+        (craciunBinaryWordEpsilon (n + 1) q) word ⊆
+          (Metric.ball (0 : Fin (n + 1) → ℝ) (margin - q))ᶜ := by
+  exact zeroBitPreBlueprintNeighborhood_separated face baseNeighborhood
+    (craciunBinaryWordEpsilon (n + 1) q) word margin q hfaceSeparated hq0.le
+    (by
+      intro i
+      exact craciunBinaryWordEpsilon_le_q hq0 hq1 _)
+    hsmall
+
+/-- The paper's fiber box in coordinate dimension `d`, using the width function of the fixed
+ambient construction dimension `depth`. Keeping `depth` fixed makes projection recursion exact. -/
+noncomputable def craciunBinaryWordFiberBox {d : ℕ} (depth : ℕ) (q : ℝ)
+    (word : List Bool) : Set (Fin d → ℝ) :=
+  binaryWordFiberBox (craciunBinaryWordEpsilon depth q) word
+
+/-- Craciun fiber boxes project recursively under deletion of the final coordinate. -/
+theorem forgetLastCoordinate_image_craciunBinaryWordFiberBox {d depth : ℕ} {q : ℝ}
+    (hq : 0 < q) (word : List Bool) :
+    forgetLastCoordinate d '' craciunBinaryWordFiberBox (d := d + 1) depth q word =
+      craciunBinaryWordFiberBox (d := d) depth q (word.take d) :=
+  forgetLastCoordinate_image_binaryWordFiberBox
+    (craciunBinaryWordEpsilon depth q) word
+    (craciunBinaryWordEpsilon_nonneg hq)
+
+/-- For a word ending in `1`, the final coordinate of its Craciun fiber box is exactly zero. -/
+theorem craciunBinaryWordFiberBox_lastCoordinate_eq_zero {d depth : ℕ} {q : ℝ}
+    (word : List Bool) (p : List Bool) (hword : word = p ++ [true])
+    (hlen : word.length = d + 1) {x : Fin (d + 1) → ℝ}
+    (hx : x ∈ craciunBinaryWordFiberBox (d := d + 1) depth q word) :
+    x (Fin.last d) = 0 := by
+  apply binaryWordFiberBox_lastCoordinate_eq_zero
+    (craciunBinaryWordEpsilon depth q) word p hword hlen
+  · exact craciunBinaryWordEpsilon_eq_zero_of_getLast_true (n := depth) q
+      (p ++ [true]) (by simp)
+  · exact hx
+
+/-- Base epsilon value at the maximal zero-ending descendant of the ordinary chain rooted at `p`. -/
+noncomputable def binaryWordUpperEndpointScale (n : ℕ) (q : ℝ) (p : List Bool) : ℝ :=
+  q ^ binaryWordValue (binaryWordMaxChildPrefix n p ++ [false])
+
+/-- The special upper endpoint for the all-ones chain is the scale of the word `1^n 0`. -/
+noncomputable def binaryWordAllOnesEndpointScale (n : ℕ) (q : ℝ) : ℝ :=
+  q ^ binaryWordValue (List.replicate n true ++ [false])
+
+/-- A run of `k + 1` ones is a run of `k` ones followed by one final `true`. -/
+theorem replicate_true_succ_append (k : ℕ) :
+    List.replicate (k + 1) true = List.replicate k true ++ [true] := by
+  induction k with
+  | zero => rfl
+  | succ k ih =>
+      calc
+        List.replicate ((k + 1) + 1) true = true :: List.replicate (k + 1) true := by
+          simp [List.replicate_succ]
+        _ = true :: (List.replicate k true ++ [true]) := by rw [ih]
+        _ = (true :: List.replicate k true) ++ [true] := rfl
+        _ = List.replicate (k + 1) true ++ [true] := by simp [List.replicate_succ]
+
+/-- The maximal child prefix of any admissible ordinary chain has length exactly `n`. -/
+theorem binaryWordMaxChildPrefix_length {n : ℕ} {p : List Bool}
+    (hp : p.length + 1 ≤ n) : (binaryWordMaxChildPrefix n p).length = n := by
+  simp [binaryWordMaxChildPrefix, List.length_replicate]
+  omega
+
+/-- The upper endpoint of one ordinary chain is exactly the lower endpoint of its maximal child
+chain. -/
+theorem binaryWordUpperEndpointScale_eq_lower_maxChild {n : ℕ} (q : ℝ) (p : List Bool)
+    (hp : p.length + 1 ≤ n) :
+    binaryWordUpperEndpointScale n q p =
+      binaryWordLowerEndpointScale n q (binaryWordMaxChildPrefix n p) := by
+  unfold binaryWordUpperEndpointScale binaryWordLowerEndpointScale
+  rw [binaryWordMaxChildPrefix_length hp]
+  simp
+
+/-- Ordered base epsilons are compatible with every last-zero chain: the child word differs from
+the padded parent word only in the final bit, so its binary code is smaller and its `q`-power is
+larger for `0 < q < 1`. -/
+theorem binaryWordLowerEndpointScale_lt_upper {n : ℕ} {q : ℝ} {p : List Bool}
+    (hq0 : 0 < q) (hq1 : q < 1) (hp : p.length + 1 ≤ n) :
+    binaryWordLowerEndpointScale n q p < binaryWordUpperEndpointScale n q p := by
+  let child := binaryWordMaxChildPrefix n p
+  have hsub : n - p.length = n - (p.length + 1) + 1 := by omega
+  have hparent : p ++ [false] ++ List.replicate (n - p.length) true =
+      child ++ [true] := by
+    rw [hsub, replicate_true_succ_append]
+    simp [child, binaryWordMaxChildPrefix, List.append_assoc]
+  have hcode : binaryWordValue (child ++ [false]) < binaryWordValue (child ++ [true]) := by
+    rw [binaryWordValue_append_bit, binaryWordValue_append_bit]
+    simp
+  change q ^ binaryWordValue (p ++ [false] ++ List.replicate (n - p.length) true) <
+      q ^ binaryWordValue (binaryWordMaxChildPrefix n p ++ [false])
+  rw [hparent]
+  exact pow_lt_pow_right_of_lt_one₀ hq0 hq1 hcode
+
+/-- Evaluate a word scale from a chain index whose interpolation position is in range. -/
+noncomputable def binaryWordTileScaleAtIndex (n : ℕ) (lo hi : List Bool → ℝ)
+    (specialHi : ℝ) (chainIndex : Option (List Bool) × ℕ)
+    (hbound : match chainIndex with
+      | (none, k) => k < n + 2
+      | (some p, k) => k < n - (p.length + 1) + 2) : ℝ :=
+  match chainIndex, hbound with
+  | (none, k), hk => tileScaleInterpolation (n := n) 0 specialHi ⟨k, hk⟩
+  | (some p, k), hk =>
+      tileScaleInterpolation (n := n - (p.length + 1)) (lo p) (hi p) ⟨k, hk⟩
+
+/-- Assign each binary word of length at most `n` the interpolated tile scale at its unique
+last-zero chain position. The all-ones chain uses lower endpoint `0`; ordinary chains use their
+preassigned endpoint scales `lo p` and `hi p`. -/
+noncomputable def binaryWordTileScale (n : ℕ) (lo hi : List Bool → ℝ) (specialHi : ℝ)
+    (w : List Bool) (hw : w.length ≤ n) : ℝ :=
+  binaryWordTileScaleAtIndex n lo hi specialHi (binaryWordChainIndex w)
+    (binaryWordChainIndex_scaleIndex_lt hw)
+
+/-- The blueprint-compatible tile scale obtained from binary base epsilons. Ordinary last-zero
+chains use the epsilon at their zero-ending word and the epsilon at their maximal child; the
+all-ones chain ends at the epsilon for `1^n0`. -/
+noncomputable def coherentBinaryWordTileScale (n : ℕ) (q : ℝ)
+    (w : List Bool) (hw : w.length ≤ n) : ℝ :=
+  binaryWordTileScale n (binaryWordLowerEndpointScale n q)
+    (binaryWordUpperEndpointScale n q) (binaryWordAllOnesEndpointScale n q) w hw
+
+/-- The scale assignment agrees with interpolation along each ordinary last-zero chain. -/
+theorem binaryWordChainWord_scaleIndex_lt {n : ℕ} (p : List Bool) (k : ℕ)
+    (hk : (p ++ [false] ++ List.replicate k true).length ≤ n) :
+    k < n - (p.length + 1) + 2 := by
+  have hlen : p.length + (k + 1) ≤ n := by
+    simpa [List.length_append, List.length_replicate] using hk
+  have hbase : p.length + 1 ≤ n := by omega
+  have hsub : (n - (p.length + 1)) + (p.length + 1) = n :=
+    Nat.sub_add_cancel hbase
+  omega
+
+/-- The all-ones chain positions also fit in the `n + 2` interpolation vertices. -/
+theorem binaryWordAllOnes_scaleIndex_lt {n k : ℕ}
+    (hk : (List.replicate k true).length ≤ n) : k < n + 2 := by
+  have hlen : k ≤ n := by simpa using hk
+  omega
+
+/-- On the exceptional no-zero chain, the scale assignment uses the lower endpoint `0` and the
+special upper endpoint. -/
+theorem binaryWordTileScale_on_allOnes {n : ℕ} (lo hi : List Bool → ℝ) (specialHi : ℝ)
+    (k : ℕ) (hk : (List.replicate k true).length ≤ n) :
+    binaryWordTileScale n lo hi specialHi (List.replicate k true) hk =
+      tileScaleInterpolation (n := n) 0 specialHi
+        ⟨k, binaryWordAllOnes_scaleIndex_lt hk⟩ := by
+  have hidx := binaryWordChainIndex_of_replicate_true k
+  unfold binaryWordTileScale
+  simp_rw [hidx]
+  rfl
+
+theorem binaryWordTileScale_on_chainWord {n : ℕ} (lo hi : List Bool → ℝ) (specialHi : ℝ)
+    (p : List Bool) (k : ℕ) (hk : (p ++ [false] ++ List.replicate k true).length ≤ n) :
+    binaryWordTileScale n lo hi specialHi (p ++ [false] ++ List.replicate k true) hk =
+      tileScaleInterpolation (n := n - (p.length + 1)) (lo p) (hi p)
+        ⟨k, binaryWordChainWord_scaleIndex_lt p k hk⟩ := by
+  unfold binaryWordTileScale
+  simp_rw [binaryWordChainIndex_of_chainWord p k]
+  rfl
+
+/-- Every zero-ending prefix width is the scale at position zero in its last-zero refinement
+chain. This connects the Cartesian fiber boxes to the existing multiplicative scale hierarchy. -/
+theorem coherentBinaryWordTileScale_eq_craciunBinaryWordEpsilon_of_zero
+    {n : ℕ} (q : ℝ) (p : List Bool)
+    (hlen : (p ++ [false]).length ≤ n) :
+    coherentBinaryWordTileScale n q (p ++ [false]) hlen =
+      craciunBinaryWordEpsilon n q (p ++ [false]) := by
+  rw [craciunBinaryWordEpsilon_eq_lowerEndpoint q p hlen]
+  change binaryWordTileScale n (binaryWordLowerEndpointScale n q)
+      (binaryWordUpperEndpointScale n q) (binaryWordAllOnesEndpointScale n q)
+      (p ++ [false]) hlen = binaryWordLowerEndpointScale n q p
+  have hchain := binaryWordTileScale_on_chainWord
+    (binaryWordLowerEndpointScale n q) (binaryWordUpperEndpointScale n q)
+    (binaryWordAllOnesEndpointScale n q) p 0 (by simpa using hlen)
+  rw [show binaryWordTileScale n (binaryWordLowerEndpointScale n q)
+      (binaryWordUpperEndpointScale n q) (binaryWordAllOnesEndpointScale n q)
+      (p ++ [false]) hlen =
+      binaryWordTileScale n (binaryWordLowerEndpointScale n q)
+        (binaryWordUpperEndpointScale n q) (binaryWordAllOnesEndpointScale n q)
+        (p ++ [false] ++ List.replicate 0 true) (by simpa using hlen) by simp]
+  rw [hchain]
+  exact (tileScaleInterpolation_endpoints (n := n - (p.length + 1))
+    (lo := binaryWordLowerEndpointScale n q p)
+    (hi := binaryWordUpperEndpointScale n q p)).1
+
+/-- Ordered endpoint scales make the assigned word scales strictly increase with the number of
+trailing ones on a fixed ordinary last-zero chain. -/
+theorem binaryWordTileScale_strictMono_on_chainWord {n : ℕ}
+    (lo hi : List Bool → ℝ) (specialHi : ℝ) (p : List Bool)
+    (hlohi : lo p < hi p) {k m : ℕ} (hkm : k < m)
+    (hk : (p ++ [false] ++ List.replicate k true).length ≤ n)
+    (hm : (p ++ [false] ++ List.replicate m true).length ≤ n) :
+    binaryWordTileScale n lo hi specialHi (p ++ [false] ++ List.replicate k true) hk <
+      binaryWordTileScale n lo hi specialHi (p ++ [false] ++ List.replicate m true) hm := by
+  rw [binaryWordTileScale_on_chainWord, binaryWordTileScale_on_chainWord]
+  apply strictMono_tileScaleInterpolation hlohi
+  exact Fin.mk_lt_mk.mpr hkm
+
+/-- Every ordinary word chain inherits a single multiplicative separation factor from its endpoint
+scales. Consecutive words with one additional trailing `true` are separated by the same `q < 1`;
+the finite-chain lemma supplies this scalar fact independently of geometric compatibility. -/
+theorem exists_binaryWordTileScale_separation_on_chain {n : ℕ}
+    (lo hi : List Bool → ℝ) (specialHi : ℝ) (p : List Bool)
+    (hlo : 0 ≤ lo p) (hlohi : lo p < hi p) :
+    ∃ q : ℝ, 0 < q ∧ q < 1 ∧
+      ∀ k : ℕ,
+        (hkSucc : (p ++ [false] ++ List.replicate (k + 1) true).length ≤ n) →
+        binaryWordTileScale n lo hi specialHi
+            (p ++ [false] ++ List.replicate k true)
+            (by
+              have hlen : p.length + (k + 1) ≤ n := by
+                have hsucc : p.length + ((k + 1) + 1) ≤ n := by
+                  simpa [List.length_append, List.length_replicate] using hkSucc
+                omega
+              simpa [List.length_append, List.length_replicate] using hlen) <
+          q * binaryWordTileScale n lo hi specialHi
+            (p ++ [false] ++ List.replicate (k + 1) true) hkSucc := by
+  let N := n - (p.length + 1)
+  obtain ⟨q, hqpos, hqone, hsep⟩ :=
+    exists_separated_tileScaleInterpolation (n := N) (hlo := hlo) (hlohi := hlohi)
+  refine ⟨q, hqpos, hqone, ?_⟩
+  intro k hkSucc
+  have hlenSucc : p.length + ((k + 1) + 1) ≤ n := by
+    simpa [List.length_append, List.length_replicate] using hkSucc
+  have hlen : p.length + (k + 1) ≤ n := by omega
+  have hk : (p ++ [false] ++ List.replicate k true).length ≤ n := by
+    simpa [List.length_append, List.length_replicate] using hlen
+  have htileIndex := binaryWordChainWord_scaleIndex_lt p (k + 1) hkSucc
+  have hindex : k < N + 1 := by dsimp [N]; omega
+  have hchainSep := hsep ⟨k, hindex⟩
+  calc
+    binaryWordTileScale n lo hi specialHi (p ++ [false] ++ List.replicate k true) hk =
+        tileScaleInterpolation (n := N) (lo p) (hi p)
+          ⟨k, binaryWordChainWord_scaleIndex_lt p k hk⟩ :=
+      binaryWordTileScale_on_chainWord lo hi specialHi p k hk
+    _ < q * tileScaleInterpolation (n := N) (lo p) (hi p)
+          ⟨k + 1, binaryWordChainWord_scaleIndex_lt p (k + 1) hkSucc⟩ := by
+      simpa [tileScaleInterpolation] using hchainSep
+    _ = q * binaryWordTileScale n lo hi specialHi
+          (p ++ [false] ++ List.replicate (k + 1) true) hkSucc := by
+      rw [binaryWordTileScale_on_chainWord lo hi specialHi p (k + 1) hkSucc]
+
+/-- A finite family of ordinary word chains admits one common multiplicative separation factor.
+This specializes the finite endpoint-pair maximum to the actual last-zero word indexing. -/
+theorem exists_uniform_binaryWordTileScale_separation_on_chains {ι : Type*} [Fintype ι]
+    {n : ℕ} (chainPrefix : ι → List Bool) (lo hi : List Bool → ℝ) (specialHi : ℝ)
+    (hlo : ∀ c, 0 ≤ lo (chainPrefix c))
+    (hlohi : ∀ c, lo (chainPrefix c) < hi (chainPrefix c)) :
+    ∃ q : ℝ, 0 < q ∧ q < 1 ∧
+      ∀ c k,
+        (hkSucc : (chainPrefix c ++ [false] ++ List.replicate (k + 1) true).length ≤ n) →
+        binaryWordTileScale n lo hi specialHi
+            (chainPrefix c ++ [false] ++ List.replicate k true)
+            (by
+              have hlen : (chainPrefix c).length + (k + 1) ≤ n := by
+                have hsucc : (chainPrefix c).length + ((k + 1) + 1) ≤ n := by
+                  simpa [List.length_append, List.length_replicate] using hkSucc
+                omega
+              simpa [List.length_append, List.length_replicate] using hlen) <
+          q * binaryWordTileScale n lo hi specialHi
+            (chainPrefix c ++ [false] ++ List.replicate (k + 1) true) hkSucc := by
+  let chainN : ι → ℕ := fun c => n - ((chainPrefix c).length + 1)
+  obtain ⟨q, hqpos, hqone, hsep⟩ :=
+    exists_uniformly_separated_tileScaleInterpolations chainN
+      (fun c => lo (chainPrefix c)) (fun c => hi (chainPrefix c)) hlo hlohi
+  refine ⟨q, hqpos, hqone, ?_⟩
+  intro c k hkSucc
+  have hlenSucc : (chainPrefix c).length + ((k + 1) + 1) ≤ n := by
+    simpa [List.length_append, List.length_replicate] using hkSucc
+  have hlen : (chainPrefix c).length + (k + 1) ≤ n := by omega
+  have hk : (chainPrefix c ++ [false] ++ List.replicate k true).length ≤ n := by
+    simpa [List.length_append, List.length_replicate] using hlen
+  have htileIndex := binaryWordChainWord_scaleIndex_lt (chainPrefix c) (k + 1) hkSucc
+  have hindex : k < chainN c + 1 := by dsimp [chainN]; omega
+  have hchainSep := hsep c ⟨k, hindex⟩
+  calc
+    binaryWordTileScale n lo hi specialHi
+        (chainPrefix c ++ [false] ++ List.replicate k true) hk =
+      tileScaleInterpolation (n := chainN c) (lo (chainPrefix c)) (hi (chainPrefix c))
+        ⟨k, binaryWordChainWord_scaleIndex_lt (chainPrefix c) k hk⟩ := by
+          simpa [chainN] using
+            binaryWordTileScale_on_chainWord lo hi specialHi (chainPrefix c) k hk
+    _ < q * tileScaleInterpolation (n := chainN c) (lo (chainPrefix c)) (hi (chainPrefix c))
+          ⟨k + 1, binaryWordChainWord_scaleIndex_lt (chainPrefix c) (k + 1) hkSucc⟩ := by
+      simpa [tileScaleInterpolation] using hchainSep
+    _ = q * binaryWordTileScale n lo hi specialHi
+          (chainPrefix c ++ [false] ++ List.replicate (k + 1) true) hkSucc := by
+      rw [binaryWordTileScale_on_chainWord lo hi specialHi (chainPrefix c) (k + 1) hkSucc]
+
+/-- The all-ones chain has the same adjacent multiplicative separation whenever its special upper
+endpoint is positive. -/
+theorem exists_binaryWordTileScale_separation_on_allOnes {n : ℕ}
+    (lo hi : List Bool → ℝ) (specialHi : ℝ) (hspecial : 0 < specialHi) :
+    ∃ q : ℝ, 0 < q ∧ q < 1 ∧
+      ∀ k : ℕ,
+        (hkSucc : (List.replicate (k + 1) true).length ≤ n) →
+        binaryWordTileScale n lo hi specialHi (List.replicate k true)
+            (by
+              have hlen : k ≤ n := by
+                have hsucc : k + 1 ≤ n := by simpa using hkSucc
+                omega
+              simpa using hlen) <
+          q * binaryWordTileScale n lo hi specialHi
+            (List.replicate (k + 1) true) hkSucc := by
+  obtain ⟨q, hqpos, hqone, hsep⟩ :=
+    exists_separated_tileScaleInterpolation (n := n) (lo := 0) (hi := specialHi)
+      (by norm_num) hspecial
+  refine ⟨q, hqpos, hqone, ?_⟩
+  intro k hkSucc
+  have hlenSucc : k + 1 ≤ n := by simpa using hkSucc
+  have hlen : k ≤ n := by omega
+  have hk : (List.replicate k true).length ≤ n := by simpa using hlen
+  calc
+    binaryWordTileScale n lo hi specialHi (List.replicate k true) hk =
+        tileScaleInterpolation (n := n) 0 specialHi
+          ⟨k, binaryWordAllOnes_scaleIndex_lt hk⟩ :=
+      binaryWordTileScale_on_allOnes lo hi specialHi k hk
+    _ < q * tileScaleInterpolation (n := n) 0 specialHi
+          ⟨k + 1, binaryWordAllOnes_scaleIndex_lt hkSucc⟩ := by
+      simpa [tileScaleInterpolation] using hsep ⟨k, by omega⟩
+    _ = q * binaryWordTileScale n lo hi specialHi (List.replicate (k + 1) true) hkSucc := by
+      rw [binaryWordTileScale_on_allOnes]
+
+/-- The endpoint-inclusive binary scale family has one common strict separation factor. The two
+ordinary-chain endpoint conditions cover the last actual word to the linked child epsilon; the two
+all-ones conditions cover its final word to the exceptional endpoint. -/
+theorem exists_uniform_coherentBinaryWordTileScale_full_chain_separation {n : ℕ} {q : ℝ}
+    (hq0 : 0 < q) (hq1 : q < 1) :
+    ∃ ρ : ℝ, 0 < ρ ∧ ρ < 1 ∧
+      (∀ (p : List Bool) (k : ℕ),
+        (hkSucc : (p ++ [false] ++ List.replicate (k + 1) true).length ≤ n) →
+        coherentBinaryWordTileScale n q
+            (p ++ [false] ++ List.replicate k true)
+            (by
+              have hsucc : p.length + ((k + 1) + 1) ≤ n := by
+                simpa [List.length_append, List.length_replicate] using hkSucc
+              have hlen : p.length + (k + 1) ≤ n := by omega
+              simpa [List.length_append, List.length_replicate] using hlen) <
+          ρ * coherentBinaryWordTileScale n q
+            (p ++ [false] ++ List.replicate (k + 1) true) hkSucc) ∧
+      (∀ p : List Bool, (hp : p.length + 1 ≤ n) →
+        coherentBinaryWordTileScale n q (binaryWordMaxChildPrefix n p)
+            (by rw [binaryWordMaxChildPrefix_length hp]) <
+          ρ * binaryWordUpperEndpointScale n q p) ∧
+      (∀ (k : ℕ),
+        (hkSucc : (List.replicate (k + 1) true).length ≤ n) →
+        coherentBinaryWordTileScale n q (List.replicate k true)
+            (by
+              have hsucc : k + 1 ≤ n := by simpa using hkSucc
+              have hlen : k ≤ n := by omega
+              simpa using hlen) <
+          ρ * coherentBinaryWordTileScale n q (List.replicate (k + 1) true) hkSucc) ∧
+      coherentBinaryWordTileScale n q (List.replicate n true)
+          (by simp [List.length_replicate]) <
+        ρ * binaryWordAllOnesEndpointScale n q := by
+  classical
+  let Prefix := {p : List Bool // p.length < n}
+  letI : Fintype Prefix := (List.finite_length_lt Bool n).fintype
+  let chainDepth : Option Prefix → ℕ := fun c =>
+    match c with
+    | none => n
+    | some p => n - (p.val.length + 1)
+  let chainLo : Option Prefix → ℝ := fun c =>
+    match c with
+    | none => 0
+    | some p => binaryWordLowerEndpointScale n q p.val
+  let chainHi : Option Prefix → ℝ := fun c =>
+    match c with
+    | none => binaryWordAllOnesEndpointScale n q
+    | some p => binaryWordUpperEndpointScale n q p.val
+  obtain ⟨ρ, hρpos, hρlt, hsep⟩ :=
+    exists_uniformly_separated_tileScaleInterpolations
+      (n := chainDepth) (lo := chainLo) (hi := chainHi)
+      (hlo := by
+        intro c
+        cases c with
+        | none => norm_num [chainLo]
+        | some p => exact (pow_pos hq0 _).le)
+      (hlohi := by
+        intro c
+        cases c with
+        | none =>
+            exact pow_pos hq0 _
+        | some p =>
+            apply binaryWordLowerEndpointScale_lt_upper hq0 hq1
+            omega)
+  refine ⟨ρ, hρpos, hρlt, ?_, ?_, ?_, ?_⟩
+  · intro p k hkSucc
+    have hsucc : p.length + ((k + 1) + 1) ≤ n := by
+      simpa [List.length_append, List.length_replicate] using hkSucc
+    have hbase : p.length + 1 ≤ n := by omega
+    have hp : p.length < n := by omega
+    have hprev : (p ++ [false] ++ List.replicate k true).length ≤ n := by
+      have hlen : p.length + (k + 1) ≤ n := by omega
+      simpa [List.length_append, List.length_replicate] using hlen
+    let c : Option Prefix := some ⟨p, hp⟩
+    have hidx : k < chainDepth c + 1 := by
+      dsimp [c, chainDepth]
+      omega
+    have hfamily := hsep c ⟨k, hidx⟩
+    calc
+      coherentBinaryWordTileScale n q (p ++ [false] ++ List.replicate k true) hprev =
+          tileScaleInterpolation (binaryWordLowerEndpointScale n q p)
+            (binaryWordUpperEndpointScale n q p)
+            ⟨k, binaryWordChainWord_scaleIndex_lt p k hprev⟩ := by
+        rw [coherentBinaryWordTileScale]
+        exact binaryWordTileScale_on_chainWord
+          (binaryWordLowerEndpointScale n q) (binaryWordUpperEndpointScale n q)
+          (binaryWordAllOnesEndpointScale n q) p k hprev
+      _ < ρ * tileScaleInterpolation (binaryWordLowerEndpointScale n q p)
+            (binaryWordUpperEndpointScale n q p)
+            ⟨k + 1, binaryWordChainWord_scaleIndex_lt p (k + 1) hkSucc⟩ := by
+        simpa [c, chainDepth, chainLo, chainHi] using hfamily
+      _ = ρ * coherentBinaryWordTileScale n q
+            (p ++ [false] ++ List.replicate (k + 1) true) hkSucc := by
+        rw [coherentBinaryWordTileScale]
+        exact congrArg (fun z : ℝ => ρ * z)
+          (binaryWordTileScale_on_chainWord
+            (binaryWordLowerEndpointScale n q) (binaryWordUpperEndpointScale n q)
+            (binaryWordAllOnesEndpointScale n q) p (k + 1) hkSucc).symm
+  · intro p hp
+    have hp' : p.length < n := by omega
+    let depth := n - (p.length + 1)
+    let c : Option Prefix := some ⟨p, hp'⟩
+    have hmax : (binaryWordMaxChildPrefix n p).length ≤ n := by
+      rw [binaryWordMaxChildPrefix_length hp]
+    have hfamily := hsep c (Fin.last depth)
+    have hraw : tileScaleInterpolation (binaryWordLowerEndpointScale n q p)
+          (binaryWordUpperEndpointScale n q p)
+          ((Fin.last depth).castSucc) <
+        ρ * tileScaleInterpolation (binaryWordLowerEndpointScale n q p)
+          (binaryWordUpperEndpointScale n q p) ((Fin.last depth).succ) := by
+      simpa [c, depth, chainDepth, chainLo, chainHi] using hfamily
+    have hleftIdx : (Fin.last depth).castSucc =
+        (⟨depth, by omega⟩ : Fin (depth + 2)) := by
+      apply Fin.ext
+      rfl
+    have hrightIdx : (Fin.last depth).succ = Fin.last (depth + 1) := by
+      apply Fin.ext
+      rfl
+    rw [hleftIdx, hrightIdx,
+      (tileScaleInterpolation_endpoints (n := depth)
+        (lo := binaryWordLowerEndpointScale n q p)
+        (hi := binaryWordUpperEndpointScale n q p)).2] at hraw
+    calc
+      coherentBinaryWordTileScale n q (binaryWordMaxChildPrefix n p) hmax =
+          tileScaleInterpolation (binaryWordLowerEndpointScale n q p)
+            (binaryWordUpperEndpointScale n q p)
+            ⟨depth, binaryWordChainWord_scaleIndex_lt p depth hmax⟩ := by
+        rw [coherentBinaryWordTileScale]
+        have hword : binaryWordMaxChildPrefix n p =
+            p ++ [false] ++ List.replicate depth true := by
+          simp [depth, binaryWordMaxChildPrefix]
+        have hwordLen : (p ++ [false] ++ List.replicate depth true).length ≤ n := by
+          rw [← hword]
+          exact hmax
+        have hscale : binaryWordTileScale n (binaryWordLowerEndpointScale n q)
+            (binaryWordUpperEndpointScale n q) (binaryWordAllOnesEndpointScale n q)
+            (binaryWordMaxChildPrefix n p) hmax =
+          binaryWordTileScale n (binaryWordLowerEndpointScale n q)
+            (binaryWordUpperEndpointScale n q) (binaryWordAllOnesEndpointScale n q)
+            (p ++ [false] ++ List.replicate depth true) hwordLen := by
+          cases hword
+          rfl
+        rw [hscale]
+        exact binaryWordTileScale_on_chainWord
+          (binaryWordLowerEndpointScale n q) (binaryWordUpperEndpointScale n q)
+          (binaryWordAllOnesEndpointScale n q) p depth hwordLen
+      _ < ρ * binaryWordUpperEndpointScale n q p := hraw
+  · intro k hkSucc
+    have hlen : k ≤ n := by
+      have hsucc : k + 1 ≤ n := by simpa using hkSucc
+      omega
+    have hidx : k < n + 1 := by omega
+    have hfamily := hsep none ⟨k, hidx⟩
+    have hprev : (List.replicate k true).length ≤ n := by simpa using hlen
+    calc
+      coherentBinaryWordTileScale n q (List.replicate k true) hprev =
+          tileScaleInterpolation 0 (binaryWordAllOnesEndpointScale n q)
+            ⟨k, binaryWordAllOnes_scaleIndex_lt hprev⟩ := by
+        rw [coherentBinaryWordTileScale]
+        exact binaryWordTileScale_on_allOnes
+          (binaryWordLowerEndpointScale n q) (binaryWordUpperEndpointScale n q)
+          (binaryWordAllOnesEndpointScale n q) k hprev
+      _ < ρ * tileScaleInterpolation 0 (binaryWordAllOnesEndpointScale n q)
+            ⟨k + 1, binaryWordAllOnes_scaleIndex_lt hkSucc⟩ := by
+        simpa [chainDepth, chainLo, chainHi] using hfamily
+      _ = ρ * coherentBinaryWordTileScale n q (List.replicate (k + 1) true) hkSucc := by
+        rw [coherentBinaryWordTileScale]
+        exact congrArg (fun z : ℝ => ρ * z)
+          (binaryWordTileScale_on_allOnes
+            (binaryWordLowerEndpointScale n q) (binaryWordUpperEndpointScale n q)
+            (binaryWordAllOnesEndpointScale n q) (k + 1) hkSucc).symm
+  · have hfamily := hsep (none : Option Prefix) (Fin.last n)
+    have hraw : tileScaleInterpolation 0 (binaryWordAllOnesEndpointScale n q)
+          ((Fin.last n).castSucc) <
+        ρ * tileScaleInterpolation 0 (binaryWordAllOnesEndpointScale n q)
+          ((Fin.last n).succ) := by
+      simpa [chainDepth, chainLo, chainHi] using hfamily
+    have hleftIdx : (Fin.last n).castSucc = (⟨n, by omega⟩ : Fin (n + 2)) := by
+      apply Fin.ext
+      rfl
+    have hrightIdx : (Fin.last n).succ = Fin.last (n + 1) := by
+      apply Fin.ext
+      rfl
+    rw [hleftIdx, hrightIdx,
+      (tileScaleInterpolation_endpoints (n := n) (lo := 0)
+        (hi := binaryWordAllOnesEndpointScale n q)).2] at hraw
+    have hword : (List.replicate n true).length ≤ n := by simp [List.length_replicate]
+    calc
+      coherentBinaryWordTileScale n q (List.replicate n true) hword =
+          tileScaleInterpolation 0 (binaryWordAllOnesEndpointScale n q)
+            ⟨n, binaryWordAllOnes_scaleIndex_lt hword⟩ := by
+        rw [coherentBinaryWordTileScale]
+        exact binaryWordTileScale_on_allOnes
+          (binaryWordLowerEndpointScale n q) (binaryWordUpperEndpointScale n q)
+          (binaryWordAllOnesEndpointScale n q) n hword
+      _ < ρ * binaryWordAllOnesEndpointScale n q := hraw
+
+/-- The binary endpoint assignment admits one common multiplicative separation factor across every
+actual adjacent pair of words. -/
+theorem exists_uniform_coherentBinaryWordTileScale_separation {n : ℕ} {q : ℝ}
+    (hq0 : 0 < q) (hq1 : q < 1) :
+    ∃ ρ : ℝ, 0 < ρ ∧ ρ < 1 ∧
+      (∀ (p : List Bool) (k : ℕ),
+        (hkSucc : (p ++ [false] ++ List.replicate (k + 1) true).length ≤ n) →
+        coherentBinaryWordTileScale n q
+            (p ++ [false] ++ List.replicate k true)
+            (by
+              have hsucc : p.length + ((k + 1) + 1) ≤ n := by
+                simpa [List.length_append, List.length_replicate] using hkSucc
+              have hlen : p.length + (k + 1) ≤ n := by omega
+              simpa [List.length_append, List.length_replicate] using hlen) <
+          ρ * coherentBinaryWordTileScale n q
+            (p ++ [false] ++ List.replicate (k + 1) true) hkSucc) ∧
+      (∀ (k : ℕ),
+        (hkSucc : (List.replicate (k + 1) true).length ≤ n) →
+        coherentBinaryWordTileScale n q (List.replicate k true)
+            (by
+              have hsucc : k + 1 ≤ n := by simpa using hkSucc
+              have hlen : k ≤ n := by omega
+              simpa using hlen) <
+          ρ * coherentBinaryWordTileScale n q (List.replicate (k + 1) true) hkSucc) := by
+  obtain ⟨ρ, hρpos, hρlt, hordinary, _, hallones, _⟩ :=
+    exists_uniform_coherentBinaryWordTileScale_full_chain_separation hq0 hq1
+  exact ⟨ρ, hρpos, hρlt, hordinary, hallones⟩
+
+/-! ## Filling a projected tile between its boundary graphs
+
+This is the set-theoretic part of Craciun v3, §7.4.3, Case 1.2. A face whose last projection
+lowers dimension has vertical fibers bounded by its already-constructed boundary neighborhoods.
+The fill below records the exact region between those graphs over one projected tile. Optional
+endpoints also cover the paper's unbounded-face case, where only one boundary graph is present.
+-/
+
+/-- The allowed interval in one projection fiber. Missing endpoints represent an unbounded side. -/
+def projectionFiberInterval (lower upper : Option ℝ) : Set ℝ :=
+  match lower, upper with
+  | none, none => Set.univ
+  | some a, none => Set.Ici a
+  | none, some b => Set.Iic b
+  | some a, some b => Set.Icc a b
+
+/-- The region over `base` filled between lower and upper boundary graphs in the last coordinate.
+For each projected point, the fiber is the full interval between its boundary values, with either
+endpoint allowed to be absent for an unbounded face. -/
+def projectionFiberBand {n : ℕ} (base : Set (Fin n → ℝ))
+    (lower upper : (Fin n → ℝ) → Option ℝ) : Set (Fin (n + 1) → ℝ) :=
+  {x | let y := forgetLastCoordinate n x
+    y ∈ base ∧ x (Fin.last n) ∈ projectionFiberInterval (lower y) (upper y)}
+
+/-- Membership in a fiber band is exactly base membership plus membership of the last coordinate
+in the corresponding endpoint interval. -/
+theorem mem_projectionFiberBand_snoc_iff {n : ℕ} (base : Set (Fin n → ℝ))
+    (lower upper : (Fin n → ℝ) → Option ℝ) (y : Fin n → ℝ) (t : ℝ) :
+    Fin.snoc y t ∈ projectionFiberBand base lower upper ↔
+      y ∈ base ∧ t ∈ projectionFiberInterval (lower y) (upper y) := by
+  simp [projectionFiberBand, forgetLastCoordinate]
+
+/-! ### Thickening a zero-bit graph
+
+The zero-bit case of the v3 construction lifts each tile center through a face whose projection is
+bijective, then thickens that graph by a small amount in the deleted coordinate. The lemmas here
+record the exact projected base, compactness, and thickness of that neighborhood. The face-profile
+equivalence above supplies the graph section; its smooth or affine realization is a separate input.
+-/
+
+/-- A transverse tube of radius `radius` around a coordinate graph over `base`. -/
+def projectionFiberTube {n : ℕ} (base : Set (Fin n → ℝ))
+    (center : (Fin n → ℝ) → ℝ) (radius : ℝ) : Set (Fin (n + 1) → ℝ) :=
+  projectionFiberBand base (fun y => some (center y - radius))
+    (fun y => some (center y + radius))
+
+/-- The fiber of a filled tile over `y` is the whole interval between its boundary graphs, with no
+gaps. This is the exact fiber property used when Case 1.2 declares the preimage of a lower tile to
+be one tile in the new dimension. -/
+theorem projectionFiberBand_snoc_fiber {n : ℕ} (base : Set (Fin n → ℝ))
+    (lower upper : (Fin n → ℝ) → Option ℝ) (y : Fin n → ℝ) (hy : y ∈ base) :
+    {t | Fin.snoc y t ∈ projectionFiberBand base lower upper} =
+      projectionFiberInterval (lower y) (upper y) := by
+  classical
+  ext t
+  simp [mem_projectionFiberBand_snoc_iff, hy]
+
+/-- If every projected point has a nonempty vertical interval, filling the fibers projects onto
+exactly the original tile. Thus the last-bit-one construction preserves the prescribed projection
+of every tile. -/
+theorem projectionFiberBand_projects_onto_base {n : ℕ} (base : Set (Fin n → ℝ))
+    (lower upper : (Fin n → ℝ) → Option ℝ)
+    (hnonempty : ∀ y ∈ base, (projectionFiberInterval (lower y) (upper y)).Nonempty) :
+    forgetLastCoordinate n '' projectionFiberBand base lower upper = base := by
+  apply Set.Subset.antisymm
+  · rintro y ⟨x, hx, hxy⟩
+    simpa [hxy] using hx.1
+  · intro y hy
+    obtain ⟨t, ht⟩ := hnonempty y hy
+    refine ⟨Fin.snoc y t, ?_, ?_⟩
+    · exact (mem_projectionFiberBand_snoc_iff base lower upper y t).2 ⟨hy, ht⟩
+    · simp [forgetLastCoordinate]
+
+/-- Intersecting a filled region with the preimage of one projected tile gives exactly the
+corresponding full-fiber tile. This formalizes the tile definition in Case 1.2 of the induction. -/
+theorem projectionFiberBand_restrict_to_tile {n : ℕ} (base tile : Set (Fin n → ℝ))
+    (lower upper : (Fin n → ℝ) → Option ℝ) (htile : tile ⊆ base) :
+    projectionFiberBand base lower upper ∩
+        {x | forgetLastCoordinate n x ∈ tile} =
+      projectionFiberBand tile lower upper := by
+  ext x
+  simp only [Set.mem_inter_iff, Set.mem_setOf_eq, projectionFiberBand]
+  constructor
+  · rintro ⟨⟨hbase, hfiber⟩, htile'⟩
+    exact ⟨htile', hfiber⟩
+  · rintro ⟨htile', hfiber⟩
+    exact ⟨⟨htile htile', hfiber⟩, htile'⟩
+
+/-! ## Equal-width subdivision of a bounded fiber
+
+The paper next subdivides each bounded vertical fiber into intervals whose last-coordinate width
+is at most the prescribed `tilde epsilon`. The finite interpolation already used for tile scales
+provides the subdivision points; the lemmas below calculate the width of every resulting strip.
+-/
+
+/-- The `i`th subdivision point on the vertical fiber over `y`, using the existing equally-spaced
+finite interpolation. There are `m + 1` closed strips between the `m + 2` points. -/
+noncomputable def projectionFiberSubdivisionEndpoint {n m : ℕ}
+    (lower upper : (Fin n → ℝ) → ℝ) (i : Fin (m + 2)) (y : Fin n → ℝ) : ℝ :=
+  tileScaleInterpolation (lower y) (upper y) i
+
+/-- One closed strip in the equal subdivision of each bounded vertical fiber. -/
+def projectionFiberSubdivisionTile {n m : ℕ} (base : Set (Fin n → ℝ))
+    (lower upper : (Fin n → ℝ) → ℝ) (i : Fin (m + 1)) : Set (Fin (n + 1) → ℝ) :=
+  {x | let y := forgetLastCoordinate n x
+    y ∈ base ∧
+      projectionFiberSubdivisionEndpoint lower upper i.castSucc y ≤ x (Fin.last n) ∧
+      x (Fin.last n) ≤ projectionFiberSubdivisionEndpoint lower upper i.succ y}
+
+/-- Membership in one subdivision tile is membership in the projected base and the closed
+interval between its two adjacent interpolation points. -/
+theorem mem_projectionFiberSubdivisionTile_snoc_iff {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (i : Fin (m + 1)) (y : Fin n → ℝ) (t : ℝ) :
+    Fin.snoc y t ∈ projectionFiberSubdivisionTile base lower upper i ↔
+      y ∈ base ∧
+        projectionFiberSubdivisionEndpoint lower upper i.castSucc y ≤ t ∧
+        t ≤ projectionFiberSubdivisionEndpoint lower upper i.succ y := by
+  simp [projectionFiberSubdivisionTile, projectionFiberSubdivisionEndpoint, forgetLastCoordinate]
+
+/-- Restricting the projected base can only shrink a fiber subdivision tile. -/
+theorem projectionFiberSubdivisionTile_mono {n m : ℕ}
+    {base₁ base₂ : Set (Fin n → ℝ)} (hbase : base₁ ⊆ base₂)
+    (lower upper : (Fin n → ℝ) → ℝ) (i : Fin (m + 1)) :
+    projectionFiberSubdivisionTile base₁ lower upper i ⊆
+      projectionFiberSubdivisionTile base₂ lower upper i := by
+  intro x hx
+  change (let y := forgetLastCoordinate n x
+    y ∈ base₁ ∧ projectionFiberSubdivisionEndpoint lower upper i.castSucc y ≤
+      x (Fin.last n) ∧ x (Fin.last n) ≤
+        projectionFiberSubdivisionEndpoint lower upper i.succ y) at hx
+  change (let y := forgetLastCoordinate n x
+    y ∈ base₂ ∧ projectionFiberSubdivisionEndpoint lower upper i.castSucc y ≤
+      x (Fin.last n) ∧ x (Fin.last n) ≤
+        projectionFiberSubdivisionEndpoint lower upper i.succ y)
+  exact ⟨hbase hx.1, hx.2.1, hx.2.2⟩
+
+/-- Every adjacent pair of subdivision points has the same vertical width. -/
+theorem projectionFiberSubdivisionEndpoint_gap {n m : ℕ}
+    (lower upper : (Fin n → ℝ) → ℝ) (i : Fin (m + 1)) (y : Fin n → ℝ) :
+    projectionFiberSubdivisionEndpoint lower upper i.succ y -
+        projectionFiberSubdivisionEndpoint lower upper i.castSucc y =
+      (upper y - lower y) / ((m + 1 : ℕ) : ℝ) := by
+  dsimp [projectionFiberSubdivisionEndpoint, tileScaleInterpolation]
+  push_cast
+  have hden : ((m + 1 : ℕ) : ℝ) ≠ 0 := by positivity
+  field_simp
+  <;> ring
+
+/-- If every fiber has total height at most `m + 1` times `epsilon`, then each closed subdivision
+tile has last-coordinate width at most `epsilon`. -/
+theorem projectionFiberSubdivisionEndpoint_gap_le {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ) (epsilon : ℝ)
+    (hheight : ∀ y ∈ base,
+      upper y - lower y ≤ ((m + 1 : ℕ) : ℝ) * epsilon)
+    (i : Fin (m + 1)) (y : Fin n → ℝ) (hy : y ∈ base) :
+    projectionFiberSubdivisionEndpoint lower upper i.succ y -
+        projectionFiberSubdivisionEndpoint lower upper i.castSucc y ≤ epsilon := by
+  rw [projectionFiberSubdivisionEndpoint_gap]
+  rw [div_le_iff₀ (by positivity : 0 < ((m + 1 : ℕ) : ℝ))]
+  nlinarith [hheight y hy]
+
+/-- Any bounded fiber height can be split into finitely many equal strips of width at most a
+prescribed positive `epsilon`. -/
+theorem exists_fiberSubdivision_count {height epsilon : ℝ}
+    (hheight : 0 ≤ height) (hepsilon : 0 < epsilon) :
+    ∃ m : ℕ, height ≤ ((m + 1 : ℕ) : ℝ) * epsilon := by
+  obtain ⟨N, hN⟩ := exists_nat_gt (height / epsilon)
+  have hNpos : 0 < N := by
+    by_contra h
+    have hNzero : N = 0 := Nat.eq_zero_of_not_pos h
+    subst N
+    have hquot : 0 ≤ height / epsilon := div_nonneg hheight hepsilon.le
+    exact (not_lt_of_ge hquot) (by simpa using hN)
+  have hNcast : height / epsilon < (N : ℝ) := by exact_mod_cast hN
+  have hmul : height < (N : ℝ) * epsilon := (div_lt_iff₀ hepsilon).mp hNcast
+  have hsucc : N - 1 + 1 = N := by omega
+  refine ⟨N - 1, ?_⟩
+  have hcast : ((N - 1 + 1 : ℕ) : ℝ) = (N : ℝ) := by exact_mod_cast hsucc
+  rw [hcast]
+  exact hmul.le
+
+/-- A common subdivision count works for every fiber over `base` whenever their heights share a
+finite upper bound. -/
+theorem exists_uniform_fiberSubdivision_count {n : ℕ} (base : Set (Fin n → ℝ))
+    (lower upper : (Fin n → ℝ) → ℝ) {height epsilon : ℝ}
+    (hheight : 0 ≤ height) (hwidth : ∀ y ∈ base, upper y - lower y ≤ height)
+    (hepsilon : 0 < epsilon) :
+    ∃ m : ℕ, ∀ y ∈ base, upper y - lower y ≤ ((m + 1 : ℕ) : ℝ) * epsilon := by
+  obtain ⟨m, hm⟩ := exists_fiberSubdivision_count hheight hepsilon
+  exact ⟨m, fun y hy => (hwidth y hy).trans hm⟩
+
+/-- One finite equal subdivision controls every bounded fiber over `base` to last-coordinate width
+at most `epsilon`. -/
+theorem exists_uniform_projectionFiberSubdivision {n : ℕ} (base : Set (Fin n → ℝ))
+    (lower upper : (Fin n → ℝ) → ℝ) {height epsilon : ℝ}
+    (hheight : 0 ≤ height) (hwidth : ∀ y ∈ base, upper y - lower y ≤ height)
+    (hepsilon : 0 < epsilon) :
+    ∃ m : ℕ, ∀ y ∈ base, ∀ i : Fin (m + 1),
+      projectionFiberSubdivisionEndpoint lower upper i.succ y -
+        projectionFiberSubdivisionEndpoint lower upper i.castSucc y ≤ epsilon := by
+  obtain ⟨m, hm⟩ := exists_uniform_fiberSubdivision_count base lower upper
+    hheight hwidth hepsilon
+  refine ⟨m, ?_⟩
+  intro y hy i
+  exact projectionFiberSubdivisionEndpoint_gap_le base lower upper epsilon hm i y hy
+
+/-- Every interpolation point stays between its prescribed endpoints. -/
+theorem tileScaleInterpolation_bounds {m : ℕ} {lo hi : ℝ} (hlohi : lo ≤ hi)
+    (i : Fin (m + 2)) :
+    lo ≤ tileScaleInterpolation lo hi i ∧ tileScaleInterpolation lo hi i ≤ hi := by
+  by_cases hsame : lo = hi
+  · subst hi
+    simp [tileScaleInterpolation]
+  · have hlt : lo < hi := lt_of_le_of_ne hlohi hsame
+    have hmono := strictMono_tileScaleInterpolation (n := m) hlt
+    constructor
+    · have h := hmono.monotone (Fin.zero_le i)
+      simpa [tileScaleInterpolation_endpoints] using h
+    · have h := hmono.monotone (Fin.le_last i)
+      simpa [tileScaleInterpolation_endpoints] using h
+
+/-- Every in-range one-ending word receives a strictly positive interpolated tilde scale. The
+ordinary chains interpolate between positive zero-ending endpoints; the all-ones chain starts at
+zero, but every nonempty word on it has a positive interpolation index. -/
+theorem coherentBinaryWordTileScale_pos_of_getLast_true {n : ℕ} {q : ℝ}
+    (hq0 : 0 < q) (hq1 : q < 1) (w : List Bool) (hw : w.length ≤ n)
+    (hlast : w.getLast? = some true) :
+    0 < coherentBinaryWordTileScale n q w hw := by
+  classical
+  cases hidx : binaryWordChainIndex w with
+  | mk chain k =>
+      cases chain with
+      | none =>
+          have hword : w = List.replicate k true := by
+            simpa [hidx] using binaryWordChainIndex_reconstruct w
+          have hkpos : 0 < k := by
+            have hlen : 1 ≤ w.length := by
+              cases w with
+              | nil => simp at hlast
+              | cons b bs => simp
+            rw [hword] at hlen
+            simp only [List.length_replicate] at hlen
+            exact hlen
+          have hk : (List.replicate k true).length ≤ n := by
+            rw [← hword]
+            exact hw
+          have hendpoint : 0 < binaryWordAllOnesEndpointScale n q :=
+            pow_pos hq0 _
+          have hindex : 0 < ((k : ℕ) : ℝ) / ((n + 1 : ℕ) : ℝ) :=
+            div_pos (by exact_mod_cast hkpos) (by positivity)
+          subst w
+          change 0 < binaryWordTileScale n (binaryWordLowerEndpointScale n q)
+            (binaryWordUpperEndpointScale n q) (binaryWordAllOnesEndpointScale n q)
+            (List.replicate k true) hk
+          rw [binaryWordTileScale_on_allOnes
+            (binaryWordLowerEndpointScale n q) (binaryWordUpperEndpointScale n q)
+            (binaryWordAllOnesEndpointScale n q) k hk]
+          simpa [tileScaleInterpolation] using
+            (mul_pos hendpoint hindex)
+      | some p =>
+          have hword : w = p ++ [false] ++ List.replicate k true := by
+            simpa [hidx] using binaryWordChainIndex_reconstruct w
+          have hbase : p.length + 1 ≤ n := by
+            have hlen := congrArg List.length hword
+            simp only [List.length_append, List.length_cons, List.length_nil,
+              List.length_replicate] at hlen
+            omega
+          subst w
+          have hindex : k < n - (p.length + 1) + 2 :=
+            binaryWordChainWord_scaleIndex_lt p k hw
+          have hlower : 0 < binaryWordLowerEndpointScale n q p := pow_pos hq0 _
+          have hendpoints := binaryWordLowerEndpointScale_lt_upper hq0 hq1 hbase
+          have hbounds := tileScaleInterpolation_bounds hendpoints.le
+            (⟨k, hindex⟩ : Fin (n - (p.length + 1) + 2))
+          change 0 < binaryWordTileScale n (binaryWordLowerEndpointScale n q)
+            (binaryWordUpperEndpointScale n q) (binaryWordAllOnesEndpointScale n q)
+            (p ++ [false] ++ List.replicate k true) hw
+          rw [binaryWordTileScale_on_chainWord
+            (binaryWordLowerEndpointScale n q) (binaryWordUpperEndpointScale n q)
+            (binaryWordAllOnesEndpointScale n q) p k hw]
+          exact lt_of_lt_of_le hlower hbounds.1
+
+/-- Every point in a bounded interval belongs to one adjacent strip of its finite equal
+interpolation. The index is the floored normalized position, capped at the final strip. -/
+theorem exists_tileScaleInterpolation_segment {m : ℕ} {lo hi t : ℝ}
+    (hlohi : lo ≤ hi) (htlo : lo ≤ t) (hthi : t ≤ hi) :
+    ∃ i : Fin (m + 1),
+      tileScaleInterpolation lo hi i.castSucc ≤ t ∧
+      t ≤ tileScaleInterpolation lo hi i.succ := by
+  classical
+  by_cases hsame : lo = hi
+  · subst hi
+    have ht : t = lo := le_antisymm hthi htlo
+    subst t
+    refine ⟨0, ?_, ?_⟩ <;> simp [tileScaleInterpolation]
+  · have hlt : lo < hi := lt_of_le_of_ne hlohi hsame
+    let N : ℝ := ((m + 1 : ℕ) : ℝ)
+    let gap : ℝ := (hi - lo) / N
+    have hNpos : 0 < N := by positivity
+    have hNne : N ≠ 0 := ne_of_gt hNpos
+    have hgap : 0 < gap := div_pos (sub_pos.mpr hlt) hNpos
+    let u : ℝ := (t - lo) / gap
+    have hu0 : 0 ≤ u := by
+      dsimp [u]
+      exact div_nonneg (sub_nonneg.mpr htlo) hgap.le
+    have huN : u ≤ N := by
+      dsimp [u]
+      calc
+        (t - lo) / gap ≤ (hi - lo) / gap :=
+          div_le_div_of_nonneg_right (sub_le_sub_right hthi lo) hgap.le
+        _ = N := by
+          dsimp [gap]
+          field_simp [hNne, ne_of_gt (sub_pos.mpr hlt)]
+    have hgap_mul : gap * u = t - lo := by
+      dsimp [u]
+      field_simp [ne_of_gt hgap]
+    let k : ℕ := min m (Nat.floor u)
+    have hfloor_le : Nat.floor u ≤ m + 1 := Nat.floor_le_of_le (by simpa [N] using huN)
+    have hk_le_m : k ≤ m := by dsimp [k]; exact Nat.min_le_left _ _
+    have hku : (k : ℝ) ≤ u := by
+      by_cases hfloor : Nat.floor u ≤ m
+      · have hk : k = Nat.floor u := by dsimp [k]; exact min_eq_right hfloor
+        rw [hk]
+        exact Nat.floor_le hu0
+      · have hmLt : m < Nat.floor u := Nat.lt_of_not_ge hfloor
+        have hmSucc : m + 1 ≤ Nat.floor u := Nat.succ_le_of_lt hmLt
+        have hfeq : Nat.floor u = m + 1 := Nat.le_antisymm hfloor_le hmSucc
+        have hk : k = m := by dsimp [k]; rw [hfeq]; simp
+        rw [hk]
+        have hcast : (m : ℝ) ≤ (Nat.floor u : ℝ) := by
+          exact_mod_cast (Nat.le_of_lt hmLt)
+        exact hcast.trans (Nat.floor_le hu0)
+    have hu_k_succ : u ≤ (k + 1 : ℕ) := by
+      by_cases hfloor : Nat.floor u ≤ m
+      · have hk : k = Nat.floor u := by dsimp [k]; exact min_eq_right hfloor
+        rw [hk]
+        simpa [Nat.cast_add] using (Nat.lt_floor_add_one u).le
+      · have hmLt : m < Nat.floor u := Nat.lt_of_not_ge hfloor
+        have hmSucc : m + 1 ≤ Nat.floor u := Nat.succ_le_of_lt hmLt
+        have hfeq : Nat.floor u = m + 1 := Nat.le_antisymm hfloor_le hmSucc
+        have hk : k = m := by dsimp [k]; rw [hfeq]; simp
+        rw [hk]
+        simpa [N] using huN
+    let i : Fin (m + 1) := ⟨k, Nat.lt_succ_of_le hk_le_m⟩
+    have hpoint (j : Fin (m + 2)) :
+        tileScaleInterpolation lo hi j = lo + gap * (j.val : ℝ) := by
+      dsimp [tileScaleInterpolation, gap, N]
+      have hden : ((m + 1 : ℕ) : ℝ) ≠ 0 := by positivity
+      field_simp [hden]
+    have hleft : tileScaleInterpolation lo hi i.castSucc = lo + gap * (k : ℝ) := by
+      rw [hpoint]
+      simp [i]
+    have hright : tileScaleInterpolation lo hi i.succ =
+        lo + gap * ((k + 1 : ℕ) : ℝ) := by
+      rw [hpoint]
+      simp [i]
+    have hleft_le : lo + gap * (k : ℝ) ≤ t := by
+      have hmul := mul_le_mul_of_nonneg_left hku hgap.le
+      rw [hgap_mul] at hmul
+      linarith
+    have hright_ge : t ≤ lo + gap * ((k + 1 : ℕ) : ℝ) := by
+      have hmul := mul_le_mul_of_nonneg_left hu_k_succ hgap.le
+      rw [hgap_mul] at hmul
+      linarith
+    exact ⟨i, by rw [hleft]; exact hleft_le, by rw [hright]; exact hright_ge⟩
+
+/-- Membership in the bounded-endpoint specialization of `projectionFiberBand`. -/
+theorem mem_projectionFiberBand_bounded_iff {n : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ) (x : Fin (n + 1) → ℝ) :
+    x ∈ projectionFiberBand base (fun y => some (lower y)) (fun y => some (upper y)) ↔
+      forgetLastCoordinate n x ∈ base ∧
+        lower (forgetLastCoordinate n x) ≤ x (Fin.last n) ∧
+        x (Fin.last n) ≤ upper (forgetLastCoordinate n x) := by
+  change (let y := forgetLastCoordinate n x
+    y ∈ base ∧ x (Fin.last n) ∈ projectionFiberInterval (some (lower y)) (some (upper y))) ↔ _
+  simp [projectionFiberInterval]
+
+/-- Each bounded-endpoint subdivision tile stays inside its filled fiber band. -/
+theorem projectionFiberSubdivisionTile_subset_band {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (horder : ∀ y ∈ base, lower y ≤ upper y) (i : Fin (m + 1)) :
+    projectionFiberSubdivisionTile base lower upper i ⊆
+      projectionFiberBand base (fun y => some (lower y)) (fun y => some (upper y)) := by
+  intro x hx
+  change (let y := forgetLastCoordinate n x
+    y ∈ base ∧
+      projectionFiberSubdivisionEndpoint lower upper i.castSucc y ≤ x (Fin.last n) ∧
+      x (Fin.last n) ≤ projectionFiberSubdivisionEndpoint lower upper i.succ y) at hx
+  let y := forgetLastCoordinate n x
+  have hy : y ∈ base := by simpa [y] using hx.1
+  have hboundsLeft := tileScaleInterpolation_bounds (m := m) (horder y hy) i.castSucc
+  have hboundsRight := tileScaleInterpolation_bounds (m := m) (horder y hy) i.succ
+  have hleft := hboundsLeft.1
+  have hright := hboundsRight.2
+  have hleft' : lower y ≤ projectionFiberSubdivisionEndpoint lower upper i.castSucc y := by
+    simpa [projectionFiberSubdivisionEndpoint] using hleft
+  have hright' : projectionFiberSubdivisionEndpoint lower upper i.succ y ≤ upper y := by
+    simpa [projectionFiberSubdivisionEndpoint] using hright
+  apply (mem_projectionFiberBand_bounded_iff base lower upper x).2
+  refine ⟨?_, ?_, ?_⟩
+  · simpa [y] using hx.1
+  · exact hleft'.trans hx.2.1
+  · exact hx.2.2.trans hright'
+
+/-- The filled bounded fiber band is exactly the union of its equal-width subdivision tiles. -/
+theorem projectionFiberBand_bounded_eq_iUnion_subdivisionTiles {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (horder : ∀ y ∈ base, lower y ≤ upper y) :
+    projectionFiberBand base (fun y => some (lower y)) (fun y => some (upper y)) =
+      ⋃ i : Fin (m + 1), projectionFiberSubdivisionTile base lower upper i := by
+  ext x
+  constructor
+  · intro hx
+    obtain ⟨ybase, hlow, hhigh⟩ :=
+      (mem_projectionFiberBand_bounded_iff base lower upper x).1 hx
+    obtain ⟨i, htileLow, htileHigh⟩ :=
+      exists_tileScaleInterpolation_segment (horder _ ybase) hlow hhigh
+    refine Set.mem_iUnion.mpr ⟨i, ?_⟩
+    change (let y := forgetLastCoordinate n x
+      y ∈ base ∧
+        projectionFiberSubdivisionEndpoint lower upper i.castSucc y ≤ x (Fin.last n) ∧
+        x (Fin.last n) ≤ projectionFiberSubdivisionEndpoint lower upper i.succ y)
+    exact ⟨ybase, by simpa [projectionFiberSubdivisionEndpoint] using htileLow,
+      by simpa [projectionFiberSubdivisionEndpoint] using htileHigh⟩
+  · intro hx
+    rcases Set.mem_iUnion.mp hx with ⟨i, hi⟩
+    exact projectionFiberSubdivisionTile_subset_band base lower upper horder i hi
+
+/-- For ordered fiber endpoints, every equal subdivision tile projects onto the whole base. -/
+theorem tileScaleInterpolation_monotone_of_le {m : ℕ} {lo hi : ℝ}
+    (hlohi : lo ≤ hi) : Monotone (tileScaleInterpolation lo hi : Fin (m + 2) → ℝ) := by
+  by_cases hsame : lo = hi
+  · subst hi
+    intro i j hij
+    simp [tileScaleInterpolation]
+  · have hlt : lo < hi := lt_of_le_of_ne hlohi hsame
+    exact (strictMono_tileScaleInterpolation (n := m) hlt).monotone
+
+/-- Projection onto the lower-dimensional coordinate slice is surjective for each subdivided
+tile: over every base point, the fiber interval between consecutive interpolation points is
+nonempty. -/
+theorem projectionFiberSubdivisionTile_projects_onto_base {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (horder : ∀ y ∈ base, lower y ≤ upper y) (i : Fin (m + 1)) :
+    forgetLastCoordinate n '' projectionFiberSubdivisionTile base lower upper i = base := by
+  apply Set.Subset.antisymm
+  · rintro y ⟨x, hx, hxy⟩
+    change (let z := forgetLastCoordinate n x
+      z ∈ base ∧
+        projectionFiberSubdivisionEndpoint lower upper i.castSucc z ≤ x (Fin.last n) ∧
+        x (Fin.last n) ≤ projectionFiberSubdivisionEndpoint lower upper i.succ z) at hx
+    have hy : forgetLastCoordinate n x ∈ base := by simpa using hx.1
+    simpa [hxy] using hy
+  · intro y hy
+    let t := projectionFiberSubdivisionEndpoint lower upper i.castSucc y
+    refine ⟨Fin.snoc y t, ?_, ?_⟩
+    · apply (mem_projectionFiberSubdivisionTile_snoc_iff base lower upper i y t).2
+      refine ⟨hy, le_rfl, ?_⟩
+      have hmono := tileScaleInterpolation_monotone_of_le (m := m) (horder y hy)
+      exact hmono (Fin.castSucc_le_succ i)
+    · simp [forgetLastCoordinate]
+
+/-- An ambient interior point of a fiber tile projects to the interior of its base. This follows
+from openness of the coordinate projection and the exact projection identity for each tile. -/
+theorem projectionFiberSubdivisionTile_interior_projects_into_interior_base {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (horder : ∀ y ∈ base, lower y ≤ upper y) (i : Fin (m + 1))
+    {x : Fin (n + 1) → ℝ}
+    (hx : x ∈ interior (projectionFiberSubdivisionTile base lower upper i)) :
+    forgetLastCoordinate n x ∈ interior base := by
+  have himage := image_interior_subset_interior_image_of_isOpenMap
+    (forgetLastCoordinate n) (forgetLastCoordinate_isOpenMap n)
+    (projectionFiberSubdivisionTile base lower upper i)
+  have hximage : forgetLastCoordinate n x ∈
+      interior (forgetLastCoordinate n '' projectionFiberSubdivisionTile base lower upper i) :=
+    himage ⟨x, hx, rfl⟩
+  rwa [projectionFiberSubdivisionTile_projects_onto_base base lower upper horder i] at hximage
+
+/-- Fiber tiles over projected bases with disjoint interiors have disjoint ambient interiors. -/
+theorem disjoint_projectionFiberSubdivisionTile_ambientInteriors_of_disjoint_baseInteriors
+    {n m₁ m₂ : ℕ} (base₁ base₂ : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (horder₁ : ∀ y ∈ base₁, lower y ≤ upper y)
+    (horder₂ : ∀ y ∈ base₂, lower y ≤ upper y)
+    (i : Fin (m₁ + 1)) (j : Fin (m₂ + 1))
+    (hbase : interior base₁ ∩ interior base₂ = ∅) :
+    interior (projectionFiberSubdivisionTile base₁ lower upper i) ∩
+      interior (projectionFiberSubdivisionTile base₂ lower upper j) = ∅ := by
+  ext x
+  constructor
+  · intro hx
+    rcases hx with ⟨hx₁, hx₂⟩
+    have hy₁ := projectionFiberSubdivisionTile_interior_projects_into_interior_base
+      base₁ lower upper horder₁ i hx₁
+    have hy₂ := projectionFiberSubdivisionTile_interior_projects_into_interior_base
+      base₂ lower upper horder₂ j hx₂
+    have hy : forgetLastCoordinate n x ∈ interior base₁ ∩ interior base₂ := ⟨hy₁, hy₂⟩
+    rw [hbase] at hy
+    simpa using hy
+  · simp
+
+/-- Interpolated fiber endpoints vary continuously with the projected point whenever the two
+boundary graphs do. -/
+theorem continuous_projectionFiberSubdivisionEndpoint {n m : ℕ}
+    (lower upper : (Fin n → ℝ) → ℝ) (i : Fin (m + 2))
+    (hlower : Continuous lower) (hupper : Continuous upper) :
+    Continuous (projectionFiberSubdivisionEndpoint lower upper i) := by
+  change Continuous (fun y => lower y + (upper y - lower y) *
+    ((i.val : ℝ) / ((m + 1 : ℕ) : ℝ)))
+  exact hlower.add ((hupper.sub hlower).mul continuous_const)
+
+/-- A subdivided fiber tile is closed when its base is closed and its two boundary graphs are
+continuous. -/
+theorem isClosed_projectionFiberSubdivisionTile {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (hbase : IsClosed base) (hlower : Continuous lower) (hupper : Continuous upper)
+    (i : Fin (m + 1)) : IsClosed (projectionFiberSubdivisionTile base lower upper i) := by
+  have hforget : Continuous (forgetLastCoordinate n :
+      (Fin (n + 1) → ℝ) → (Fin n → ℝ)) := by
+    apply continuous_pi
+    intro j
+    exact continuous_apply j.castSucc
+  have hlast : Continuous (fun x : Fin (n + 1) → ℝ => x (Fin.last n)) :=
+    continuous_apply _
+  have hlow : Continuous (fun x : Fin (n + 1) → ℝ =>
+      projectionFiberSubdivisionEndpoint lower upper i.castSucc (forgetLastCoordinate n x)) :=
+    (continuous_projectionFiberSubdivisionEndpoint lower upper i.castSucc hlower hupper).comp
+      hforget
+  have hhigh : Continuous (fun x : Fin (n + 1) → ℝ =>
+      projectionFiberSubdivisionEndpoint lower upper i.succ (forgetLastCoordinate n x)) :=
+    (continuous_projectionFiberSubdivisionEndpoint lower upper i.succ hlower hupper).comp
+      hforget
+  have hlowClosed := isClosed_le hlow hlast
+  have hhighClosed := isClosed_le hlast hhigh
+  have hbaseClosed : IsClosed ((forgetLastCoordinate n) ⁻¹' base) := hbase.preimage hforget
+  have hset : projectionFiberSubdivisionTile base lower upper i =
+      (forgetLastCoordinate n) ⁻¹' base ∩
+        ({x | projectionFiberSubdivisionEndpoint lower upper i.castSucc
+            (forgetLastCoordinate n x) ≤ x (Fin.last n)} ∩
+          {x | x (Fin.last n) ≤ projectionFiberSubdivisionEndpoint lower upper i.succ
+            (forgetLastCoordinate n x)}) := by
+    ext x
+    simp [projectionFiberSubdivisionTile]
+  rw [hset]
+  exact hbaseClosed.inter (hlowClosed.inter hhighClosed)
+
+/-- A compact projected base remains compact after filling each vertical fiber between continuous
+bounded endpoint graphs. This turns the paper's Case 1.2 fill into a compact geometric patch,
+which can be used as the domain for finite local-chart covers. -/
+theorem isCompact_projectionFiberBand_bounded {n : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (hbase : IsCompact base) (hlower : Continuous lower) (hupper : Continuous upper)
+    (horder : ∀ y ∈ base, lower y ≤ upper y) :
+    IsCompact (projectionFiberBand base (fun y => some (lower y))
+      (fun y => some (upper y))) := by
+  classical
+  let A := {y : Fin n → ℝ // y ∈ base} × Set.Icc (0 : ℝ) 1
+  let fill : A → Fin (n + 1) → ℝ := fun q =>
+    Fin.snoc q.1.1 (lower q.1.1 + q.2.1 * (upper q.1.1 - lower q.1.1))
+  have hy : Continuous (fun q : A => q.1.1) :=
+    continuous_subtype_val.comp continuous_fst
+  have ht : Continuous (fun q : A => q.2.1) :=
+    continuous_subtype_val.comp continuous_snd
+  have hfill : Continuous fill := by
+    apply continuous_pi
+    intro i
+    cases i using Fin.lastCases with
+    | cast j =>
+        simp only [fill, Fin.snoc_castSucc]
+        convert (continuous_apply j).comp hy using 1
+        ext q
+        rfl
+    | last =>
+        simp only [fill, Fin.snoc_last]
+        convert (hlower.comp hy).add (ht.mul ((hupper.comp hy).sub (hlower.comp hy)))
+          using 1
+        ext q
+        rfl
+  letI : CompactSpace {y : Fin n → ℝ // y ∈ base} := isCompact_iff_compactSpace.mp hbase
+  letI : CompactSpace A := inferInstance
+  have hdomain : IsCompact (Set.univ : Set A) := isCompact_univ
+  have himage : fill '' (Set.univ : Set A) =
+      projectionFiberBand base (fun y => some (lower y))
+        (fun y => some (upper y)) := by
+    ext x
+    constructor
+    · rintro ⟨q, -, rfl⟩
+      apply (mem_projectionFiberBand_bounded_iff base lower upper (fill q)).2
+      have ht0 := q.2.property.1
+      have ht1 := q.2.property.2
+      have hgap : 0 ≤ upper q.1.1 - lower q.1.1 :=
+        sub_nonneg.mpr (horder q.1.1 q.1.property)
+      have hlow : lower q.1.1 ≤
+            lower q.1.1 + q.2.1 * (upper q.1.1 - lower q.1.1) := by
+        nlinarith [mul_nonneg ht0 hgap]
+      have hupp : lower q.1.1 + q.2.1 * (upper q.1.1 - lower q.1.1) ≤
+            upper q.1.1 := by
+        nlinarith [mul_nonneg (sub_nonneg.mpr ht1) hgap]
+      have hcoords : q.1.1 ∈ base ∧
+          lower q.1.1 ≤ lower q.1.1 + q.2.1 * (upper q.1.1 - lower q.1.1) ∧
+          lower q.1.1 + q.2.1 * (upper q.1.1 - lower q.1.1) ≤ upper q.1.1 :=
+        ⟨q.1.property, hlow, hupp⟩
+      simpa [fill, forgetLastCoordinate] using hcoords
+    · intro hx
+      have hx' :=
+        (mem_projectionFiberBand_bounded_iff base lower upper x).1 hx
+      let y := forgetLastCoordinate n x
+      let z := x (Fin.last n)
+      have hybase : y ∈ base := by simpa [y] using hx'.1
+      have hzlow : lower y ≤ z := by simpa [y, z] using hx'.2.1
+      have hzhigh : z ≤ upper y := by simpa [y, z] using hx'.2.2
+      by_cases heq : lower y = upper y
+      · have hz : z = lower y := by
+          apply le_antisymm
+          · simpa [heq] using hzhigh
+          · exact hzlow
+        let t : ℝ := 0
+        have ht0 : 0 ≤ t := by simp [t]
+        have ht1 : t ≤ 1 := by simp [t]
+        have hcoord : lower y + t * (upper y - lower y) = z := by
+          simp [t, heq, hz]
+        let q : A := (⟨y, hybase⟩, ⟨t, ⟨ht0, ht1⟩⟩)
+        refine ⟨q, Set.mem_univ q, ?_⟩
+        dsimp [fill, q]
+        rw [← Fin.snoc_init_self x]
+        rw [Fin.snoc_inj]
+        exact ⟨by ext i; rfl, hcoord⟩
+      · have hlt : lower y < upper y := lt_of_le_of_ne (horder y hybase) heq
+        have hgap : 0 < upper y - lower y := sub_pos.mpr hlt
+        let t : ℝ := (z - lower y) / (upper y - lower y)
+        have ht0 : 0 ≤ t := by
+          dsimp [t]
+          exact div_nonneg (sub_nonneg.mpr hzlow) hgap.le
+        have ht1 : t ≤ 1 := by
+          dsimp [t]
+          calc
+            (z - lower y) / (upper y - lower y) ≤
+                (upper y - lower y) / (upper y - lower y) :=
+              div_le_div_of_nonneg_right (sub_le_sub_right hzhigh (lower y)) hgap.le
+            _ = 1 := div_self (ne_of_gt hgap)
+        have hcoord : lower y + t * (upper y - lower y) = z := by
+          dsimp [t]
+          field_simp [ne_of_gt hgap]
+          ring
+        let q : A := (⟨y, hybase⟩, ⟨t, ⟨ht0, ht1⟩⟩)
+        refine ⟨q, Set.mem_univ q, ?_⟩
+        dsimp [fill, q]
+        rw [← Fin.snoc_init_self x]
+        rw [Fin.snoc_inj]
+        exact ⟨by ext i; rfl, hcoord⟩
+  rw [← himage]
+  exact hdomain.image hfill
+
+/-- Membership in a graph tube is base membership and a uniform bound on the deleted coordinate's
+distance from the graph. -/
+theorem mem_projectionFiberTube_iff {n : ℕ} (base : Set (Fin n → ℝ))
+    (center : (Fin n → ℝ) → ℝ) (radius : ℝ) (x : Fin (n + 1) → ℝ) :
+    x ∈ projectionFiberTube base center radius ↔
+      forgetLastCoordinate n x ∈ base ∧
+        |x (Fin.last n) - center (forgetLastCoordinate n x)| ≤ radius := by
+  rw [projectionFiberTube, mem_projectionFiberBand_bounded_iff]
+  constructor
+  · rintro ⟨hy, hlo, hhi⟩
+    refine ⟨hy, ?_⟩
+    rw [abs_le]
+    constructor <;> linarith
+  · rintro ⟨hy, habs⟩
+    rw [abs_le] at habs
+    refine ⟨hy, ?_, ?_⟩ <;> linarith
+
+/-- Two graph tubes over one projected patch are disjoint when their vertical gap exceeds the
+sum of their radii uniformly over that patch. This is the final separation estimate in the
+same-projection case of Craciun v3, §7.3, once the shared lower-face neighborhood has been removed. -/
+theorem projectionFiberTube_inter_eq_empty_of_centers_separated
+    {n : ℕ} (base : Set (Fin n → ℝ))
+    (centerA centerB : (Fin n → ℝ) → ℝ) (radiusA radiusB : ℝ)
+    (hgap : ∀ y ∈ base, radiusA + radiusB < |centerA y - centerB y|) :
+    projectionFiberTube base centerA radiusA ∩
+      projectionFiberTube base centerB radiusB = ∅ := by
+  apply Set.eq_empty_iff_forall_notMem.mpr
+  intro x hx
+  rw [Set.mem_inter_iff, mem_projectionFiberTube_iff,
+    mem_projectionFiberTube_iff] at hx
+  obtain ⟨⟨hyA, hA⟩, ⟨hyB, hB⟩⟩ := hx
+  have hy : forgetLastCoordinate n x ∈ base := hyA
+  have hdist : |centerA (forgetLastCoordinate n x) -
+      centerB (forgetLastCoordinate n x)| ≤ radiusA + radiusB := by
+    calc
+      _ ≤ |centerA (forgetLastCoordinate n x) - x (Fin.last n)| +
+          |x (Fin.last n) - centerB (forgetLastCoordinate n x)| :=
+        abs_sub_le _ _ _
+      _ = |x (Fin.last n) - centerA (forgetLastCoordinate n x)| +
+          |x (Fin.last n) - centerB (forgetLastCoordinate n x)| := by
+        rw [abs_sub_comm]
+      _ ≤ radiusA + radiusB := add_le_add hA hB
+  exact (not_lt_of_ge hdist) (hgap _ hy)
+
+/-- Compactness gives a positive uniform separation between two graph sections that never agree.
+The resulting common tube radius makes their closed tubes disjoint. In the §7.3 face argument,
+the compact base is the part left after trimming away the shared lower-dimensional face. -/
+theorem exists_disjoint_projectionFiberTube_of_compact_separated_centers
+    {n : ℕ} {base : Set (Fin n → ℝ)}
+    (centerA centerB : (Fin n → ℝ) → ℝ)
+    (hbase : IsCompact base)
+    (hcenterA : ContinuousOn centerA base) (hcenterB : ContinuousOn centerB base)
+    (hneCenter : ∀ y ∈ base, centerA y ≠ centerB y) :
+    ∃ radius : ℝ, 0 < radius ∧
+      projectionFiberTube base centerA radius ∩
+        projectionFiberTube base centerB radius = ∅ := by
+  have hgapContinuous : ContinuousOn (fun y => |centerA y - centerB y|) base :=
+    (hcenterA.sub hcenterB).abs
+  have hgapPositive : ∀ y ∈ base, 0 < |centerA y - centerB y| := by
+    intro y hy
+    exact abs_pos.mpr (sub_ne_zero.mpr (hneCenter y hy))
+  obtain ⟨δ, hδ, hδle⟩ := hbase.exists_forall_le'
+    (a := 0) hgapContinuous hgapPositive
+  refine ⟨δ / 3, by linarith, ?_⟩
+  apply projectionFiberTube_inter_eq_empty_of_centers_separated
+  intro y hy
+  have hle := hδle y hy
+  linarith
+
+/-- If a binary-word fiber has width only in the final coordinate, its zero-bit
+pre-blueprint is exactly the tube around the face's graph section. This is the critical
+`11…110` face type in Craciun v3, §7.3. -/
+theorem zeroBitPreBlueprintNeighborhood_eq_projectionFiberTube_of_last_width
+    {n : ℕ} (face : Set (Fin (n + 1) → ℝ)) (base : Set (Fin n → ℝ))
+    (center : (Fin n → ℝ) → ℝ) (epsilon : List Bool → ℝ) (word : List Bool)
+    (radius : ℝ)
+    (hgraph : ∀ x ∈ face, center (forgetLastCoordinate n x) = x (Fin.last n))
+    (hlift : ∀ y ∈ base,
+      Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (center y) ∈ face)
+    (hwidth : ∀ i : Fin (n + 1),
+      epsilon (word.take (i.val + 1)) = if i = Fin.last n then radius else 0) :
+    zeroBitPreBlueprintNeighborhood face base epsilon word =
+      projectionFiberTube base center radius := by
+  ext x
+  constructor
+  · rintro ⟨hthick, hproj⟩
+    rcases Set.mem_add.mp hthick with ⟨a, ha, b, hb, hab⟩
+    change forgetLastCoordinate n x ∈ base at hproj
+    change b ∈ coordinateFiberBox
+      (fun i : Fin (n + 1) => epsilon (word.take (i.val + 1))) at hb
+    have hbbox := (mem_coordinateFiberBox_iff _ b).mp hb
+    have hprojB : forgetLastCoordinate n b = 0 := by
+      ext j
+      have hwidthZero : epsilon (word.take ((j.castSucc).val + 1)) = 0 := by
+        simpa using hwidth j.castSucc
+      have hj := hbbox j.castSucc
+      rw [hwidthZero] at hj
+      have hzero : b j.castSucc = 0 := abs_eq_zero.mp
+        (le_antisymm hj (abs_nonneg _))
+      simp [forgetLastCoordinate, hzero]
+    have hprojAB : forgetLastCoordinate n (a + b) = forgetLastCoordinate n a := by
+      simp [map_add, hprojB]
+    have hwidthLast : epsilon (word.take ((Fin.last n).val + 1)) = radius := by
+      simpa [Fin.val_last] using hwidth (Fin.last n)
+    have hbound : |b (Fin.last n)| ≤ radius := by
+      have hbound := hbbox (Fin.last n)
+      rw [hwidthLast] at hbound
+      exact hbound
+    have hlast : (a + b) (Fin.last n) -
+        center (forgetLastCoordinate n (a + b)) = b (Fin.last n) := by
+      rw [hprojAB, hgraph a ha]
+      simp
+    rw [mem_projectionFiberTube_iff]
+    refine ⟨hproj, ?_⟩
+    calc
+      |x (Fin.last n) - center (forgetLastCoordinate n x)| =
+          |(a + b) (Fin.last n) - center (forgetLastCoordinate n (a + b))| := by rw [hab]
+      _ = |b (Fin.last n)| := by rw [hlast]
+      _ ≤ radius := hbound
+  · intro hx
+    rw [mem_projectionFiberTube_iff] at hx
+    obtain ⟨hy, hdist⟩ := hx
+    let y := forgetLastCoordinate n x
+    let a := Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (center y)
+    let b := x - a
+    have ha : a ∈ face := by exact hlift y hy
+    have hb : b ∈ binaryWordFiberBox epsilon word := by
+      change b ∈ coordinateFiberBox
+        (fun i : Fin (n + 1) => epsilon (word.take (i.val + 1)))
+      rw [mem_coordinateFiberBox_iff]
+      intro i
+      refine Fin.lastCases ?_ (fun j => ?_) i
+      · have hwidthLast : epsilon (word.take ((Fin.last n).val + 1)) = radius := by
+          simpa [Fin.val_last] using hwidth (Fin.last n)
+        rw [hwidthLast]
+        simpa [b, a, y] using hdist
+      · have hwidthZero : epsilon (word.take ((j.castSucc).val + 1)) = 0 := by
+          simpa using hwidth j.castSucc
+        rw [hwidthZero]
+        simp [b, a, y, forgetLastCoordinate]
+    have hadd : a + b = x := by
+      funext i
+      refine Fin.lastCases ?_ (fun j => ?_) i
+      · simp [a, b]
+      · simp [a, b, y, forgetLastCoordinate]
+    exact ⟨Set.mem_add.mpr ⟨a, ha, b, hb, hadd⟩, hy⟩
+
+/-- A tube around a selected face lift lies inside the Craciun zero-bit pre-blueprint whenever
+its last-coordinate radius is bounded by the final binary-prefix width. The other fiber
+coordinates are zero, and nonnegative prefix widths absorb those coordinates. -/
+theorem projectionFiberTube_subset_zeroBitPreBlueprintNeighborhood {n : ℕ}
+    (face : Set (Fin (n + 1) → ℝ)) (base baseNeighborhood : Set (Fin n → ℝ))
+    (center : (Fin n → ℝ) → ℝ) (radius : ℝ)
+    (epsilon : List Bool → ℝ) (word : List Bool)
+    (hepsilon : ∀ p, 0 ≤ epsilon p)
+    (hwidth : radius ≤ epsilon (word.take (n + 1)))
+    (hbase : base ⊆ baseNeighborhood)
+    (hlift : ∀ y ∈ base, Fin.snoc y (center y) ∈ face) :
+    projectionFiberTube base center radius ⊆
+      zeroBitPreBlueprintNeighborhood face baseNeighborhood epsilon word := by
+  intro x hx
+  rcases (mem_projectionFiberTube_iff base center radius x).mp hx with ⟨hy, hdist⟩
+  let y := forgetLastCoordinate n x
+  let p : Fin (n + 1) → ℝ := Fin.snoc y (center y)
+  have hbox : x - p ∈ binaryWordFiberBox (n := n + 1) epsilon word := by
+    change x - p ∈ coordinateFiberBox
+      (fun i => epsilon (word.take (i.val + 1)))
+    rw [mem_coordinateFiberBox_iff]
+    intro i
+    refine Fin.lastCases ?_ (fun j => ?_) i
+    · have hlast : (x - p) (Fin.last n) =
+          x (Fin.last n) - center (forgetLastCoordinate n x) := by
+        simp [p, y]
+      rw [hlast, Fin.val_last]
+      exact hdist.trans hwidth
+    · have hzero : (x - p) j.castSucc = 0 := by
+        simp [p, y, forgetLastCoordinate]
+      rw [hzero]
+      simpa using hepsilon (word.take (j.val + 1))
+  refine ⟨Set.mem_add.mpr ⟨p, hlift y hy, x - p, hbox, ?_⟩, hbase hy⟩
+  dsimp [p]
+  abel
+
+/-- A nonnegative-radius graph tube projects onto exactly its base. -/
+theorem projectionFiberTube_projects_onto_base {n : ℕ} (base : Set (Fin n → ℝ))
+    (center : (Fin n → ℝ) → ℝ) {radius : ℝ} (hradius : 0 ≤ radius) :
+    forgetLastCoordinate n '' projectionFiberTube base center radius = base := by
+  apply projectionFiberBand_projects_onto_base
+  intro y hy
+  refine ⟨center y, ?_⟩
+  change center y ∈ Set.Icc (center y - radius) (center y + radius)
+  simp only [Set.mem_Icc]
+  exact ⟨by linarith, by linarith⟩
+
+/-- An ambient interior point of a graph tube projects to the interior of its base. -/
+theorem projectionFiberTube_interior_projects_into_interior_base {n : ℕ}
+    (base : Set (Fin n → ℝ)) (center : (Fin n → ℝ) → ℝ) (radius : ℝ)
+    (hradius : 0 ≤ radius) {x : Fin (n + 1) → ℝ}
+    (hx : x ∈ interior (projectionFiberTube base center radius)) :
+    forgetLastCoordinate n x ∈ interior base := by
+  have himage := image_interior_subset_interior_image_of_isOpenMap
+    (forgetLastCoordinate n) (forgetLastCoordinate_isOpenMap n)
+    (projectionFiberTube base center radius)
+  have hximage : forgetLastCoordinate n x ∈
+      interior (forgetLastCoordinate n '' projectionFiberTube base center radius) :=
+    himage ⟨x, hx, rfl⟩
+  rwa [projectionFiberTube_projects_onto_base base center hradius] at hximage
+
+/-- Graph tubes over projected bases with disjoint interiors have disjoint ambient interiors. -/
+theorem disjoint_projectionFiberTube_ambientInteriors_of_disjoint_baseInteriors
+    {n : ℕ} (base₁ base₂ : Set (Fin n → ℝ)) (center : (Fin n → ℝ) → ℝ)
+    (radius : ℝ) (hradius : 0 ≤ radius)
+    (hbase : interior base₁ ∩ interior base₂ = ∅) :
+    interior (projectionFiberTube base₁ center radius) ∩
+      interior (projectionFiberTube base₂ center radius) = ∅ := by
+  ext x
+  constructor
+  · intro hx
+    rcases hx with ⟨hx₁, hx₂⟩
+    have hy₁ := projectionFiberTube_interior_projects_into_interior_base
+      base₁ center radius hradius hx₁
+    have hy₂ := projectionFiberTube_interior_projects_into_interior_base
+      base₂ center radius hradius hx₂
+    have hy : forgetLastCoordinate n x ∈ interior base₁ ∩ interior base₂ := ⟨hy₁, hy₂⟩
+    rw [hbase] at hy
+    simpa using hy
+  · simp
+
+/-- The deleted-coordinate thickness of a graph tube is at most its prescribed radius. -/
+theorem projectionFiberTube_thickness_le {n : ℕ} (base : Set (Fin n → ℝ))
+    (center : (Fin n → ℝ) → ℝ) {radius : ℝ} {x : Fin (n + 1) → ℝ}
+    (hx : x ∈ projectionFiberTube base center radius) :
+    |x (Fin.last n) - center (forgetLastCoordinate n x)| ≤ radius :=
+  (mem_projectionFiberTube_iff base center radius x).mp hx |>.2
+
+/-- Changing only the final coordinate by `d` moves a tuple by at most `|d|` in the product
+sup norm. -/
+theorem dist_snoc_same_base_le {n : ℕ} (y : Fin n → ℝ) (a b : ℝ) :
+    dist (Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y a)
+      (Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y b) ≤ |a - b| := by
+  rw [dist_eq_norm, pi_norm_le_iff_of_nonneg (abs_nonneg (a - b))]
+  intro i
+  refine Fin.lastCases ?_ (fun j => ?_) i
+  · rw [Pi.sub_apply, Fin.snoc_last, Fin.snoc_last]
+    exact le_rfl
+  · rw [Pi.sub_apply, Fin.snoc_castSucc, Fin.snoc_castSucc]
+    simp
+
+/-- If every graph point is at least `margin` from the origin, its radius-`radius` tube stays
+outside the open ball of radius `margin - radius`. This is the separation transfer for a
+zero-bit transverse thickening. -/
+theorem projectionFiberTube_subset_compl_ball_of_graph_separated {n : ℕ}
+    (base : Set (Fin n → ℝ)) (center : (Fin n → ℝ) → ℝ) (radius margin : ℝ)
+    (hseparated : ∀ y ∈ base,
+      margin ≤ dist (Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (center y))
+        (0 : Fin (n + 1) → ℝ)) :
+    projectionFiberTube base center radius ⊆
+      (Metric.ball (0 : Fin (n + 1) → ℝ) (margin - radius))ᶜ := by
+  intro x hx
+  rw [Set.mem_compl_iff, Metric.mem_ball]
+  intro hxball
+  obtain ⟨hy, hthick⟩ := (mem_projectionFiberTube_iff base center radius x).mp hx
+  let y := forgetLastCoordinate n x
+  have hxform : x = Fin.snoc (α := fun _ : Fin (n + 1) => ℝ)
+      y (x (Fin.last n)) := by
+    apply funext
+    refine Fin.lastCases ?_ (fun i => ?_)
+    · simp [Fin.snoc_last]
+    · simp [y, forgetLastCoordinate, Fin.snoc_castSucc]
+  have hnear : dist x (Fin.snoc (α := fun _ : Fin (n + 1) => ℝ)
+      y (center y)) ≤ radius := by
+    calc
+      dist x (Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (center y)) =
+          dist (Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (x (Fin.last n)))
+            (Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (center y)) := by
+              exact congrArg (fun z => dist z
+                (Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (center y))) hxform
+      _ ≤ |x (Fin.last n) - center y| :=
+        dist_snoc_same_base_le y (x (Fin.last n)) (center y)
+      _ ≤ radius := by simpa [y] using hthick
+  have htriangle :
+      dist (Fin.snoc (α := fun _ : Fin (n + 1) => ℝ)
+          y (center y)) 0 ≤
+        radius + dist x 0 := by
+    calc
+      dist (Fin.snoc (α := fun _ : Fin (n + 1) => ℝ)
+          y (center y)) 0 ≤
+        dist (Fin.snoc (α := fun _ : Fin (n + 1) => ℝ)
+            y (center y)) x + dist x 0 :=
+          dist_triangle _ _ _
+      _ = dist x (Fin.snoc (α := fun _ : Fin (n + 1) => ℝ)
+            y (center y)) + dist x 0 := by
+          rw [dist_comm]
+      _ ≤ radius + dist x 0 := by linarith
+  have hgraph := hseparated y hy
+  linarith
+
+/-- A graph tube over a compact base is compact when its center varies continuously and its radius
+is nonnegative. This gives compact patches for the finite local-chart cover in the zero-bit case. -/
+theorem isCompact_projectionFiberTube {n : ℕ} (base : Set (Fin n → ℝ))
+    (center : (Fin n → ℝ) → ℝ) {radius : ℝ} (hbase : IsCompact base)
+    (hcenter : Continuous center) (hradius : 0 ≤ radius) :
+    IsCompact (projectionFiberTube base center radius) := by
+  unfold projectionFiberTube
+  apply isCompact_projectionFiberBand_bounded base (fun y => center y - radius)
+    (fun y => center y + radius) hbase (hcenter.sub continuous_const)
+    (hcenter.add continuous_const)
+  intro y hy
+  linarith
+
+/-- A graph tube is still compact when its center is only continuous on the compact base. This
+form is suited to graph sections obtained by inverting projection on one compact face: the
+section is naturally defined on the projected face, with no need to extend it away from that
+face. -/
+theorem isCompact_projectionFiberTube_of_continuousOn {n : ℕ} (base : Set (Fin n → ℝ))
+    (center : (Fin n → ℝ) → ℝ) {radius : ℝ} (hbase : IsCompact base)
+    (hcenter : ContinuousOn center base) (hradius : 0 ≤ radius) :
+    IsCompact (projectionFiberTube base center radius) := by
+  let B := {y // y ∈ base}
+  let I := Set.Icc (-radius) radius
+  letI : CompactSpace B := isCompact_iff_compactSpace.mp hbase
+  letI : CompactSpace I := isCompact_iff_compactSpace.mp isCompact_Icc
+  let param : B × I → Fin (n + 1) → ℝ := fun q =>
+    Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) q.1.1
+      (center q.1.1 + q.2.1)
+  have hbaseCoord : Continuous fun q : B × I => (q.1.1 : Fin n → ℝ) :=
+    continuous_subtype_val.comp continuous_fst
+  have hcenterBase : Continuous fun y : B => center y.1 :=
+    continuousOn_iff_continuous_domRestrict.mp hcenter
+  have hcenterParam : Continuous fun q : B × I => center q.1.1 :=
+    hcenterBase.comp continuous_fst
+  have hfiberParam : Continuous fun q : B × I => (q.2.1 : ℝ) :=
+    continuous_subtype_val.comp continuous_snd
+  have hlast : Continuous fun q : B × I => center q.1.1 + q.2.1 :=
+    hcenterParam.add hfiberParam
+  have hparam : Continuous param := by
+    change Continuous (fun q : B × I =>
+      Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) q.1.1
+        (center q.1.1 + q.2.1))
+    refine continuous_pi fun i => ?_
+    refine Fin.lastCases ?_ (fun j => ?_) i
+    · simpa using hlast
+    · have hcoord : Continuous fun q : B × I => q.1.1 j := by
+        exact (continuous_apply j).comp hbaseCoord
+      simpa only [Fin.snoc_castSucc] using hcoord
+  have hrange : Set.range param = projectionFiberTube base center radius := by
+    ext x
+    constructor
+    · rintro ⟨q, rfl⟩
+      rw [mem_projectionFiberTube_iff]
+      have hproj : forgetLastCoordinate n (param q) = q.1.1 := by
+        ext i
+        simp [param, forgetLastCoordinate]
+      have hlast' : param q (Fin.last n) = center q.1.1 + q.2.1 := by
+        simp [param]
+      refine ⟨?_, ?_⟩
+      · rw [hproj]
+        exact q.1.2
+      · rw [hproj, hlast']
+        rw [abs_le]
+        rcases q.2.2 with ⟨htlo, hthi⟩
+        constructor <;> linarith
+    · intro hx
+      rcases (mem_projectionFiberTube_iff base center radius x).mp hx with
+        ⟨hy, hdist⟩
+      rw [abs_le] at hdist
+      refine ⟨(⟨forgetLastCoordinate n x, hy⟩,
+        ⟨x (Fin.last n) - center (forgetLastCoordinate n x), hdist⟩), ?_⟩
+      apply funext
+      refine Fin.lastCases ?_ (fun i => ?_)
+      · simp [param, Fin.snoc_last]
+      · simp [param, forgetLastCoordinate]
+  have hcompactRange : IsCompact (Set.range param) := by
+    rw [← Set.image_univ]
+    exact isCompact_univ.image hparam
+  rw [← hrange]
+  exact hcompactRange
+
+/-- If the face projects into `base` and lies on the chosen graph, the graph tube contains the
+face. A dimension-code zero supplies the uniqueness of this graph lift. -/
+theorem subset_projectionFiberTube_of_graph {n : ℕ} (face : Set (Fin (n + 1) → ℝ))
+    (base : Set (Fin n → ℝ)) (center : (Fin n → ℝ) → ℝ) {radius : ℝ}
+    (hradius : 0 ≤ radius)
+    (hproject : ∀ x ∈ face, forgetLastCoordinate n x ∈ base)
+    (hgraph : ∀ x ∈ face,
+      center (forgetLastCoordinate n x) = x (Fin.last n)) :
+    face ⊆ projectionFiberTube base center radius := by
+  intro x hx
+  rw [mem_projectionFiberTube_iff]
+  refine ⟨hproject x hx, ?_⟩
+  rw [hgraph x hx]
+  simpa using hradius
+
+/-- A compact face whose last-coordinate projection preserves its affine dimension is the graph
+of a continuous function on its projected face. Its closed transverse tube is compact and contains
+the face. This is the zero-bit graph thickening, now connected to the projection equivalence from
+`ProjectedFaceDimensionCode`. -/
+theorem exists_compact_zeroBitGraphTube {n : ℕ}
+    (chain : CoordinateProjectedFaceChain (n + 1))
+    (hbit : faceProjectionDimensionLetter
+      (fun k => Module.finrank ℝ ((affineSpan ℝ (chain.face k)).direction))
+      (Fin.last n) = false)
+    (hface : IsCompact (chain.face (Fin.last n).succ))
+    {radius : ℝ} (hradius : 0 ≤ radius) :
+    ∃ center : (Fin n → ℝ) → ℝ,
+      ContinuousOn center (chain.face (Fin.last n).castSucc) ∧
+      IsCompact (projectionFiberTube (chain.face (Fin.last n).castSucc) center radius) ∧
+      forgetLastCoordinate n ''
+          projectionFiberTube (chain.face (Fin.last n).castSucc) center radius =
+        chain.face (Fin.last n).castSucc ∧
+      chain.face (Fin.last n).succ ⊆
+        projectionFiberTube (chain.face (Fin.last n).castSucc) center radius ∧
+      (∀ y ∈ chain.face (Fin.last n).castSucc,
+        Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (center y) ∈
+          chain.face (Fin.last n).succ) ∧
+      (∀ x ∈ chain.face (Fin.last n).succ,
+        center (forgetLastCoordinate n x) = x (Fin.last n)) := by
+  classical
+  let j : Fin (n + 1) := Fin.last n
+  let face := chain.face j.succ
+  let base := chain.face j.castSucc
+  let A := {x // x ∈ face}
+  let B := {y // y ∈ base}
+  let e := chain.projectionEquiv_of_dimensionLetter_false j hbit
+  letI : CompactSpace A := isCompact_iff_compactSpace.mp hface
+  have hbaseCompact : IsCompact base := by
+    change IsCompact (chain.face j.castSucc)
+    rw [← chain.projectedFace j]
+    exact hface.image (forgetLastAffine j.val).continuous_of_finiteDimensional
+  letI : T2Space B := inferInstance
+  have hprojectMem : ∀ x : A, forgetLastCoordinate n x.1 ∈ base := by
+    intro x
+    have hx : forgetLastAffine j.val x.1 ∈ forgetLastAffine j.val '' face :=
+      Set.mem_image_of_mem _ x.2
+    rw [chain.projectedFace j] at hx
+    simpa [j, face, base, forgetLastAffine] using hx
+  have heq : (fun x : A => e x) =
+      (fun x => (⟨forgetLastCoordinate n x.1, hprojectMem x⟩ : B)) := by
+    funext x
+    apply Subtype.ext
+    simpa [e, j, forgetLastAffine] using
+      (chain.projectionEquiv_of_dimensionLetter_false_apply j hbit x)
+  have hmap : Continuous (fun x : A => forgetLastCoordinate n x.1) := by
+    change Continuous (fun x : {x // x ∈ face} => forgetLastCoordinate n x.1)
+    exact (forgetLastCoordinate n).continuous_of_finiteDimensional.comp continuous_subtype_val
+  have hforward : Continuous (fun x : A => e x) := by
+    rw [heq]
+    exact Continuous.subtype_mk hmap hprojectMem
+  have hsection : Continuous fun y : B => (e.symm y).1 (Fin.last n) := by
+    have hinv : Continuous e.symm :=
+      Continuous.continuous_symm_of_equiv_compact_to_t2 hforward
+    exact (continuous_apply (Fin.last n)).comp
+      (continuous_subtype_val.comp hinv)
+  let center : (Fin n → ℝ) → ℝ := fun y =>
+    if hy : y ∈ base then (e.symm ⟨y, hy⟩).1 (Fin.last n) else 0
+  have hcenter : ContinuousOn center base := by
+    rw [continuousOn_iff_continuous_domRestrict]
+    change Continuous (fun y : B => center y.1)
+    have hcenterEq : (fun y : B => center y.1) =
+        (fun y => (e.symm y).1 (Fin.last n)) := by
+      funext y
+      simp [center]
+    rw [hcenterEq]
+    exact hsection
+  have hproject : ∀ x ∈ face, forgetLastCoordinate n x ∈ base := by
+    intro x hx
+    have hx' : forgetLastAffine j.val x ∈ forgetLastAffine j.val '' face :=
+      Set.mem_image_of_mem _ hx
+    rw [chain.projectedFace j] at hx'
+    simpa [j, face, base, forgetLastAffine] using hx'
+  have hgraph : ∀ x ∈ face,
+      center (forgetLastCoordinate n x) = x (Fin.last n) := by
+    intro x hx
+    let xA : A := ⟨x, hx⟩
+    have hprojection : (e xA).1 = forgetLastCoordinate n x := by
+      simpa [e, j, forgetLastAffine] using
+        (chain.projectionEquiv_of_dimensionLetter_false_apply j hbit xA)
+    have heqPoint : e xA = ⟨forgetLastCoordinate n x, hproject x hx⟩ :=
+      Subtype.ext hprojection
+    have hinverse : e.symm ⟨forgetLastCoordinate n x, hproject x hx⟩ = xA := by
+      rw [← heqPoint]
+      exact e.symm_apply_apply xA
+    simp [center, hproject x hx, hinverse, xA]
+  have hgraphPoint : ∀ y ∈ base,
+      Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (center y) ∈ face := by
+    intro y hy
+    let yB : B := ⟨y, hy⟩
+    let xA : A := e.symm yB
+    have hprojection : forgetLastCoordinate n xA.1 = y := by
+      have heqVal : (e xA).1 = y := congrArg Subtype.val (e.apply_symm_apply yB)
+      have happly :=
+        chain.projectionEquiv_of_dimensionLetter_false_apply j hbit xA
+      have hproj := happly.symm.trans heqVal
+      simpa [e, j, forgetLastAffine] using hproj
+    have hlast : xA.1 (Fin.last n) = center y := by
+      simp [center, hy, yB, xA]
+    have hcoordinates :
+        Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (center y) = xA.1 := by
+      apply funext
+      refine Fin.lastCases ?_ (fun i => ?_)
+      · simpa [hlast]
+      · have hi := congrFun hprojection i
+        simpa [forgetLastCoordinate, Fin.snoc_castSucc] using hi.symm
+    rw [hcoordinates]
+    exact xA.2
+  refine ⟨center, hcenter, ?_, ?_, ?_, hgraphPoint, hgraph⟩
+  · exact isCompact_projectionFiberTube_of_continuousOn base center
+      hbaseCompact hcenter hradius
+  · exact projectionFiberTube_projects_onto_base base center hradius
+  · exact subset_projectionFiberTube_of_graph face base center hradius hproject hgraph
+
+/-- A compact zero-bit graph patch inherits an explicit origin-avoidance margin: if every point
+of its face lies outside the radius-`margin` ball, a transverse tube of radius less than `margin`
+is compact, projects exactly onto the same base, contains the face, and stays outside the
+radius-`(margin - radius)` ball. -/
+theorem exists_compact_separated_zeroBitGraphTube {n : ℕ}
+    (chain : CoordinateProjectedFaceChain (n + 1))
+    (hbit : faceProjectionDimensionLetter
+      (fun k => Module.finrank ℝ ((affineSpan ℝ (chain.face k)).direction))
+      (Fin.last n) = false)
+    (hface : IsCompact (chain.face (Fin.last n).succ))
+    (margin radius : ℝ)
+    (hfaceSeparated : chain.face (Fin.last n).succ ⊆
+      (Metric.ball (0 : Fin (n + 1) → ℝ) margin)ᶜ)
+    (hradius : 0 ≤ radius) (hsmall : radius < margin) :
+    ∃ center : (Fin n → ℝ) → ℝ,
+      ContinuousOn center (chain.face (Fin.last n).castSucc) ∧
+      IsCompact (projectionFiberTube (chain.face (Fin.last n).castSucc) center radius) ∧
+      forgetLastCoordinate n ''
+          projectionFiberTube (chain.face (Fin.last n).castSucc) center radius =
+        chain.face (Fin.last n).castSucc ∧
+      chain.face (Fin.last n).succ ⊆
+        projectionFiberTube (chain.face (Fin.last n).castSucc) center radius ∧
+      0 < margin - radius ∧
+      projectionFiberTube (chain.face (Fin.last n).castSucc) center radius ⊆
+        (Metric.ball (0 : Fin (n + 1) → ℝ) (margin - radius))ᶜ ∧
+      (∀ y ∈ chain.face (Fin.last n).castSucc,
+        Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (center y) ∈
+          chain.face (Fin.last n).succ) ∧
+      (∀ x ∈ chain.face (Fin.last n).succ,
+        center (forgetLastCoordinate n x) = x (Fin.last n)) := by
+  obtain ⟨center, hcenter, hcompact, hprojects, hfaceTube, hgraphPoint, hgraph⟩ :=
+    exists_compact_zeroBitGraphTube chain hbit hface hradius
+  refine ⟨center, hcenter, hcompact, hprojects, hfaceTube, sub_pos.mpr hsmall, ?_,
+    hgraphPoint, hgraph⟩
+  apply projectionFiberTube_subset_compl_ball_of_graph_separated
+    (chain.face (Fin.last n).castSucc) center radius margin
+  intro y hy
+  have hnotball : ¬ dist
+      (Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (center y))
+      (0 : Fin (n + 1) → ℝ) < margin := by
+    simpa only [Set.mem_compl_iff, Metric.mem_ball] using
+      hfaceSeparated (hgraphPoint y hy)
+  exact le_of_not_gt hnotball
+
+/-- Restricting a graph tube to a projected tile gives precisely the graph tube over that tile.
+This is the set-level restriction needed to lift each member of a finite lower-dimensional
+blueprint separately. -/
+theorem projectionFiberTube_restrict_to_tile {n : ℕ}
+    (base tile : Set (Fin n → ℝ)) (center : (Fin n → ℝ) → ℝ) (radius : ℝ)
+    (htile : tile ⊆ base) :
+    projectionFiberTube base center radius ∩
+        {x : Fin (n + 1) → ℝ | forgetLastCoordinate n x ∈ tile} =
+      projectionFiberTube tile center radius := by
+  unfold projectionFiberTube
+  exact projectionFiberBand_restrict_to_tile base tile
+    (fun y => some (center y - radius))
+    (fun y => some (center y + radius)) htile
+
+/-- A finite cover of the projected base induces an exact cover of its graph tube by the
+corresponding tile tubes. This records the cover-preserving part of the zero-bit blueprint lift. -/
+theorem projectionFiberTube_eq_iUnion_of_base_cover {n : ℕ} {ι : Type*} [Fintype ι]
+    (base : Set (Fin n → ℝ)) (tile : ι → Set (Fin n → ℝ))
+    (center : (Fin n → ℝ) → ℝ) (radius : ℝ)
+    (hcover : base = ⋃ i, tile i) :
+    projectionFiberTube base center radius =
+      ⋃ i, projectionFiberTube (tile i) center radius := by
+  ext x
+  simp only [mem_projectionFiberTube_iff, Set.mem_iUnion]
+  constructor
+  · rintro ⟨hbase, hwidth⟩
+    rw [hcover] at hbase
+    obtain ⟨i, hi⟩ := Set.mem_iUnion.mp hbase
+    exact ⟨i, hi, hwidth⟩
+  · rintro ⟨i, hi, hwidth⟩
+    refine ⟨?_, hwidth⟩
+    rw [hcover]
+    exact Set.mem_iUnion.mpr ⟨i, hi⟩
+
+/-- A zero-bit graph tube can be restricted to any compact tile in its projected face. The
+restricted patch remains compact, projects exactly onto that tile, contains the face points above
+it, and inherits the same origin-avoidance margin. This is the local tile constructor for the
+dimension-increasing step; the piecewise-smooth surface and seam data are separate obligations. -/
+theorem exists_compact_separated_zeroBitGraphTube_over_tile {n : ℕ}
+    (chain : CoordinateProjectedFaceChain (n + 1))
+    (hbit : faceProjectionDimensionLetter
+      (fun k => Module.finrank ℝ ((affineSpan ℝ (chain.face k)).direction))
+      (Fin.last n) = false)
+    (hface : IsCompact (chain.face (Fin.last n).succ))
+    (tile : Set (Fin n → ℝ))
+    (htileCompact : IsCompact tile)
+    (htile : tile ⊆ chain.face (Fin.last n).castSucc)
+    (margin radius : ℝ)
+    (hfaceSeparated : chain.face (Fin.last n).succ ⊆
+      (Metric.ball (0 : Fin (n + 1) → ℝ) margin)ᶜ)
+    (hradius : 0 ≤ radius) (hsmall : radius < margin) :
+    ∃ center : (Fin n → ℝ) → ℝ,
+      ContinuousOn center (chain.face (Fin.last n).castSucc) ∧
+      IsCompact (projectionFiberTube tile center radius) ∧
+      forgetLastCoordinate n '' projectionFiberTube tile center radius = tile ∧
+      (chain.face (Fin.last n).succ ∩
+        {x : Fin (n + 1) → ℝ | forgetLastCoordinate n x ∈ tile}) ⊆
+        projectionFiberTube tile center radius ∧
+      0 < margin - radius ∧
+      projectionFiberTube tile center radius ⊆
+        (Metric.ball (0 : Fin (n + 1) → ℝ) (margin - radius))ᶜ ∧
+      (∀ y ∈ tile,
+        Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (center y) ∈
+          chain.face (Fin.last n).succ) ∧
+      (∀ x ∈ chain.face (Fin.last n).succ,
+        center (forgetLastCoordinate n x) = x (Fin.last n)) := by
+  obtain ⟨center, hcenter, hcompact, hprojects, hfaceTube, hpositive, hseparated,
+      hbasepoint, hcenterGraph⟩ :=
+    exists_compact_separated_zeroBitGraphTube chain hbit hface margin radius
+      hfaceSeparated hradius hsmall
+  have hcenterTile : ContinuousOn center tile := hcenter.mono htile
+  have hrestrict := projectionFiberTube_restrict_to_tile
+    (chain.face (Fin.last n).castSucc) tile center radius htile
+  refine ⟨center, hcenter, ?_, ?_, ?_, hpositive, ?_, ?_, hcenterGraph⟩
+  · exact isCompact_projectionFiberTube_of_continuousOn tile center
+      htileCompact hcenterTile hradius
+  · exact projectionFiberTube_projects_onto_base tile center hradius
+  · intro x hx
+    rw [← hrestrict]
+    exact ⟨hfaceTube hx.1, hx.2⟩
+  · intro x hx
+    rw [← hrestrict] at hx
+    exact hseparated hx.1
+  · intro y hy
+    exact hbasepoint y (htile hy)
+
+/-- Two graph tubes with the same center and radius intersect exactly over the intersection of
+their projected bases. This gives the set-level seam identity for a zero-bit finite cover. -/
+theorem projectionFiberTube_inter_of_same_center {n : ℕ}
+    (base₁ base₂ : Set (Fin n → ℝ)) (center : (Fin n → ℝ) → ℝ) (radius : ℝ) :
+    projectionFiberTube base₁ center radius ∩ projectionFiberTube base₂ center radius =
+      projectionFiberTube (base₁ ∩ base₂) center radius := by
+  ext x
+  simp only [Set.mem_inter_iff, mem_projectionFiberTube_iff]
+  constructor
+  · rintro ⟨⟨h₁, hw₁⟩, h₂, hw₂⟩
+    exact ⟨⟨h₁, h₂⟩, hw₁⟩
+  · rintro ⟨⟨h₁, h₂⟩, hw⟩
+    exact ⟨⟨h₁, hw⟩, h₂, hw⟩
+
+/-- The zero-bit counterpart of a finite fiber-patch cover: one continuous graph section is shared
+across all lower tiles, while each tile receives its own compact separated tube. -/
+structure CompactZeroBitFiberPatchCover {n : ℕ} {ι : Type*} [Fintype ι]
+    (facePatch : Set (Fin (n + 1) → ℝ)) (base : Set (Fin n → ℝ))
+    (baseTile : ι → Set (Fin n → ℝ)) (margin radius : ℝ) where
+  /-- The graph section selected by the dimension-preserving face projection. -/
+  center : (Fin n → ℝ) → ℝ
+  center_continuous : ContinuousOn center base
+  facePatch_compact : IsCompact facePatch
+  /-- The lower-dimensional tiles cover the projected face, as in the inductive blueprint. -/
+  baseTile_cover : base = ⋃ i, baseTile i
+  /-- The whole face patch lies in the separated tube over its projected face. -/
+  facePatch_subset_tube : facePatch ⊆ projectionFiberTube base center radius
+  /-- The parent tube is exactly covered by tubes over the lower-dimensional tiles. -/
+  facePatch_subset_iUnion_tileTubes :
+    facePatch ⊆ ⋃ i, projectionFiberTube (baseTile i) center radius
+  /-- Each tile tube is compact and projects exactly onto its base tile. -/
+  tile_tube_compact : ∀ i, IsCompact (projectionFiberTube (baseTile i) center radius)
+  tile_tube_projects : ∀ i,
+    forgetLastCoordinate n '' projectionFiberTube (baseTile i) center radius = baseTile i
+  /-- The projected lower-dimensional tiles have pairwise disjoint interiors. This is retained
+  explicitly so two such covers can be crossed to form a common refinement for a one-bit fill. -/
+  baseTile_interiors_disjoint : ∀ i j, i ≠ j →
+    interior (baseTile i) ∩ interior (baseTile j) = ∅
+  /-- Distinct projected tiles with disjoint interiors lift to tube patches with disjoint ambient
+  interiors. -/
+  tile_tube_interiors_disjoint : ∀ i j, i ≠ j →
+    interior (projectionFiberTube (baseTile i) center radius) ∩
+      interior (projectionFiberTube (baseTile j) center radius) = ∅
+  /-- Patches meet exactly in the tube over the common part of their projected bases. -/
+  tile_tube_intersection : ∀ i j,
+    projectionFiberTube (baseTile i) center radius ∩
+      projectionFiberTube (baseTile j) center radius =
+        projectionFiberTube (baseTile i ∩ baseTile j) center radius
+  /-- The part of the face patch above each lower tile lies in that tile's tube. -/
+  tile_facePatch_subset : ∀ i,
+    (facePatch ∩ {x | forgetLastCoordinate n x ∈ baseTile i}) ⊆
+      projectionFiberTube (baseTile i) center radius
+  /-- Every lower-dimensional basepoint has its chosen center lift on the higher-dimensional
+  face. Projection of this `Fin.snoc` lift recovers the original basepoint exactly, as required by
+  Craciun v3, §7.4.3, Case 1.1. -/
+  tile_basepoint_lift : ∀ i y, y ∈ baseTile i →
+    Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (center y) ∈ facePatch
+  /-- The center section is the graph of the face itself. This Case 1.1 invariant makes
+  independently constructed zero-bit face patches agree on a projected common face. -/
+  center_graph_on_face : ∀ x, x ∈ facePatch →
+    center (forgetLastCoordinate n x) = x (Fin.last n)
+  /-- Every tile tube retains the parent origin-avoidance margin. -/
+  positive_margin : 0 < margin - radius
+  radius_nonneg : 0 ≤ radius
+  tile_tube_separated : ∀ i,
+    projectionFiberTube (baseTile i) center radius ⊆
+      (Metric.ball (0 : Fin (n + 1) → ℝ) (margin - radius))ᶜ
+
+/-- Craciun v3, §7.4.3, Case 1.1: every lower-dimensional basepoint has a chosen lift on the
+higher face, inside the corresponding restricted graph tube, and the coordinate projection of
+that lifted point is exactly the original basepoint. -/
+theorem CompactZeroBitFiberPatchCover.tile_basepoint_lift_mem_restrictedTube
+    {n : ℕ} {ι : Type*} [Fintype ι]
+    {facePatch : Set (Fin (n + 1) → ℝ)} {base : Set (Fin n → ℝ)}
+    {baseTile : ι → Set (Fin n → ℝ)} {margin radius : ℝ}
+    (cover : CompactZeroBitFiberPatchCover facePatch base baseTile margin radius)
+    (i : ι) (y : Fin n → ℝ) (hy : y ∈ baseTile i) :
+    Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (cover.center y) ∈
+        facePatch ∩ projectionFiberTube (baseTile i) cover.center radius ∧
+      forgetLastCoordinate n
+        (Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (cover.center y)) = y := by
+  constructor
+  · refine ⟨cover.tile_basepoint_lift i y hy, ?_⟩
+    rw [mem_projectionFiberTube_iff]
+    constructor
+    · simpa [forgetLastCoordinate] using hy
+    · simp [forgetLastCoordinate, cover.radius_nonneg]
+  · simp [forgetLastCoordinate]
+
+/-- Every tile tube from a zero-bit cover lies inside the corresponding Craciun
+pre-blueprint when its base tile is already inside the lower-dimensional neighborhood
+and the tube radius fits the final binary-prefix width. This combines the Case 1.1
+basepoint lift with the §7.3 Minkowski construction. -/
+theorem CompactZeroBitFiberPatchCover.tile_tube_subset_zeroBitPreBlueprintNeighborhood
+    {n : ℕ} {ι : Type*} [Fintype ι]
+    {facePatch : Set (Fin (n + 1) → ℝ)} {base : Set (Fin n → ℝ)}
+    {baseTile : ι → Set (Fin n → ℝ)} {margin radius : ℝ}
+    (cover : CompactZeroBitFiberPatchCover facePatch base baseTile margin radius)
+    (baseNeighborhood : Set (Fin n → ℝ)) (epsilon : List Bool → ℝ) (word : List Bool)
+    (i : ι) (hepsilon : ∀ p, 0 ≤ epsilon p)
+    (hwidth : radius ≤ epsilon (word.take (n + 1)))
+    (htile : baseTile i ⊆ baseNeighborhood) :
+    projectionFiberTube (baseTile i) cover.center radius ⊆
+      zeroBitPreBlueprintNeighborhood facePatch baseNeighborhood epsilon word := by
+  exact projectionFiberTube_subset_zeroBitPreBlueprintNeighborhood
+    facePatch (baseTile i) baseNeighborhood cover.center radius epsilon word
+    hepsilon hwidth htile (fun y hy => cover.tile_basepoint_lift i y hy)
+
+/-- Every point of the projected face belongs to some lower tile and therefore has its selected
+center lift on the face patch, inside that tile's restricted graph tube, with projection exactly
+equal to the original point. This is the tile-to-face incidence statement used by Case 1.1. -/
+theorem CompactZeroBitFiberPatchCover.exists_tile_basepoint_incidence
+    {n : ℕ} {ι : Type*} [Fintype ι]
+    {facePatch : Set (Fin (n + 1) → ℝ)} {base : Set (Fin n → ℝ)}
+    {baseTile : ι → Set (Fin n → ℝ)} {margin radius : ℝ}
+    (cover : CompactZeroBitFiberPatchCover facePatch base baseTile margin radius)
+    (y : Fin n → ℝ) (hy : y ∈ base) :
+    ∃ i, Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (cover.center y) ∈
+        facePatch ∩ projectionFiberTube (baseTile i) cover.center radius ∧
+      forgetLastCoordinate n
+        (Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (cover.center y)) = y := by
+  rw [cover.baseTile_cover] at hy
+  obtain ⟨i, hi⟩ := Set.mem_iUnion.mp hy
+  exact ⟨i, cover.tile_basepoint_lift_mem_restrictedTube i y hi⟩
+
+/-- The center lift of a basepoint on a shared lower-dimensional face lies in the common tube
+patch, so the tile-to-face incidence agrees on overlaps of neighboring zero-bit patches. -/
+theorem CompactZeroBitFiberPatchCover.shared_basepoint_incidence
+    {n : ℕ} {ι : Type*} [Fintype ι]
+    {facePatch : Set (Fin (n + 1) → ℝ)} {base : Set (Fin n → ℝ)}
+    {baseTile : ι → Set (Fin n → ℝ)} {margin radius : ℝ}
+    (cover : CompactZeroBitFiberPatchCover facePatch base baseTile margin radius)
+    (i j : ι) (y : Fin n → ℝ)
+    (hy : y ∈ baseTile i ∩ baseTile j) :
+    Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (cover.center y) ∈
+        facePatch ∩ projectionFiberTube (baseTile i ∩ baseTile j) cover.center radius ∧
+      forgetLastCoordinate n
+        (Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (cover.center y)) = y := by
+  have hi := cover.tile_basepoint_lift_mem_restrictedTube i y hy.1
+  have hj := cover.tile_basepoint_lift_mem_restrictedTube j y hy.2
+  have hcommon : Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (cover.center y) ∈
+      projectionFiberTube (baseTile i ∩ baseTile j) cover.center radius := by
+    rw [← cover.tile_tube_intersection i j]
+    exact ⟨hi.1.2, hj.1.2⟩
+  exact ⟨⟨hi.1.1, hcommon⟩, hi.2⟩
+
+/-- Craciun v3, §7.4.3, Case 1.1: independently constructed graph lifts agree over a shared
+face. The shared-face incidence supplies one point in both face patches above the projected
+basepoint; each graph section must therefore select that point's final coordinate. This is the
+basepoint compatibility needed when the face recursion meets along a common zero-bit face. -/
+theorem CompactZeroBitFiberPatchCover.centers_agree_on_shared_face
+    {n : ℕ} {ιA ιB : Type*} [Fintype ιA] [Fintype ιB]
+    {faceA faceB : Set (Fin (n + 1) → ℝ)}
+    {baseA baseB : Set (Fin n → ℝ)}
+    {tileA : ιA → Set (Fin n → ℝ)} {tileB : ιB → Set (Fin n → ℝ)}
+    {marginA radiusA marginB radiusB : ℝ}
+    (coverA : CompactZeroBitFiberPatchCover faceA baseA tileA marginA radiusA)
+    (coverB : CompactZeroBitFiberPatchCover faceB baseB tileB marginB radiusB)
+    {y : Fin n → ℝ}
+    (hy : y ∈ forgetLastCoordinate n '' (faceA ∩ faceB)) :
+    coverA.center y = coverB.center y := by
+  rcases hy with ⟨x, hx, hxy⟩
+  subst y
+  rw [coverA.center_graph_on_face x hx.1, coverB.center_graph_on_face x hx.2]
+
+/-- Increasing a graph tube's transverse radius can only enlarge the tube. -/
+theorem projectionFiberTube_subset_of_radius_le
+    {n : ℕ} (base : Set (Fin n → ℝ)) (center : (Fin n → ℝ) → ℝ)
+    {radius₁ radius₂ : ℝ} (hradius : radius₁ ≤ radius₂) :
+    projectionFiberTube base center radius₁ ⊆ projectionFiberTube base center radius₂ := by
+  intro x hx
+  rw [mem_projectionFiberTube_iff] at hx ⊢
+  exact ⟨hx.1, hx.2.trans hradius⟩
+
+/-- Compact graph sections with no intersections have disjoint tubes at a radius that can be
+chosen below any prescribed positive scale. This is the scale-order form used by the recursive
+face construction. -/
+theorem exists_disjoint_projectionFiberTube_of_compact_separated_centers_below
+    {n : ℕ} {base : Set (Fin n → ℝ)}
+    (centerA centerB : (Fin n → ℝ) → ℝ)
+    (hbase : IsCompact base)
+    (hcenterA : ContinuousOn centerA base) (hcenterB : ContinuousOn centerB base)
+    (hneCenter : ∀ y ∈ base, centerA y ≠ centerB y)
+    (cap : ℝ) (hcap : 0 < cap) :
+    ∃ radius : ℝ, 0 < radius ∧ radius < cap ∧
+      projectionFiberTube base centerA radius ∩
+        projectionFiberTube base centerB radius = ∅ := by
+  obtain ⟨radius₀, hradius₀, hdisjoint₀⟩ :=
+    exists_disjoint_projectionFiberTube_of_compact_separated_centers
+      centerA centerB hbase hcenterA hcenterB hneCenter
+  let radius := min radius₀ (cap / 2)
+  have hradius : 0 < radius := lt_min hradius₀ (by linarith)
+  have hradiusCap : radius < cap :=
+    lt_of_le_of_lt (min_le_right _ _) (by linarith)
+  have hsubA : projectionFiberTube base centerA radius ⊆
+      projectionFiberTube base centerA radius₀ :=
+    projectionFiberTube_subset_of_radius_le base centerA (min_le_left _ _)
+  have hsubB : projectionFiberTube base centerB radius ⊆
+      projectionFiberTube base centerB radius₀ :=
+    projectionFiberTube_subset_of_radius_le base centerB (min_le_left _ _)
+  have hdisjoint : projectionFiberTube base centerA radius ∩
+      projectionFiberTube base centerB radius = ∅ := by
+    apply Set.eq_empty_iff_forall_notMem.mpr
+    intro x hx
+    have hx₀ : x ∈ projectionFiberTube base centerA radius₀ ∩
+        projectionFiberTube base centerB radius₀ := ⟨hsubA hx.1, hsubB hx.2⟩
+    rw [hdisjoint₀] at hx₀
+    exact hx₀.elim
+  exact ⟨radius, hradius, hradiusCap, hdisjoint⟩
+
+/-- Every projected basepoint has its selected graph lift on the face, independent of which
+member of the finite tile cover contains it. -/
+theorem CompactZeroBitFiberPatchCover.center_lift_mem_face
+    {n : ℕ} {ι : Type*} [Fintype ι]
+    {face : Set (Fin (n + 1) → ℝ)} {base : Set (Fin n → ℝ)}
+    {baseTile : ι → Set (Fin n → ℝ)} {margin radius : ℝ}
+    (cover : CompactZeroBitFiberPatchCover face base baseTile margin radius)
+    {y : Fin n → ℝ} (hy : y ∈ base) :
+    Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (cover.center y) ∈ face := by
+  rw [cover.baseTile_cover] at hy
+  obtain ⟨i, hi⟩ := Set.mem_iUnion.mp hy
+  exact cover.tile_basepoint_lift i y hi
+
+/-- A compact zero-bit cover has a compact projected base: the base is exactly the projection of
+its compact face patch, since every basepoint has a chosen graph lift on the face. -/
+theorem CompactZeroBitFiberPatchCover.base_isCompact
+    {n : ℕ} {ι : Type*} [Fintype ι]
+    {face : Set (Fin (n + 1) → ℝ)} {base : Set (Fin n → ℝ)}
+    {baseTile : ι → Set (Fin n → ℝ)} {margin radius : ℝ}
+    (cover : CompactZeroBitFiberPatchCover face base baseTile margin radius) :
+    IsCompact base := by
+  have himage : forgetLastCoordinate n '' face = base := by
+    ext y
+    constructor
+    · rintro ⟨x, hx, rfl⟩
+      exact (mem_projectionFiberTube_iff base cover.center radius x).mp
+        (cover.facePatch_subset_tube hx) |>.1
+    · intro hy
+      refine ⟨Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (cover.center y),
+        cover.center_lift_mem_face hy, ?_⟩
+      simp [forgetLastCoordinate]
+  rw [← himage]
+  exact cover.facePatch_compact.image (forgetLastCoordinate n).continuous_of_finiteDimensional
+
+/-- A graph section on a compact projected face extends to a continuous function on the full
+coordinate space. The extension preserves every selected Case 1.1 basepoint on the projected
+face, so independently chosen lower-face sections can serve as the boundary graphs of a Case 1.2
+fiber fill. -/
+theorem CompactZeroBitFiberPatchCover.exists_continuous_center_extension
+    {n : ℕ} {ι : Type*} [Fintype ι]
+    {face : Set (Fin (n + 1) → ℝ)} {base : Set (Fin n → ℝ)}
+    {tiles : ι → Set (Fin n → ℝ)} {margin faceRadius : ℝ}
+    (cover : CompactZeroBitFiberPatchCover face base tiles margin faceRadius) :
+    ∃ centerExtension : C(Fin n → ℝ, ℝ),
+      ∀ y ∈ base, centerExtension y = cover.center y := by
+  let centerOnBase : C(base, ℝ) :=
+    ⟨base.domRestrict cover.center,
+      continuousOn_iff_continuous_domRestrict.mp cover.center_continuous⟩
+  obtain ⟨centerExtension, hext⟩ := centerOnBase.exists_extension
+    (cover.base_isCompact.isClosed.isClosedEmbedding_subtypeVal)
+  refine ⟨centerExtension, ?_⟩
+  intro y hy
+  have h := congrArg (fun f : C(base, ℝ) => f ⟨y, hy⟩) hext
+  simpa [centerOnBase] using h
+
+/-- Equal-projection face tubes separate on any compact part of the shared projected base that
+avoids the projection of the common face. The graph lifts force the two center sections to differ
+there, and compactness makes the gap uniform. -/
+theorem CompactZeroBitFiberPatchCover.exists_disjoint_faceTubes_on_compact_base
+    {n : ℕ} {ιA ιB : Type*} [Fintype ιA] [Fintype ιB]
+    {faceA faceB : Set (Fin (n + 1) → ℝ)}
+    {baseA baseB : Set (Fin n → ℝ)}
+    {tilesA : ιA → Set (Fin n → ℝ)} {tilesB : ιB → Set (Fin n → ℝ)}
+    {marginA radiusA marginB radiusB cap : ℝ}
+    (coverA : CompactZeroBitFiberPatchCover faceA baseA tilesA marginA radiusA)
+    (coverB : CompactZeroBitFiberPatchCover faceB baseB tilesB marginB radiusB)
+    (tile : Set (Fin n → ℝ)) (htileCompact : IsCompact tile)
+    (htileA : tile ⊆ baseA) (htileB : tile ⊆ baseB)
+    (havoid : tile ∩ forgetLastCoordinate n '' (faceA ∩ faceB) = ∅)
+    (hcap : 0 < cap) :
+    ∃ radius : ℝ, 0 < radius ∧ radius < cap ∧
+      projectionFiberTube tile coverA.center radius ∩
+        projectionFiberTube tile coverB.center radius = ∅ := by
+  have hcenters : ∀ y ∈ tile, coverA.center y ≠ coverB.center y := by
+    intro y hy heq
+    have hfaceA := coverA.center_lift_mem_face (htileA hy)
+    have hfaceB : Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (coverA.center y) ∈ faceB := by
+      rw [heq]
+      exact coverB.center_lift_mem_face (htileB hy)
+    have himage : y ∈ forgetLastCoordinate n '' (faceA ∩ faceB) := by
+      exact ⟨Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) y (coverA.center y),
+        ⟨hfaceA, hfaceB⟩, by simp [forgetLastCoordinate]⟩
+    have hbad : y ∈ tile ∩ forgetLastCoordinate n '' (faceA ∩ faceB) := ⟨hy, himage⟩
+    rw [havoid] at hbad
+    exact hbad.elim
+  exact exists_disjoint_projectionFiberTube_of_compact_separated_centers_below
+    coverA.center coverB.center htileCompact
+    (coverA.center_continuous.mono htileA)
+    (coverB.center_continuous.mono htileB) hcenters cap hcap
+
+/-- Craciun v3, §7.3, equal-projection face case away from the shared lower face. The compact
+common projected base is trimmed by a positive distance from the projected intersection; its two
+graph tubes then admit one positive width below any prescribed parent scale, with disjoint closed
+sets. -/
+theorem CompactZeroBitFiberPatchCover.exists_disjoint_faceTubes_away_from_shared_face
+    {n : ℕ} {ιA ιB : Type*} [Fintype ιA] [Fintype ιB]
+    {faceA faceB : Set (Fin (n + 1) → ℝ)}
+    {baseA baseB : Set (Fin n → ℝ)}
+    {tilesA : ιA → Set (Fin n → ℝ)} {tilesB : ιB → Set (Fin n → ℝ)}
+    {marginA radiusA marginB radiusB eta cap : ℝ}
+    (coverA : CompactZeroBitFiberPatchCover faceA baseA tilesA marginA radiusA)
+    (coverB : CompactZeroBitFiberPatchCover faceB baseB tilesB marginB radiusB)
+    (heta : 0 < eta) (hcap : 0 < cap) :
+    ∃ radius : ℝ, 0 < radius ∧ radius < cap ∧
+      projectionFiberTube
+        ((baseA ∩ baseB) ∩ {y | eta ≤ Metric.infDist y
+          (forgetLastCoordinate n '' (faceA ∩ faceB))}) coverA.center radius ∩
+      projectionFiberTube
+        ((baseA ∩ baseB) ∩ {y | eta ≤ Metric.infDist y
+          (forgetLastCoordinate n '' (faceA ∩ faceB))}) coverB.center radius = ∅ := by
+  let shared := forgetLastCoordinate n '' (faceA ∩ faceB)
+  let tile := (baseA ∩ baseB) ∩ {y | eta ≤ Metric.infDist y shared}
+  have hdistContinuous : Continuous fun y : Fin n → ℝ => Metric.infDist y shared :=
+    (Metric.lipschitz_infDist_pt shared).continuous
+  have hclosed : IsClosed {y | eta ≤ Metric.infDist y shared} :=
+    isClosed_Ici.preimage hdistContinuous
+  have htileCompact : IsCompact tile := by
+    dsimp [tile]
+    exact (coverA.base_isCompact.inter coverB.base_isCompact).inter_right hclosed
+  have havoid : tile ∩ shared = ∅ := by
+    apply Set.eq_empty_iff_forall_notMem.mpr
+    intro y hy
+    obtain ⟨⟨⟨_, _⟩, hdist⟩, hyShared⟩ := hy
+    change eta ≤ Metric.infDist y shared at hdist
+    have hzero : Metric.infDist y shared = 0 := Metric.infDist_zero_of_mem hyShared
+    rw [hzero] at hdist
+    exact (not_le_of_gt heta) hdist
+  have htileA : tile ⊆ baseA := by
+    intro y hy
+    exact hy.1.1
+  have htileB : tile ⊆ baseB := by
+    intro y hy
+    exact hy.1.2
+  simpa [tile, shared] using coverA.exists_disjoint_faceTubes_on_compact_base
+    coverB tile htileCompact htileA htileB (by simpa [shared] using havoid) hcap
+
+/-- The critical facet type `11…110` has zero width in every earlier coordinate and positive
+width only in the final coordinate. This is the binary scale case in Theorem 7.1 whose two
+projected graph tubes are separated away from their shared ridge. -/
+def criticalFacetBinaryWord (n : ℕ) : List Bool := List.replicate n true ++ [false]
+
+theorem craciunCriticalFacetWord_prefix_width (n : ℕ) (radius : ℝ) :
+    ∀ i : Fin (n + 1),
+      (fun p => if p = criticalFacetBinaryWord n then radius else 0)
+          ((criticalFacetBinaryWord n).take (i.val + 1)) =
+        if i = Fin.last n then radius else 0 := by
+  intro i
+  by_cases hi : i = Fin.last n
+  · subst i
+    simp [criticalFacetBinaryWord]
+  · have hval : i.val < n := by
+      have hne : i.val ≠ n := by
+        intro h
+        apply hi
+        apply Fin.ext
+        simpa using h
+      omega
+    have hlenTake :
+        ((criticalFacetBinaryWord n).take (i.val + 1)).length = i.val + 1 := by
+      simp only [criticalFacetBinaryWord, List.length_take, List.length_append,
+        List.length_replicate, List.length_cons, List.length_nil]
+      omega
+    have hlenWord : (criticalFacetBinaryWord n).length = n + 1 := by
+      simp [criticalFacetBinaryWord]
+    have hnotEq : (criticalFacetBinaryWord n).take (i.val + 1) ≠
+        criticalFacetBinaryWord n := by
+      intro heq
+      have hlen := congrArg List.length heq
+      omega
+    simp [hnotEq, hi]
+
+/-- Restricting two zero-bit pre-blueprints to their common projected base does not change their
+intersection. This is the set-level identity used to make pairwise face collars compatible with a
+single family of projected bases. -/
+theorem zeroBitPreBlueprintNeighborhood_inter_eq_commonBase {n : ℕ}
+    (faceA faceB : Set (Fin (n + 1) → ℝ))
+    (baseA baseB : Set (Fin n → ℝ)) (epsilon : List Bool → ℝ) (word : List Bool) :
+    zeroBitPreBlueprintNeighborhood faceA baseA epsilon word ∩
+        zeroBitPreBlueprintNeighborhood faceB baseB epsilon word =
+      zeroBitPreBlueprintNeighborhood faceA (baseA ∩ baseB) epsilon word ∩
+        zeroBitPreBlueprintNeighborhood faceB (baseA ∩ baseB) epsilon word := by
+  ext x
+  simp [zeroBitPreBlueprintNeighborhood, and_assoc, and_left_comm, and_comm]
+
+/-- The critical-facet pre-blueprint grows monotonically with its final width. This lets a single
+finite-family scale inherit every pairwise lower-face collar. -/
+theorem CompactZeroBitFiberPatchCover.criticalFacetPreBlueprint_subset_of_radius_le
+    {n : ℕ} {ι : Type*} [Fintype ι]
+    {face : Set (Fin (n + 1) → ℝ)} {base : Set (Fin n → ℝ)}
+    {tiles : ι → Set (Fin n → ℝ)} {margin faceRadius : ℝ}
+    (cover : CompactZeroBitFiberPatchCover face base tiles margin faceRadius)
+    (baseNeighborhood : Set (Fin n → ℝ))
+    (hbaseNeighborhood : baseNeighborhood ⊆ base) {radius₁ radius₂ : ℝ}
+    (hradius : radius₁ ≤ radius₂) :
+    zeroBitPreBlueprintNeighborhood face baseNeighborhood
+        (fun p => if p = criticalFacetBinaryWord n then radius₁ else 0)
+        (criticalFacetBinaryWord n) ⊆
+      zeroBitPreBlueprintNeighborhood face baseNeighborhood
+        (fun p => if p = criticalFacetBinaryWord n then radius₂ else 0)
+        (criticalFacetBinaryWord n) := by
+  rw [zeroBitPreBlueprintNeighborhood_eq_projectionFiberTube_of_last_width
+      face baseNeighborhood cover.center
+      (fun p => if p = criticalFacetBinaryWord n then radius₁ else 0)
+      (criticalFacetBinaryWord n) radius₁ cover.center_graph_on_face
+      (fun y hy => cover.center_lift_mem_face (hbaseNeighborhood hy))
+      (craciunCriticalFacetWord_prefix_width n radius₁),
+    zeroBitPreBlueprintNeighborhood_eq_projectionFiberTube_of_last_width
+      face baseNeighborhood cover.center
+      (fun p => if p = criticalFacetBinaryWord n then radius₂ else 0)
+      (criticalFacetBinaryWord n) radius₂ cover.center_graph_on_face
+      (fun y hy => cover.center_lift_mem_face (hbaseNeighborhood hy))
+      (craciunCriticalFacetWord_prefix_width n radius₂)]
+  exact projectionFiberTube_subset_of_radius_le baseNeighborhood cover.center hradius
+
+/-- Applying the critical `11…110` word to the graph-tube equality turns the compact gap into
+actual disjoint §7.3 pre-blueprint neighborhoods. The selected final width remains below the
+supplied parent-face scale, as required by the binary hierarchy. -/
+theorem CompactZeroBitFiberPatchCover.exists_disjoint_preBlueprints_away_from_shared_face
+    {n : ℕ} {ιA ιB : Type*} [Fintype ιA] [Fintype ιB]
+    {faceA faceB : Set (Fin (n + 1) → ℝ)}
+    {baseA baseB : Set (Fin n → ℝ)}
+    {tilesA : ιA → Set (Fin n → ℝ)} {tilesB : ιB → Set (Fin n → ℝ)}
+    {marginA radiusA marginB radiusB eta cap : ℝ}
+    (coverA : CompactZeroBitFiberPatchCover faceA baseA tilesA marginA radiusA)
+    (coverB : CompactZeroBitFiberPatchCover faceB baseB tilesB marginB radiusB)
+    (heta : 0 < eta) (hcap : 0 < cap) :
+    ∃ radius : ℝ, 0 < radius ∧ radius < cap ∧
+      zeroBitPreBlueprintNeighborhood faceA
+        ((baseA ∩ baseB) ∩ {y | eta ≤ Metric.infDist y
+          (forgetLastCoordinate n '' (faceA ∩ faceB))})
+        (fun p => if p = criticalFacetBinaryWord n then radius else 0)
+        (criticalFacetBinaryWord n) ∩
+      zeroBitPreBlueprintNeighborhood faceB
+        ((baseA ∩ baseB) ∩ {y | eta ≤ Metric.infDist y
+          (forgetLastCoordinate n '' (faceA ∩ faceB))})
+        (fun p => if p = criticalFacetBinaryWord n then radius else 0)
+        (criticalFacetBinaryWord n) = ∅ := by
+  obtain ⟨radius, hradius, hradiusCap, htubes⟩ :=
+    coverA.exists_disjoint_faceTubes_away_from_shared_face coverB heta hcap
+  have hwidth := craciunCriticalFacetWord_prefix_width n radius
+  refine ⟨radius, hradius, hradiusCap, ?_⟩
+  rw [zeroBitPreBlueprintNeighborhood_eq_projectionFiberTube_of_last_width
+      faceA ((baseA ∩ baseB) ∩ {y | eta ≤ Metric.infDist y
+        (forgetLastCoordinate n '' (faceA ∩ faceB))}) coverA.center
+      (fun p => if p = criticalFacetBinaryWord n then radius else 0)
+      (criticalFacetBinaryWord n) radius coverA.center_graph_on_face
+      (fun y hy => coverA.center_lift_mem_face hy.1.1) hwidth,
+    zeroBitPreBlueprintNeighborhood_eq_projectionFiberTube_of_last_width
+      faceB ((baseA ∩ baseB) ∩ {y | eta ≤ Metric.infDist y
+        (forgetLastCoordinate n '' (faceA ∩ faceB))}) coverB.center
+      (fun p => if p = criticalFacetBinaryWord n then radius else 0)
+      (criticalFacetBinaryWord n) radius coverB.center_graph_on_face
+      (fun y hy => coverB.center_lift_mem_face hy.1.2) hwidth]
+  exact htubes
+
+/-- The pairwise §7.3 separation statement in collar form: after choosing the final width below
+the parent scale, any overlap of the two critical-facet pre-blueprints projects within `eta` of
+their shared lower-dimensional face. This is the interface needed for the recursive filler to
+hand the remaining overlap to the already-constructed common-face neighborhood. -/
+theorem CompactZeroBitFiberPatchCover.exists_preBlueprint_overlap_within_shared_face_collar
+    {n : ℕ} {ιA ιB : Type*} [Fintype ιA] [Fintype ιB]
+    {faceA faceB : Set (Fin (n + 1) → ℝ)}
+    {baseA baseB : Set (Fin n → ℝ)}
+    {tilesA : ιA → Set (Fin n → ℝ)} {tilesB : ιB → Set (Fin n → ℝ)}
+    {marginA radiusA marginB radiusB eta cap : ℝ}
+    (coverA : CompactZeroBitFiberPatchCover faceA baseA tilesA marginA radiusA)
+    (coverB : CompactZeroBitFiberPatchCover faceB baseB tilesB marginB radiusB)
+    (hshared : (forgetLastCoordinate n '' (faceA ∩ faceB)).Nonempty)
+    (heta : 0 < eta) (hcap : 0 < cap) :
+    ∃ radius : ℝ, 0 < radius ∧ radius < cap ∧
+      ∀ x,
+        x ∈ zeroBitPreBlueprintNeighborhood faceA (baseA ∩ baseB)
+          (fun p => if p = criticalFacetBinaryWord n then radius else 0)
+          (criticalFacetBinaryWord n) →
+        x ∈ zeroBitPreBlueprintNeighborhood faceB (baseA ∩ baseB)
+          (fun p => if p = criticalFacetBinaryWord n then radius else 0)
+          (criticalFacetBinaryWord n) →
+        ∃ y ∈ forgetLastCoordinate n '' (faceA ∩ faceB),
+          dist (forgetLastCoordinate n x) y < eta := by
+  obtain ⟨radius, hradius, hradiusCap, hdisjoint⟩ :=
+    coverA.exists_disjoint_faceTubes_away_from_shared_face coverB heta hcap
+  refine ⟨radius, hradius, hradiusCap, ?_⟩
+  intro x hxA hxB
+  let shared := forgetLastCoordinate n '' (faceA ∩ faceB)
+  have hcollar : Metric.infDist (forgetLastCoordinate n x) shared < eta := by
+    by_contra hnot
+    have hfar : eta ≤ Metric.infDist (forgetLastCoordinate n x) shared := le_of_not_gt hnot
+    have hwidth := craciunCriticalFacetWord_prefix_width n radius
+    rw [zeroBitPreBlueprintNeighborhood_eq_projectionFiberTube_of_last_width
+        faceA (baseA ∩ baseB) coverA.center
+        (fun p => if p = criticalFacetBinaryWord n then radius else 0)
+        (criticalFacetBinaryWord n) radius coverA.center_graph_on_face
+        (fun y hy => coverA.center_lift_mem_face hy.1) hwidth] at hxA
+    rw [zeroBitPreBlueprintNeighborhood_eq_projectionFiberTube_of_last_width
+        faceB (baseA ∩ baseB) coverB.center
+        (fun p => if p = criticalFacetBinaryWord n then radius else 0)
+        (criticalFacetBinaryWord n) radius coverB.center_graph_on_face
+        (fun y hy => coverB.center_lift_mem_face hy.2) hwidth] at hxB
+    rw [mem_projectionFiberTube_iff] at hxA hxB
+    have hxTileA : x ∈ projectionFiberTube
+        ((baseA ∩ baseB) ∩ {y | eta ≤ Metric.infDist y shared}) coverA.center radius := by
+      rw [mem_projectionFiberTube_iff]
+      exact ⟨⟨hxA.1, hfar⟩, hxA.2⟩
+    have hxTileB : x ∈ projectionFiberTube
+        ((baseA ∩ baseB) ∩ {y | eta ≤ Metric.infDist y shared}) coverB.center radius := by
+      rw [mem_projectionFiberTube_iff]
+      exact ⟨⟨hxB.1, hfar⟩, hxB.2⟩
+    have hxInter := Set.mem_inter hxTileA hxTileB
+    rw [hdisjoint] at hxInter
+    exact hxInter.elim
+  exact (Metric.infDist_lt_iff hshared).mp hcollar
+
+/-- A scale-compatible metric form of the same-projection face step: by making the critical
+`11…110` width small enough, every overlap point of two pre-blueprints lies in any prescribed
+ambient neighborhood of an actual point on their common lower face. The selected lifts agree on
+that face, and compact uniform continuity controls their variation across the collar. -/
+theorem CompactZeroBitFiberPatchCover.exists_preBlueprint_overlap_near_shared_face
+    {n : ℕ} {ιA ιB : Type*} [Fintype ιA] [Fintype ιB]
+    {faceA faceB : Set (Fin (n + 1) → ℝ)}
+    {baseA baseB : Set (Fin n → ℝ)}
+    {tilesA : ιA → Set (Fin n → ℝ)} {tilesB : ιB → Set (Fin n → ℝ)}
+    {marginA radiusA marginB radiusB : ℝ}
+    (coverA : CompactZeroBitFiberPatchCover faceA baseA tilesA marginA radiusA)
+    (coverB : CompactZeroBitFiberPatchCover faceB baseB tilesB marginB radiusB)
+    (hshared : (forgetLastCoordinate n '' (faceA ∩ faceB)).Nonempty)
+    {epsilon : ℝ} (hepsilon : 0 < epsilon) :
+    ∃ radius : ℝ, 0 < radius ∧ radius < epsilon / 3 ∧
+      ∀ x,
+        x ∈ zeroBitPreBlueprintNeighborhood faceA (baseA ∩ baseB)
+          (fun p => if p = criticalFacetBinaryWord n then radius else 0)
+          (criticalFacetBinaryWord n) →
+        x ∈ zeroBitPreBlueprintNeighborhood faceB (baseA ∩ baseB)
+          (fun p => if p = criticalFacetBinaryWord n then radius else 0)
+          (criticalFacetBinaryWord n) →
+        ∃ q ∈ faceA ∩ faceB, dist x q < epsilon := by
+  obtain ⟨eta₀, heta₀, hvariation⟩ := Metric.uniformContinuousOn_iff.mp
+    (coverA.base_isCompact.uniformContinuousOn_of_continuous coverA.center_continuous)
+    (epsilon / 3) (by linarith)
+  let eta := min eta₀ (epsilon / 3)
+  have heta : 0 < eta := lt_min heta₀ (by linarith)
+  have heta₀bound : eta ≤ eta₀ := min_le_left _ _
+  have hetaBound : eta ≤ epsilon / 3 := min_le_right _ _
+  obtain ⟨radius, hradius, hradiusCap, hoverlap⟩ :=
+    coverA.exists_preBlueprint_overlap_within_shared_face_collar coverB hshared heta
+      (by linarith : 0 < epsilon / 3)
+  refine ⟨radius, hradius, hradiusCap, ?_⟩
+  intro x hxA hxB
+  obtain ⟨z, hz, hdistBase⟩ := hoverlap x hxA hxB
+  have hwidth := craciunCriticalFacetWord_prefix_width n radius
+  rw [zeroBitPreBlueprintNeighborhood_eq_projectionFiberTube_of_last_width
+      faceA (baseA ∩ baseB) coverA.center
+      (fun p => if p = criticalFacetBinaryWord n then radius else 0)
+      (criticalFacetBinaryWord n) radius coverA.center_graph_on_face
+      (fun y hy => coverA.center_lift_mem_face hy.1) hwidth] at hxA
+  rw [zeroBitPreBlueprintNeighborhood_eq_projectionFiberTube_of_last_width
+      faceB (baseA ∩ baseB) coverB.center
+      (fun p => if p = criticalFacetBinaryWord n then radius else 0)
+      (criticalFacetBinaryWord n) radius coverB.center_graph_on_face
+      (fun y hy => coverB.center_lift_mem_face hy.2) hwidth] at hxB
+  rw [mem_projectionFiberTube_iff] at hxA hxB
+  let y := forgetLastCoordinate n x
+  obtain ⟨w, hw, hwproj⟩ := hz
+  have hzShared : z ∈ forgetLastCoordinate n '' (faceA ∩ faceB) :=
+    ⟨w, hw, hwproj⟩
+  have hwTubeA := coverA.facePatch_subset_tube hw.1
+  have hwTubeB := coverB.facePatch_subset_tube hw.2
+  have hzA : z ∈ baseA := by
+    have hwbase := (mem_projectionFiberTube_iff baseA coverA.center radiusA w).mp hwTubeA |>.1
+    rw [hwproj] at hwbase
+    exact hwbase
+  have hzB : z ∈ baseB := by
+    have hwbase := (mem_projectionFiberTube_iff baseB coverB.center radiusB w).mp hwTubeB |>.1
+    rw [hwproj] at hwbase
+    exact hwbase
+  have hcenterEq := coverA.centers_agree_on_shared_face coverB hzShared
+  let q := Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) z (coverA.center z)
+  have hqA : q ∈ faceA := by
+    exact coverA.center_lift_mem_face hzA
+  have hqB : q ∈ faceB := by
+    change Fin.snoc (α := fun _ : Fin (n + 1) => ℝ) z (coverA.center z) ∈ faceB
+    rw [hcenterEq]
+    exact coverB.center_lift_mem_face hzB
+  have hvariation' : |coverA.center y - coverA.center z| < epsilon / 3 := by
+    have hvar := hvariation y hxA.1.1 z hzA
+      (lt_of_lt_of_le hdistBase heta₀bound)
+    simpa [Real.dist_eq] using hvar
+  have hbaseCoordinates : ∀ j : Fin n,
+      dist (x j.castSucc) (q j.castSucc) < epsilon := by
+    intro j
+    have hcoord := dist_le_pi_dist y z j
+    have hcoord' : dist (y j) (z j) < eta := lt_of_le_of_lt hcoord hdistBase
+    calc
+      dist (x j.castSucc) (q j.castSucc) = dist (y j) (z j) := by
+        simp [y, q, forgetLastCoordinate]
+      _ < eta := hcoord'
+      _ ≤ epsilon / 3 := hetaBound
+      _ < epsilon := by linarith
+  have hlastAbs : |x (Fin.last n) - coverA.center z| < epsilon := by
+    calc
+      |x (Fin.last n) - coverA.center z| ≤
+          |x (Fin.last n) - coverA.center y| +
+            |coverA.center y - coverA.center z| := abs_sub_le _ _ _
+      _ ≤ radius + |coverA.center y - coverA.center z| :=
+        add_le_add hxA.2 le_rfl
+      _ < radius + epsilon / 3 := by linarith
+      _ < epsilon := by linarith
+  have hlastDistance : dist (x (Fin.last n)) (q (Fin.last n)) < epsilon := by
+    simpa [Real.dist_eq, q] using hlastAbs
+  have hdist : dist x q < epsilon := by
+    rw [dist_pi_lt_iff hepsilon]
+    intro i
+    refine Fin.lastCases ?_ (fun j => ?_) i
+    · simpa [q, Fin.snoc_last] using hlastDistance
+    · simpa [q, Fin.snoc_castSucc] using hbaseCoordinates j
+  exact ⟨q, ⟨hqA, hqB⟩, hdist⟩
+
+/-- If an inherited lower-face neighborhood is open, then the two critical-facet pre-blueprints
+can be chosen so that their entire intersection is already inside that neighborhood. Thus the
+equal-projection face step reduces precisely to the recursive construction on the common face. -/
+theorem CompactZeroBitFiberPatchCover.exists_preBlueprint_intersection_subset_of_open_shared_face
+    {n : ℕ} {ιA ιB : Type*} [Fintype ιA] [Fintype ιB]
+    {faceA faceB : Set (Fin (n + 1) → ℝ)}
+    {baseA baseB : Set (Fin n → ℝ)}
+    {tilesA : ιA → Set (Fin n → ℝ)} {tilesB : ιB → Set (Fin n → ℝ)}
+    {marginA radiusA marginB radiusB : ℝ}
+    (coverA : CompactZeroBitFiberPatchCover faceA baseA tilesA marginA radiusA)
+    (coverB : CompactZeroBitFiberPatchCover faceB baseB tilesB marginB radiusB)
+    (hshared : (forgetLastCoordinate n '' (faceA ∩ faceB)).Nonempty)
+    {neighborhood : Set (Fin (n + 1) → ℝ)} (hneighborhood : IsOpen neighborhood)
+    (hface : faceA ∩ faceB ⊆ neighborhood) :
+    ∃ radius : ℝ, 0 < radius ∧
+      zeroBitPreBlueprintNeighborhood faceA (baseA ∩ baseB)
+        (fun p => if p = criticalFacetBinaryWord n then radius else 0)
+        (criticalFacetBinaryWord n) ∩
+      zeroBitPreBlueprintNeighborhood faceB (baseA ∩ baseB)
+        (fun p => if p = criticalFacetBinaryWord n then radius else 0)
+        (criticalFacetBinaryWord n) ⊆ neighborhood := by
+  have hfaceCompact : IsCompact (faceA ∩ faceB) :=
+    coverA.facePatch_compact.inter coverB.facePatch_compact
+  obtain ⟨epsilon, hepsilon, hthick⟩ :=
+    hfaceCompact.exists_thickening_subset_open hneighborhood hface
+  obtain ⟨radius, hradius, _hradiusEpsilon, hoverlap⟩ :=
+    coverA.exists_preBlueprint_overlap_near_shared_face coverB hshared hepsilon
+  refine ⟨radius, hradius, ?_⟩
+  intro x hx
+  rcases hx with ⟨hxA, hxB⟩
+  obtain ⟨q, hq, hdist⟩ := hoverlap x hxA hxB
+  have hxThick : x ∈ Metric.thickening epsilon (faceA ∩ faceB) :=
+    Metric.mem_thickening_iff.mpr ⟨q, hq, hdist⟩
+  exact hthick hxThick
+
+/-- For arbitrary binary words, the full Craciun prefix profile admits a ratio making two compact
+pre-blueprints intersect only in any prescribed open neighborhood of their actual common face.
+Every prefix box is contained in an ambient `2q`-thickening because all Craciun widths are at most
+`q`; compactness then transfers overlap to the common face. -/
+theorem CompactZeroBitFiberPatchCover.exists_craciunPreBlueprint_intersection_subset_of_open_face
+    {n : ℕ} {ιA ιB : Type*} [Fintype ιA] [Fintype ιB]
+    {faceA faceB : Set (Fin (n + 1) → ℝ)}
+    {baseA baseB : Set (Fin n → ℝ)}
+    {tilesA : ιA → Set (Fin n → ℝ)} {tilesB : ιB → Set (Fin n → ℝ)}
+    {marginA radiusA marginB radiusB : ℝ}
+    (coverA : CompactZeroBitFiberPatchCover faceA baseA tilesA marginA radiusA)
+    (coverB : CompactZeroBitFiberPatchCover faceB baseB tilesB marginB radiusB)
+    (wordA wordB : List Bool)
+    {neighborhood : Set (Fin (n + 1) → ℝ)} (hneighborhood : IsOpen neighborhood)
+    (hface : faceA ∩ faceB ⊆ neighborhood) :
+    ∃ q : ℝ, 0 < q ∧ q < 1 ∧
+      zeroBitPreBlueprintNeighborhood faceA baseA
+          (craciunBinaryWordEpsilon (n + 1) q) wordA ∩
+        zeroBitPreBlueprintNeighborhood faceB baseB
+          (craciunBinaryWordEpsilon (n + 1) q) wordB ⊆ neighborhood := by
+  obtain ⟨delta, hdelta, hcompact⟩ := isCompact_inter_thickenings_subset_open
+    coverA.facePatch_compact coverB.facePatch_compact hneighborhood hface
+  let q := min (delta / 4) (1 / 2)
+  have hq : 0 < q := lt_min (by positivity) (by norm_num)
+  have hq1 : q < 1 := lt_of_le_of_lt (min_le_right _ _) (by norm_num)
+  have h2q : 2 * q ≤ delta := by
+    dsimp [q]
+    calc
+      2 * min (delta / 4) (1 / 2) ≤ 2 * (delta / 4) :=
+        mul_le_mul_of_nonneg_left (min_le_left _ _) (by norm_num)
+      _ = delta / 2 := by ring
+      _ ≤ delta := by linarith
+  have hpreA : zeroBitPreBlueprintNeighborhood faceA baseA
+      (craciunBinaryWordEpsilon (n + 1) q) wordA ⊆
+        Metric.thickening (2 * q) faceA := by
+    intro x hx
+    exact face_add_binaryWordFiberBox_subset_thickening_of_width_le
+      faceA (craciunBinaryWordEpsilon (n + 1) q) wordA hq
+      (by intro i; exact craciunBinaryWordEpsilon_le_q hq hq1 _) hx.1
+  have hpreB : zeroBitPreBlueprintNeighborhood faceB baseB
+      (craciunBinaryWordEpsilon (n + 1) q) wordB ⊆
+        Metric.thickening (2 * q) faceB := by
+    intro x hx
+    exact face_add_binaryWordFiberBox_subset_thickening_of_width_le
+      faceB (craciunBinaryWordEpsilon (n + 1) q) wordB hq
+      (by intro i; exact craciunBinaryWordEpsilon_le_q hq hq1 _) hx.1
+  refine ⟨q, hq, hq1, ?_⟩
+  intro x hx
+  apply hcompact
+  exact ⟨Metric.thickening_mono h2q faceA (hpreA hx.1),
+    Metric.thickening_mono h2q faceB (hpreB hx.2)⟩
+
+/-- A finite family of compact zero-bit faces admits one Craciun ratio for arbitrary binary-word
+pre-blueprints, with every pairwise overlap confined to its inherited open face neighborhood.
+Each ordered face pair first receives a compactness scale; a finite minimum then works for the
+whole family because lowering the ratio only shrinks every prefix box. -/
+theorem CompactZeroBitFiberPatchCover.exists_common_craciunRatio_scale
+    {n : ℕ} {ι τ : Type*} [Fintype ι] [Fintype τ]
+    (face : ι → Set (Fin (n + 1) → ℝ))
+    (base : ι → Set (Fin n → ℝ))
+    (tiles : ι → τ → Set (Fin n → ℝ))
+    (margin faceRadius : ι → ℝ)
+    (cover : ∀ i, CompactZeroBitFiberPatchCover (face i) (base i) (tiles i)
+      (margin i) (faceRadius i))
+    (word : ι → List Bool)
+    (neighborhood : ι → ι → Set (Fin (n + 1) → ℝ))
+    (hOpen : ∀ i j, i ≠ j → IsOpen (neighborhood i j))
+    (hFace : ∀ i j, i ≠ j → face i ∩ face j ⊆ neighborhood i j)
+    (cap : ℝ) (hcap : 0 < cap) :
+    ∃ q : ℝ, 0 < q ∧ q < 1 ∧ q < cap ∧
+      ∀ i j, i ≠ j →
+        zeroBitPreBlueprintNeighborhood (face i) (base i)
+            (craciunBinaryWordEpsilon (n + 1) q) (word i) ∩
+          zeroBitPreBlueprintNeighborhood (face j) (base j)
+            (craciunBinaryWordEpsilon (n + 1) q) (word j) ⊆ neighborhood i j := by
+  classical
+  have pairScale : ∀ i j, i ≠ j →
+      ∃ q : ℝ, 0 < q ∧ q < 1 ∧ q < cap ∧
+        zeroBitPreBlueprintNeighborhood (face i) (base i)
+            (craciunBinaryWordEpsilon (n + 1) q) (word i) ∩
+          zeroBitPreBlueprintNeighborhood (face j) (base j)
+            (craciunBinaryWordEpsilon (n + 1) q) (word j) ⊆ neighborhood i j := by
+    intro i j hij
+    obtain ⟨q₀, hq₀, hq₀one, hoverlap⟩ :=
+      (cover i).exists_craciunPreBlueprint_intersection_subset_of_open_face
+        (cover j) (word i) (word j) (hOpen i j hij) (hFace i j hij)
+    let q := min q₀ (cap / 2)
+    have hq : 0 < q := lt_min hq₀ (by linarith)
+    have hqone : q < 1 := (min_le_left _ _).trans_lt hq₀one
+    have hqcap : q < cap := (min_le_right _ _).trans_lt (by linarith)
+    have hqle : q ≤ q₀ := min_le_left _ _
+    have hmonoA := zeroBitPreBlueprintNeighborhood_mono_of_craciunRatio_le_at_depth
+      (ambient := n) (depth := n + 1) (face i) (base₁ := base i) (base₂ := base i)
+      Set.Subset.rfl hq.le hqle (word i)
+    have hmonoB := zeroBitPreBlueprintNeighborhood_mono_of_craciunRatio_le_at_depth
+      (ambient := n) (depth := n + 1) (face j) (base₁ := base j) (base₂ := base j)
+      Set.Subset.rfl hq.le hqle (word j)
+    refine ⟨q, hq, hqone, hqcap, ?_⟩
+    exact (Set.inter_subset_inter hmonoA hmonoB).trans hoverlap
+  let diagonal : ℝ := min (1 / 2) (cap / 2)
+  have hdiagonal : 0 < diagonal ∧ diagonal < 1 ∧ diagonal < cap := by
+    dsimp [diagonal]
+    exact ⟨lt_min (by norm_num) (by linarith),
+      (min_le_left _ _).trans_lt (by norm_num),
+      (min_le_right _ _).trans_lt (by linarith)⟩
+  by_cases hι : Nonempty ι
+  · let pairScaleValue : ι × ι → ℝ := fun ij =>
+      if h : ij.1 ≠ ij.2 then Classical.choose (pairScale ij.1 ij.2 h) else diagonal
+    have pairScaleValue_spec (ij : ι × ι) :
+        0 < pairScaleValue ij ∧ pairScaleValue ij < 1 ∧ pairScaleValue ij < cap ∧
+          (ij.1 ≠ ij.2 →
+            zeroBitPreBlueprintNeighborhood (face ij.1) (base ij.1)
+                (craciunBinaryWordEpsilon (n + 1) (pairScaleValue ij)) (word ij.1) ∩
+              zeroBitPreBlueprintNeighborhood (face ij.2) (base ij.2)
+                (craciunBinaryWordEpsilon (n + 1) (pairScaleValue ij)) (word ij.2) ⊆
+                  neighborhood ij.1 ij.2) := by
+      by_cases h : ij.1 ≠ ij.2
+      · simpa [pairScaleValue, h] using Classical.choose_spec (pairScale ij.1 ij.2 h)
+      · have hvalue : pairScaleValue ij = diagonal := by simp [pairScaleValue, h]
+        rw [hvalue]
+        refine ⟨hdiagonal.1, hdiagonal.2.1, hdiagonal.2.2, ?_⟩
+        intro hneq
+        exact (h hneq).elim
+    obtain ⟨i₀⟩ := hι
+    let scales : Finset ℝ := Finset.univ.image pairScaleValue
+    have hscales : scales.Nonempty :=
+      Finset.image_nonempty.mpr ⟨(i₀, i₀), Finset.mem_univ _⟩
+    let q := scales.min' hscales
+    have hqmem : q ∈ scales := Finset.min'_mem scales hscales
+    obtain ⟨ij₀, _, hqeq⟩ := Finset.mem_image.mp hqmem
+    have hq : 0 < q := by rw [← hqeq]; exact (pairScaleValue_spec ij₀).1
+    have hqone : q < 1 := by rw [← hqeq]; exact (pairScaleValue_spec ij₀).2.1
+    have hqcap : q < cap := by rw [← hqeq]; exact (pairScaleValue_spec ij₀).2.2.1
+    refine ⟨q, hq, hqone, hqcap, ?_⟩
+    intro i j hij
+    have hqle : q ≤ pairScaleValue (i, j) :=
+      Finset.min'_le scales (pairScaleValue (i, j))
+        (Finset.mem_image.mpr ⟨(i, j), Finset.mem_univ _, rfl⟩)
+    have hmonoA := zeroBitPreBlueprintNeighborhood_mono_of_craciunRatio_le_at_depth
+      (ambient := n) (depth := n + 1) (face i) (base₁ := base i) (base₂ := base i)
+      Set.Subset.rfl hq.le hqle (word i)
+    have hmonoB := zeroBitPreBlueprintNeighborhood_mono_of_craciunRatio_le_at_depth
+      (ambient := n) (depth := n + 1) (face j) (base₁ := base j) (base₂ := base j)
+      Set.Subset.rfl hq.le hqle (word j)
+    have hpairAtMin :
+        zeroBitPreBlueprintNeighborhood (face i) (base i)
+            (craciunBinaryWordEpsilon (n + 1) q) (word i) ∩
+          zeroBitPreBlueprintNeighborhood (face j) (base j)
+            (craciunBinaryWordEpsilon (n + 1) q) (word j) ⊆
+        zeroBitPreBlueprintNeighborhood (face i) (base i)
+            (craciunBinaryWordEpsilon (n + 1) (pairScaleValue (i, j))) (word i) ∩
+          zeroBitPreBlueprintNeighborhood (face j) (base j)
+            (craciunBinaryWordEpsilon (n + 1) (pairScaleValue (i, j))) (word j) :=
+      Set.inter_subset_inter hmonoA hmonoB
+    exact hpairAtMin.trans ((pairScaleValue_spec (i, j)).2.2.2 hij)
+  · refine ⟨diagonal, hdiagonal.1, hdiagonal.2.1, hdiagonal.2.2, ?_⟩
+    intro i j hij
+    exact (hι ⟨i⟩).elim
+
+/-- A finite zero-bit face family admits one critical-facet width satisfying every inherited
+common-face neighborhood constraint. For a nonempty projected shared face, the selected graph
+tubes overlap only inside the already-built open neighborhood; away from that face, compact
+center separation makes the tubes disjoint. Taking the minimum over the finite face-pair family
+preserves all these constraints at one scale, as required before the next §7.4.3 fill stage. -/
+theorem CompactZeroBitFiberPatchCover.exists_common_criticalFacet_scale
+    {n : ℕ} {ι τ : Type*} [Fintype ι] [Fintype τ]
+    (face : ι → Set (Fin (n + 1) → ℝ))
+    (base : ι → Set (Fin n → ℝ))
+    (tiles : ι → τ → Set (Fin n → ℝ))
+    (margin faceRadius : ι → ℝ)
+    (cover : ∀ i, CompactZeroBitFiberPatchCover (face i) (base i) (tiles i)
+      (margin i) (faceRadius i))
+    (neighborhood : ι → ι → Set (Fin (n + 1) → ℝ))
+    (hOpen : ∀ i j, i ≠ j → IsOpen (neighborhood i j))
+    (hFace : ∀ i j, i ≠ j → face i ∩ face j ⊆ neighborhood i j)
+    (cap : ℝ) (hcap : 0 < cap) :
+    ∃ radius : ℝ, 0 < radius ∧ radius < cap ∧
+      ∀ i j, i ≠ j →
+        zeroBitPreBlueprintNeighborhood (face i) (base i)
+            (fun p => if p = criticalFacetBinaryWord n then radius else 0)
+            (criticalFacetBinaryWord n) ∩
+          zeroBitPreBlueprintNeighborhood (face j) (base j)
+            (fun p => if p = criticalFacetBinaryWord n then radius else 0)
+            (criticalFacetBinaryWord n) ⊆ neighborhood i j := by
+  classical
+  let word := criticalFacetBinaryWord n
+  let width := fun (r : ℝ) (p : List Bool) => if p = word then r else 0
+  have pairScale : ∀ i j, i ≠ j →
+      ∃ r : ℝ, 0 < r ∧ r < cap ∧
+        zeroBitPreBlueprintNeighborhood (face i) (base i) (width r) word ∩
+          zeroBitPreBlueprintNeighborhood (face j) (base j) (width r) word ⊆
+            neighborhood i j := by
+    intro i j hij
+    let shared := forgetLastCoordinate n '' (face i ∩ face j)
+    by_cases hshared : shared.Nonempty
+    · obtain ⟨r₀, hr₀, hinherited⟩ :=
+        (cover i).exists_preBlueprint_intersection_subset_of_open_shared_face
+          (cover j) hshared (hOpen i j hij) (hFace i j hij)
+      let r := min r₀ (cap / 2)
+      have hr : 0 < r := lt_min hr₀ (by linarith)
+      have hrcap : r < cap :=
+        (min_le_right r₀ (cap / 2)).trans_lt (by linarith)
+      have hrle : r ≤ r₀ := min_le_left _ _
+      have hmonoA : zeroBitPreBlueprintNeighborhood (face i) (base i ∩ base j)
+          (width r) word ⊆ zeroBitPreBlueprintNeighborhood (face i) (base i ∩ base j)
+            (width r₀) word :=
+        (cover i).criticalFacetPreBlueprint_subset_of_radius_le (base i ∩ base j)
+          Set.inter_subset_left hrle
+      have hmonoB : zeroBitPreBlueprintNeighborhood (face j) (base i ∩ base j)
+          (width r) word ⊆ zeroBitPreBlueprintNeighborhood (face j) (base i ∩ base j)
+            (width r₀) word :=
+        (cover j).criticalFacetPreBlueprint_subset_of_radius_le (base i ∩ base j)
+          Set.inter_subset_right hrle
+      have hrestrict := zeroBitPreBlueprintNeighborhood_inter_eq_commonBase
+        (face i) (face j) (base i) (base j) (width r) word
+      refine ⟨r, hr, hrcap, ?_⟩
+      rw [hrestrict]
+      exact (Set.inter_subset_inter hmonoA hmonoB).trans hinherited
+    · have hsharedEmpty : shared = ∅ := by
+        apply Set.eq_empty_iff_forall_notMem.mpr
+        intro y hy
+        exact hshared ⟨y, hy⟩
+      let tile := base i ∩ base j
+      have htileCompact : IsCompact tile :=
+        (cover i).base_isCompact.inter (cover j).base_isCompact
+      have havoid : tile ∩ shared = ∅ := by
+        rw [hsharedEmpty]
+        simp [tile]
+      obtain ⟨r, hr, hrcap, hdisjoint⟩ :=
+        (cover i).exists_disjoint_faceTubes_on_compact_base (cover j) tile htileCompact
+          Set.inter_subset_left Set.inter_subset_right havoid hcap
+      have hwidth := craciunCriticalFacetWord_prefix_width n r
+      have htubeA : zeroBitPreBlueprintNeighborhood (face i) tile (width r) word =
+          projectionFiberTube tile (cover i).center r := by
+        exact zeroBitPreBlueprintNeighborhood_eq_projectionFiberTube_of_last_width
+          (face i) tile (cover i).center (width r) word r
+          (cover i).center_graph_on_face
+          (fun y hy => (cover i).center_lift_mem_face hy.1) (by simpa [width, word] using hwidth)
+      have htubeB : zeroBitPreBlueprintNeighborhood (face j) tile (width r) word =
+          projectionFiberTube tile (cover j).center r := by
+        exact zeroBitPreBlueprintNeighborhood_eq_projectionFiberTube_of_last_width
+          (face j) tile (cover j).center (width r) word r
+          (cover j).center_graph_on_face
+          (fun y hy => (cover j).center_lift_mem_face hy.2) (by simpa [width, word] using hwidth)
+      have hrestrict := zeroBitPreBlueprintNeighborhood_inter_eq_commonBase
+        (face i) (face j) (base i) (base j) (width r) word
+      refine ⟨r, hr, hrcap, ?_⟩
+      rw [hrestrict, htubeA, htubeB, hdisjoint]
+      exact Set.empty_subset _
+  by_cases hι : Nonempty ι
+  · let pairScaleValue : ι × ι → ℝ := fun ij =>
+      if h : ij.1 ≠ ij.2 then Classical.choose (pairScale ij.1 ij.2 h) else cap / 2
+    have pairScaleValue_spec (ij : ι × ι) :
+        0 < pairScaleValue ij ∧ pairScaleValue ij < cap ∧
+          (ij.1 ≠ ij.2 →
+            zeroBitPreBlueprintNeighborhood (face ij.1) (base ij.1)
+                (width (pairScaleValue ij)) word ∩
+              zeroBitPreBlueprintNeighborhood (face ij.2) (base ij.2)
+                (width (pairScaleValue ij)) word ⊆ neighborhood ij.1 ij.2) := by
+      by_cases h : ij.1 ≠ ij.2
+      · simpa [pairScaleValue, h] using Classical.choose_spec (pairScale ij.1 ij.2 h)
+      · constructor
+        · have hvalue : pairScaleValue ij = cap / 2 := by simp [pairScaleValue, h]
+          rw [hvalue]
+          linarith
+        · constructor
+          · have hvalue : pairScaleValue ij = cap / 2 := by simp [pairScaleValue, h]
+            rw [hvalue]
+            linarith
+          · intro hneq
+            exact (h hneq).elim
+    obtain ⟨i₀⟩ := hι
+    let scales : Finset ℝ := Finset.univ.image pairScaleValue
+    have hscales : scales.Nonempty :=
+      Finset.image_nonempty.mpr ⟨(i₀, i₀), Finset.mem_univ _⟩
+    let radius := scales.min' hscales
+    have hradiusMem : radius ∈ scales := Finset.min'_mem scales hscales
+    obtain ⟨ij₀, _, hradiusEq⟩ := Finset.mem_image.mp hradiusMem
+    have hradius : 0 < radius := by
+      rw [← hradiusEq]
+      exact (pairScaleValue_spec ij₀).1
+    have hrcap : radius < cap := by
+      rw [← hradiusEq]
+      exact (pairScaleValue_spec ij₀).2.1
+    refine ⟨radius, hradius, hrcap, ?_⟩
+    intro i j hij
+    have hradiusLe : radius ≤ pairScaleValue (i, j) := by
+      exact Finset.min'_le scales (pairScaleValue (i, j))
+        (Finset.mem_image.mpr ⟨(i, j), Finset.mem_univ _, rfl⟩)
+    have hmonoA := (cover i).criticalFacetPreBlueprint_subset_of_radius_le
+      (base i) Set.Subset.rfl hradiusLe
+    have hmonoB := (cover j).criticalFacetPreBlueprint_subset_of_radius_le
+      (base j) Set.Subset.rfl hradiusLe
+    have hpairAtMin :
+        zeroBitPreBlueprintNeighborhood (face i) (base i) (width radius) word ∩
+            zeroBitPreBlueprintNeighborhood (face j) (base j) (width radius) word ⊆
+          zeroBitPreBlueprintNeighborhood (face i) (base i)
+              (width (pairScaleValue (i, j))) word ∩
+            zeroBitPreBlueprintNeighborhood (face j) (base j)
+              (width (pairScaleValue (i, j))) word :=
+      Set.inter_subset_inter hmonoA hmonoB
+    exact hpairAtMin.trans ((pairScaleValue_spec (i, j)).2.2 hij)
+  · refine ⟨cap / 2, by linarith, by linarith, ?_⟩
+    intro i j hij
+    exact (hι ⟨i⟩).elim
+
+/-- Construct zero-bit graph tubes over a finite compact cover of the projected face whose tile
+interiors are pairwise disjoint. The same continuous section is used on every tile; openness of
+the projection lifts the lower-dimensional disjointness to ambient tube interiors. -/
+noncomputable def compactZeroBitFiberPatchCover_of_compactBaseCover {n : ℕ} {ι : Type*}
+    [Fintype ι] (chain : CoordinateProjectedFaceChain (n + 1))
+    (hbit : faceProjectionDimensionLetter
+      (fun k => Module.finrank ℝ ((affineSpan ℝ (chain.face k)).direction))
+      (Fin.last n) = false)
+    (hface : IsCompact (chain.face (Fin.last n).succ))
+    (baseTile : ι → Set (Fin n → ℝ)) (htileCompact : ∀ i, IsCompact (baseTile i))
+    (htileInteriorsDisjoint : ∀ i j, i ≠ j →
+      interior (baseTile i) ∩ interior (baseTile j) = ∅)
+    (hbaseCover : chain.face (Fin.last n).castSucc = ⋃ i, baseTile i)
+    (margin radius : ℝ)
+    (hfaceSeparated : chain.face (Fin.last n).succ ⊆
+      (Metric.ball (0 : Fin (n + 1) → ℝ) margin)ᶜ)
+    (hradius : 0 ≤ radius) (hsmall : radius < margin) :
+    CompactZeroBitFiberPatchCover (chain.face (Fin.last n).succ)
+      (chain.face (Fin.last n).castSucc) baseTile margin radius := by
+  let hcenterExists := exists_compact_separated_zeroBitGraphTube chain hbit hface margin radius
+    hfaceSeparated hradius hsmall
+  let center := Classical.choose hcenterExists
+  have hcenterData := Classical.choose_spec hcenterExists
+  rcases hcenterData with
+    ⟨hcenter, _, _, hfaceTube, hpositive, hseparated, hbasepoint, hcenterGraph⟩
+  have htileBase : ∀ i, baseTile i ⊆ chain.face (Fin.last n).castSucc := by
+    intro i y hy
+    rw [hbaseCover]
+    exact Set.mem_iUnion.mpr ⟨i, hy⟩
+  refine ⟨center, hcenter, hface, hbaseCover, hfaceTube, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+    hcenterGraph, hpositive, hradius, ?_⟩
+  · rw [← projectionFiberTube_eq_iUnion_of_base_cover
+      (chain.face (Fin.last n).castSucc) baseTile center radius hbaseCover]
+    exact hfaceTube
+  · intro i
+    exact isCompact_projectionFiberTube_of_continuousOn (baseTile i) center
+      (htileCompact i) (hcenter.mono (htileBase i)) hradius
+  · intro i
+    exact projectionFiberTube_projects_onto_base (baseTile i) center hradius
+  · exact htileInteriorsDisjoint
+  · intro i j hij
+    exact disjoint_projectionFiberTube_ambientInteriors_of_disjoint_baseInteriors
+      (baseTile i) (baseTile j) center radius hradius (htileInteriorsDisjoint i j hij)
+  · intro i j
+    exact projectionFiberTube_inter_of_same_center
+      (baseTile i) (baseTile j) center radius
+  · intro i x hx
+    have hrestrict := projectionFiberTube_restrict_to_tile
+      (chain.face (Fin.last n).castSucc) (baseTile i) center radius (htileBase i)
+    rw [← hrestrict]
+    exact ⟨hfaceTube hx.1, hx.2⟩
+  · intro i y hy
+    exact hbasepoint y (htileBase i hy)
+  · intro i x hx
+    have hrestrict := projectionFiberTube_restrict_to_tile
+      (chain.face (Fin.last n).castSucc) (baseTile i) center radius (htileBase i)
+    rw [← hrestrict] at hx
+    exact hseparated hx.1
+
+/-- A finite compact zero-bit cover over the projected face fits wholly inside the next
+recursively defined pre-blueprint, provided each tube radius fits the new binary-prefix scale.
+The previous stage contains the projected face, hence every lower tile; the graph-lift incidence
+then places every tile tube in the zero-bit Minkowski thickening. -/
+theorem CoordinateProjectedFaceChain.compactZeroBitFiberPatchCover_tubes_subset_preBlueprint
+    {n : ℕ} {ι : Type*} [Fintype ι]
+    (chain : CoordinateProjectedFaceChain (n + 1))
+    {baseTile : ι → Set (Fin n → ℝ)} {margin radius : ℝ}
+    (cover : CompactZeroBitFiberPatchCover
+      (chain.face (Fin.last n).succ) (chain.face (Fin.last n).castSucc)
+      baseTile margin radius)
+    (epsilon : List Bool → ℝ) (word : List Bool)
+    (hepsilon : ∀ p, 0 ≤ epsilon p)
+    (hwidth : radius ≤ epsilon (word.take (n + 1)))
+    (hbase : chain.face (Fin.last n).castSucc ⊆
+      chain.preBlueprintNeighborhood epsilon word n) :
+    (⋃ i : ι, projectionFiberTube (baseTile i) cover.center radius) ⊆
+      chain.preBlueprintNeighborhood epsilon word (n + 1) := by
+  have hrec : chain.preBlueprintNeighborhood epsilon word (n + 1) =
+      zeroBitPreBlueprintNeighborhood (chain.face (Fin.last n).succ)
+        (chain.preBlueprintNeighborhood epsilon word n) epsilon (word.take (n + 1)) := by
+    simp [CoordinateProjectedFaceChain.preBlueprintNeighborhood, Fin.last]
+  rw [hrec]
+  intro x hx
+  rcases Set.mem_iUnion.mp hx with ⟨i, hi⟩
+  apply cover.tile_tube_subset_zeroBitPreBlueprintNeighborhood
+    (chain.preBlueprintNeighborhood epsilon word n) epsilon (word.take (n + 1))
+    i hepsilon (by simpa [List.take_take] using hwidth)
+  · intro y hy
+    apply hbase
+    rw [cover.baseTile_cover]
+    exact Set.mem_iUnion.mpr ⟨i, hy⟩
+  · exact hi
+
+/-- The zero-bit Case 1.1 cover in Craciun v3, §7.4.3 needs no user-supplied projected tiling:
+compactness of the projected face gives a finite compact cover with disjoint interiors, and the
+graph-tube construction lifts it to the face patch. `patchRadius` controls the projected patch
+diameters independently of the tube radius used for boundary separation. -/
+theorem compactZeroBitFiberPatchCover_of_compactProjectedFace {n : ℕ}
+    (chain : CoordinateProjectedFaceChain (n + 1))
+    (hbit : faceProjectionDimensionLetter
+      (fun k => Module.finrank ℝ ((affineSpan ℝ (chain.face k)).direction))
+      (Fin.last n) = false)
+    (hface : IsCompact (chain.face (Fin.last n).succ))
+    (margin radius patchRadius : ℝ)
+    (hfaceSeparated : chain.face (Fin.last n).succ ⊆
+      (Metric.ball (0 : Fin (n + 1) → ℝ) margin)ᶜ)
+    (hradius : 0 ≤ radius) (hsmall : radius < margin)
+    (hpatchRadius : 0 < patchRadius) :
+    ∃ (cover : CompactFinitePatchCover (chain.face (Fin.last n).castSucc) patchRadius),
+      letI : Fintype cover.Index := cover.fintypeIndex
+      Nonempty (CompactZeroBitFiberPatchCover (chain.face (Fin.last n).succ)
+        (chain.face (Fin.last n).castSucc) cover.patch margin radius) := by
+  classical
+  have hbaseCompact : IsCompact (chain.face (Fin.last n).castSucc) := by
+    rw [← chain.projectedFace (Fin.last n)]
+    exact hface.image (forgetLastAffine n).continuous_of_finiteDimensional
+  let cover := compactFinitePatchCover_of_compact
+    (chain.face (Fin.last n).castSucc) hbaseCompact hpatchRadius
+  refine ⟨cover, ?_⟩
+  letI : Fintype cover.Index := cover.fintypeIndex
+  exact ⟨compactZeroBitFiberPatchCover_of_compactBaseCover chain hbit hface
+    cover.patch cover.patch_compact cover.patch_interiors_disjoint cover.cover margin radius
+    hfaceSeparated hradius hsmall⟩
+
+/- A zero-bit local blueprint keeps the projected chamber label and chooses a representative on
+the shared graph section for every nonempty face patch above a base tile. -/
+structure CompactZeroBitLabeledFiberPatchCover {n : ℕ} {ι : Type*} [Fintype ι]
+    (facePatch : Set (Fin (n + 1) → ℝ)) (base : Set (Fin n → ℝ))
+    (baseTile : ι → Set (Fin n → ℝ)) (margin radius : ℝ)
+    {κ : Type*} [Fintype κ] (region : κ → Set (Fin n → ℝ)) where
+  cover : CompactZeroBitFiberPatchCover facePatch base baseTile margin radius
+  label : ι → κ
+  baseTile_subset_region : ∀ i, baseTile i ⊆ region (label i)
+  basepoint : ∀ i,
+    (facePatch ∩ {x | forgetLastCoordinate n x ∈ baseTile i}).Nonempty →
+      Fin (n + 1) → ℝ
+  basepoint_mem_tube : ∀ i hp,
+    basepoint i hp ∈ projectionFiberTube (baseTile i) cover.center radius
+  basepoint_projects_into_baseTile : ∀ i hp,
+    forgetLastCoordinate n (basepoint i hp) ∈ baseTile i
+  basepoint_projects_into_region : ∀ i hp,
+    forgetLastCoordinate n (basepoint i hp) ∈ region (label i)
+
+theorem compactZeroBitLabeledFiberPatchCover_of_openChambers {n : ℕ}
+    (chain : CoordinateProjectedFaceChain (n + 1))
+    (hbit : faceProjectionDimensionLetter
+      (fun k => Module.finrank ℝ ((affineSpan ℝ (chain.face k)).direction))
+      (Fin.last n) = false)
+    (hface : IsCompact (chain.face (Fin.last n).succ))
+    {κ : Type*} [Fintype κ] (region : κ → Set (Fin n → ℝ))
+    (hregionOpen : ∀ i, IsOpen (region i))
+    (hregionCover : chain.face (Fin.last n).castSucc ⊆ ⋃ i, region i)
+    (maxMesh margin radius : ℝ) (hmaxMesh : 0 < maxMesh)
+    (hfaceSeparated : chain.face (Fin.last n).succ ⊆
+      (Metric.ball (0 : Fin (n + 1) → ℝ) margin)ᶜ)
+    (hradius : 0 ≤ radius) (hsmall : radius < margin) :
+    ∃ mesh : ℝ, 0 < mesh ∧ mesh ≤ maxMesh ∧
+      ∃ labeled : CompactLabeledPatchCover
+          (chain.face (Fin.last n).castSucc) mesh region,
+        letI : Fintype labeled.cover.Index := labeled.cover.fintypeIndex
+        Nonempty (CompactZeroBitLabeledFiberPatchCover
+          (chain.face (Fin.last n).succ) (chain.face (Fin.last n).castSucc)
+          labeled.cover.patch margin radius region) := by
+  have hbaseCompact : IsCompact (chain.face (Fin.last n).castSucc) := by
+    rw [← chain.projectedFace (Fin.last n)]
+    exact hface.image (forgetLastAffine n).continuous_of_finiteDimensional
+  obtain ⟨mesh, hmesh, hmeshBound, hlabeled⟩ :=
+    compactLabeledPatchCover_of_finiteOpenCover
+      (chain.face (Fin.last n).castSucc) hbaseCompact region hregionOpen
+      hregionCover maxMesh hmaxMesh
+  obtain ⟨labeled⟩ := hlabeled
+  letI : Fintype labeled.cover.Index := labeled.cover.fintypeIndex
+  let cover := compactZeroBitFiberPatchCover_of_compactBaseCover chain hbit hface
+    labeled.cover.patch labeled.cover.patch_compact labeled.cover.patch_interiors_disjoint
+    labeled.cover.cover margin radius hfaceSeparated hradius hsmall
+  let basepoint : (i : labeled.cover.Index) →
+      (chain.face (Fin.last n).succ ∩
+        {x | forgetLastCoordinate n x ∈ labeled.cover.patch i}).Nonempty →
+      Fin (n + 1) → ℝ := fun i hi =>
+    let x := Classical.choose hi
+    let y := forgetLastCoordinate n x
+    Fin.snoc y (cover.center y)
+  let basepointProjection : ∀ (i : labeled.cover.Index)
+      (hi : (chain.face (Fin.last n).succ ∩
+        {x | forgetLastCoordinate n x ∈ labeled.cover.patch i}).Nonempty),
+      forgetLastCoordinate n (basepoint i hi) ∈ labeled.cover.patch i := by
+    intro i hi
+    let x := Classical.choose hi
+    have hx := Classical.choose_spec hi
+    have hy : forgetLastCoordinate n x ∈ labeled.cover.patch i := hx.2
+    simpa [basepoint, x, forgetLastCoordinate] using hy
+  refine ⟨mesh, hmesh, hmeshBound, labeled, ?_⟩
+  refine ⟨⟨cover, labeled.label, labeled.patch_subset_region, basepoint, ?_,
+    basepointProjection, ?_⟩⟩
+  · intro i hi
+    have hy := basepointProjection i hi
+    rw [mem_projectionFiberTube_iff]
+    refine ⟨hy, ?_⟩
+    simpa [basepoint, forgetLastCoordinate] using cover.radius_nonneg
+  · intro i hi
+    exact labeled.patch_subset_region i (basepointProjection i hi)
+
+
+/-- Every equal-width subtile of a compact bounded fiber band is compact when the base is compact
+and the endpoint graphs are continuous. Closedness of the subtile is inherited from the
+closed-base theorem above. -/
+theorem isCompact_projectionFiberSubdivisionTile {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (hbase : IsCompact base) (hlower : Continuous lower) (hupper : Continuous upper)
+    (horder : ∀ y ∈ base, lower y ≤ upper y) (i : Fin (m + 1)) :
+    IsCompact (projectionFiberSubdivisionTile base lower upper i) := by
+  exact IsCompact.of_isClosed_subset
+    (isCompact_projectionFiberBand_bounded base lower upper hbase hlower hupper horder)
+    (isClosed_projectionFiberSubdivisionTile base lower upper hbase.isClosed hlower hupper i)
+    (projectionFiberSubdivisionTile_subset_band base lower upper horder i)
+
+/-- The center of one equal-width strip in each projected vertical fiber. -/
+noncomputable def projectionFiberSubdivisionCenter {n m : ℕ}
+    (lower upper : (Fin n → ℝ) → ℝ) (i : Fin (m + 1)) (y : Fin n → ℝ) : ℝ :=
+  (projectionFiberSubdivisionEndpoint lower upper i.castSucc y +
+    projectionFiberSubdivisionEndpoint lower upper i.succ y) / 2
+
+/-- The center graph of a subdivided fiber tile is continuous when both boundary graphs are. -/
+theorem continuous_projectionFiberSubdivisionCenter {n m : ℕ}
+    (lower upper : (Fin n → ℝ) → ℝ) (i : Fin (m + 1))
+    (hlower : Continuous lower) (hupper : Continuous upper) :
+    Continuous (projectionFiberSubdivisionCenter lower upper i) := by
+  have hleft := continuous_projectionFiberSubdivisionEndpoint lower upper i.castSucc
+    hlower hupper
+  have hright := continuous_projectionFiberSubdivisionEndpoint lower upper i.succ
+    hlower hupper
+  change Continuous (fun y =>
+    (projectionFiberSubdivisionEndpoint lower upper i.castSucc y +
+      projectionFiberSubdivisionEndpoint lower upper i.succ y) / 2)
+  exact (hleft.add hright).div_const 2
+
+/-- The center graph meets every fiber of its subdivision tile. -/
+theorem projectionFiberSubdivisionCenter_mem_tile {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (horder : ∀ y ∈ base, lower y ≤ upper y)
+    (i : Fin (m + 1)) (y : Fin n → ℝ) (hy : y ∈ base) :
+    Fin.snoc y (projectionFiberSubdivisionCenter lower upper i y) ∈
+      projectionFiberSubdivisionTile base lower upper i := by
+  have hendpoints :
+      projectionFiberSubdivisionEndpoint lower upper i.castSucc y ≤
+        projectionFiberSubdivisionEndpoint lower upper i.succ y := by
+    exact (tileScaleInterpolation_monotone_of_le (horder y hy))
+      (Fin.castSucc_le_succ i)
+  rw [mem_projectionFiberSubdivisionTile_snoc_iff]
+  refine ⟨hy, ?_, ?_⟩
+  · dsimp [projectionFiberSubdivisionCenter]
+    linarith
+  · dsimp [projectionFiberSubdivisionCenter]
+    linarith
+
+/-- On a nondegenerate fiber above an interior basepoint, the selected strip center lies in the
+ordinary ambient interior of that strip. This is the local geometric fact behind the faithful
+basepoint criterion in Craciun v3, §7.4.3, Step 2 and Remarks 7.5–7.7. -/
+theorem projectionFiberSubdivisionCenter_mem_interior_tile {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (hlower : Continuous lower) (hupper : Continuous upper)
+    (horderStrict : ∀ y ∈ base, lower y < upper y)
+    (i : Fin (m + 1)) (y : Fin n → ℝ) (hy : y ∈ interior base) :
+    Fin.snoc y (projectionFiberSubdivisionCenter lower upper i y) ∈
+      interior (projectionFiberSubdivisionTile base lower upper i) := by
+  let p := forgetLastCoordinate n
+  let lo := projectionFiberSubdivisionEndpoint lower upper i.castSucc
+  let hi := projectionFiberSubdivisionEndpoint lower upper i.succ
+  have hybase : y ∈ base := interior_subset hy
+  have hgap : lo y < hi y := by
+    have hgapEq : hi y - lo y =
+        (upper y - lower y) / ((m + 1 : ℕ) : ℝ) := by
+      simpa [hi, lo] using projectionFiberSubdivisionEndpoint_gap lower upper i y
+    have hgapPos : 0 < (upper y - lower y) / ((m + 1 : ℕ) : ℝ) :=
+      div_pos (sub_pos.mpr (horderStrict y hybase)) (by positivity)
+    linarith
+  have hcenterLo : lo y < projectionFiberSubdivisionCenter lower upper i y := by
+    dsimp [projectionFiberSubdivisionCenter, lo, hi]
+    linarith
+  have hcenterHi : projectionFiberSubdivisionCenter lower upper i y < hi y := by
+    dsimp [projectionFiberSubdivisionCenter, lo, hi]
+    linarith
+  have hp : Continuous p := (forgetLastCoordinate n).continuous_of_finiteDimensional
+  have hlo : Continuous (fun x : Fin (n + 1) → ℝ => lo (p x)) :=
+    (continuous_projectionFiberSubdivisionEndpoint lower upper i.castSucc hlower hupper).comp hp
+  have hhi : Continuous (fun x : Fin (n + 1) → ℝ => hi (p x)) :=
+    (continuous_projectionFiberSubdivisionEndpoint lower upper i.succ hlower hupper).comp hp
+  have hlast : Continuous (fun x : Fin (n + 1) → ℝ => x (Fin.last n)) :=
+    continuous_apply (Fin.last n)
+  let U : Set (Fin (n + 1) → ℝ) :=
+    p ⁻¹' interior base ∩ {x | lo (p x) < x (Fin.last n)} ∩
+      {x | x (Fin.last n) < hi (p x)}
+  have hUopen : IsOpen U := by
+    change IsOpen ((p ⁻¹' interior base ∩ {x | lo (p x) < x (Fin.last n)}) ∩
+      {x | x (Fin.last n) < hi (p x)})
+    exact ((isOpen_interior.preimage hp).inter (isOpen_lt hlo hlast)).inter
+      (isOpen_lt hlast hhi)
+  have hUsub : U ⊆ projectionFiberSubdivisionTile base lower upper i := by
+    intro x hx
+    change x ∈ (p ⁻¹' interior base ∩ {x | lo (p x) < x (Fin.last n)}) ∩
+      {x | x (Fin.last n) < hi (p x)} at hx
+    rcases hx with ⟨⟨hbaseInt, hloX⟩, hhiX⟩
+    change p x ∈ base ∧ lo (p x) ≤ x (Fin.last n) ∧
+      x (Fin.last n) ≤ hi (p x)
+    exact ⟨interior_subset hbaseInt, le_of_lt hloX, le_of_lt hhiX⟩
+  rw [mem_interior]
+  refine ⟨U, hUsub, hUopen, ?_⟩
+  have hproj : p (Fin.snoc y (projectionFiberSubdivisionCenter lower upper i y)) = y := by
+    simp [p, forgetLastCoordinate]
+  have hlastVal :
+      (Fin.snoc y (projectionFiberSubdivisionCenter lower upper i y) :
+        Fin (n + 1) → ℝ) (Fin.last n) =
+        projectionFiberSubdivisionCenter lower upper i y := by
+    rw [Fin.snoc_last]
+  let xc : Fin (n + 1) → ℝ := Fin.snoc y
+    (projectionFiberSubdivisionCenter lower upper i y)
+  have hcenterInU : xc ∈ U := by
+    change ((p xc ∈ interior base) ∧ lo (p xc) < xc (Fin.last n)) ∧
+      xc (Fin.last n) < hi (p xc)
+    exact ⟨⟨by simpa [xc, hproj] using hy,
+      by simpa [xc, hproj, hlastVal] using hcenterLo⟩,
+      by simpa [xc, hproj, hlastVal] using hcenterHi⟩
+  exact hcenterInU
+
+/-- The graph of the selected center representatives over a projected tile. -/
+def projectionFiberSubdivisionCenterGraph {n m : ℕ}
+    (base : Set (Fin n → ℝ))
+    (center : Fin (m + 1) → (Fin n → ℝ) → ℝ) (i : Fin (m + 1)) :
+    Set (Fin (n + 1) → ℝ) :=
+  {x | ∃ y ∈ base, x = Fin.snoc y (center i y)}
+
+/-- Craciun v3, §7.4.3, Case 1.1 and Step 2: the graph of the selected representatives lies in
+its strip and projects onto the entire intended base tile. Thus every lower-dimensional basepoint
+has its chosen lift in the corresponding higher-dimensional tile, and projection of that lift
+recovers the same point. -/
+theorem projectionFiberSubdivisionCenterGraph_incidence {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (center : Fin (m + 1) → (Fin n → ℝ) → ℝ)
+    (hcenterMem : ∀ i y, y ∈ base →
+      Fin.snoc y (center i y) ∈ projectionFiberSubdivisionTile base lower upper i)
+    (i : Fin (m + 1)) :
+    projectionFiberSubdivisionCenterGraph base center i ⊆
+        projectionFiberSubdivisionTile base lower upper i ∧
+      forgetLastCoordinate n '' projectionFiberSubdivisionCenterGraph base center i = base := by
+  constructor
+  · intro x hx
+    rcases hx with ⟨y, hy, rfl⟩
+    exact hcenterMem i y hy
+  · ext y
+    constructor
+    · rintro ⟨x, ⟨z, hz, rfl⟩, hproj⟩
+      have hproj' : forgetLastCoordinate n (Fin.snoc z (center i z)) = z := by
+        simp [forgetLastCoordinate]
+      rw [hproj'] at hproj
+      simpa [hproj] using hz
+    · intro hy
+      refine ⟨Fin.snoc y (center i y), ?_, ?_⟩
+      · exact ⟨y, hy, rfl⟩
+      · simp [forgetLastCoordinate]
+
+/-- The center section over the interior of a projected base lies entirely in the ambient
+interior of its lifted strip and still projects onto that full interior. This is the face-local
+tile incidence used by the faithful-basepoint criterion of Craciun v3, §7.4.3, Remarks 7.5–7.7. -/
+theorem projectionFiberSubdivisionCenterGraph_interior_incidence {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (hlower : Continuous lower) (hupper : Continuous upper)
+    (horderStrict : ∀ y ∈ base, lower y < upper y) (i : Fin (m + 1)) :
+    projectionFiberSubdivisionCenterGraph (interior base)
+        (fun _ => projectionFiberSubdivisionCenter lower upper i) i ⊆
+        interior (projectionFiberSubdivisionTile base lower upper i) ∧
+      forgetLastCoordinate n ''
+        projectionFiberSubdivisionCenterGraph (interior base)
+          (fun _ => projectionFiberSubdivisionCenter lower upper i) i = interior base := by
+  constructor
+  · rintro x ⟨y, hy, rfl⟩
+    exact projectionFiberSubdivisionCenter_mem_interior_tile base lower upper hlower hupper
+      horderStrict i y hy
+  · ext y
+    constructor
+    · rintro ⟨x, ⟨z, hz, rfl⟩, hproj⟩
+      have hproj' : forgetLastCoordinate n
+          (Fin.snoc z (projectionFiberSubdivisionCenter lower upper i z)) = z := by
+        simp [forgetLastCoordinate]
+      rw [hproj'] at hproj
+      simpa [hproj] using hz
+    · intro hy
+      refine ⟨Fin.snoc y (projectionFiberSubdivisionCenter lower upper i y), ?_, ?_⟩
+      · exact ⟨y, hy, rfl⟩
+      · simp [forgetLastCoordinate]
+
+/-- A center selected in a positive-height fiber belongs to no other closed strip over the same
+basepoint. Thus center representatives lie away from the shared endpoint seams of the equal-width
+subdivision in Craciun v3, §7.4.3, Step 2. -/
+theorem projectionFiberSubdivisionCenter_not_mem_otherTile {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (horderStrict : ∀ y ∈ base, lower y < upper y)
+    (i j : Fin (m + 1)) (hij : i ≠ j) {y : Fin n → ℝ} (hy : y ∈ base) :
+    Fin.snoc y (projectionFiberSubdivisionCenter lower upper i y) ∉
+      projectionFiberSubdivisionTile base lower upper j := by
+  intro hmem
+  have htile := (mem_projectionFiberSubdivisionTile_snoc_iff
+    base lower upper j y (projectionFiberSubdivisionCenter lower upper i y)).mp hmem
+  have hmidLo : projectionFiberSubdivisionEndpoint lower upper i.castSucc y <
+      projectionFiberSubdivisionCenter lower upper i y := by
+    dsimp [projectionFiberSubdivisionCenter]
+    have hgap := projectionFiberSubdivisionEndpoint_gap lower upper i y
+    have hgapPos : 0 < (upper y - lower y) / ((m + 1 : ℕ) : ℝ) :=
+      div_pos (sub_pos.mpr (horderStrict y hy)) (by positivity)
+    linarith
+  have hmidHi : projectionFiberSubdivisionCenter lower upper i y <
+      projectionFiberSubdivisionEndpoint lower upper i.succ y := by
+    dsimp [projectionFiberSubdivisionCenter]
+    have hgap := projectionFiberSubdivisionEndpoint_gap lower upper i y
+    have hgapPos : 0 < (upper y - lower y) / ((m + 1 : ℕ) : ℝ) :=
+      div_pos (sub_pos.mpr (horderStrict y hy)) (by positivity)
+    linarith
+  have hstrict := strictMono_tileScaleInterpolation (n := m) (horderStrict y hy)
+  have hmono := hstrict.monotone
+  by_cases hji : j.val < i.val
+  · have hidx : j.succ ≤ i.castSucc := by
+      apply Fin.le_iff_val_le_val.mpr
+      simp
+      omega
+    have hendpoint := hmono hidx
+    have hendpoint' : projectionFiberSubdivisionEndpoint lower upper j.succ y ≤
+        projectionFiberSubdivisionEndpoint lower upper i.castSucc y := by
+      simpa [projectionFiberSubdivisionEndpoint] using hendpoint
+    exact (not_lt_of_ge (le_trans htile.2.2 hendpoint')) hmidLo
+  · have hijval : i.val < j.val := by
+      have hneq : i.val ≠ j.val := fun h => hij (Fin.ext h)
+      omega
+    have hidx : i.succ ≤ j.castSucc := by
+      apply Fin.le_iff_val_le_val.mpr
+      simp
+      omega
+    have hendpoint := hmono hidx
+    have hendpoint' : projectionFiberSubdivisionEndpoint lower upper i.succ y ≤
+        projectionFiberSubdivisionEndpoint lower upper j.castSucc y := by
+      simpa [projectionFiberSubdivisionEndpoint] using hendpoint
+    exact (not_lt_of_ge (le_trans hendpoint' htile.2.1)) hmidHi
+
+/-- On a compact projected base, each continuous subdivision endpoint has a uniform
+continuity modulus. This lets the projected tiling scale control endpoint variation uniformly. -/
+theorem exists_uniform_projectionFiberSubdivisionEndpoint_variation {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (hbase : IsCompact base) (hlower : Continuous lower) (hupper : Continuous upper)
+    (i : Fin (m + 2)) {tolerance : ℝ} (htolerance : 0 < tolerance) :
+    ∃ η : ℝ, 0 < η ∧ ∀ y ∈ base, ∀ z ∈ base,
+      dist y z < η →
+        dist (projectionFiberSubdivisionEndpoint lower upper i y)
+          (projectionFiberSubdivisionEndpoint lower upper i z) < tolerance := by
+  have hendpoint : Continuous (projectionFiberSubdivisionEndpoint lower upper i) :=
+    continuous_projectionFiberSubdivisionEndpoint lower upper i hlower hupper
+  exact (Metric.uniformContinuousOn_iff.mp
+    (hbase.uniformContinuousOn_of_continuous hendpoint.continuousOn)) tolerance htolerance
+
+/-- A strip with narrow fibers over a sufficiently small projected patch has small ambient
+ diameter. The only variation term is the upper endpoint graph: comparing two points by way of
+that common upper graph and each point's own lower endpoint costs at most `epsilon + tolerance`.
+This is the quantitative bridge from the one-bit subdivision to the small-patch wall-chart lemma. -/
+theorem projectionFiberSubdivisionTile_pair_dist_lt {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (epsilon tolerance δ η : ℝ)
+    (i : Fin (m + 1)) (x y : Fin (n + 1) → ℝ)
+    (hx : x ∈ projectionFiberSubdivisionTile base lower upper i)
+    (hy : y ∈ projectionFiberSubdivisionTile base lower upper i)
+    (hbaseSmall : dist (forgetLastCoordinate n x) (forgetLastCoordinate n y) < η)
+    (hendpointVariation : ∀ a ∈ base, ∀ b ∈ base, dist a b < η →
+      dist (projectionFiberSubdivisionEndpoint lower upper i.succ a)
+        (projectionFiberSubdivisionEndpoint lower upper i.succ b) < tolerance)
+    (hwidth : ∀ z ∈ base,
+      projectionFiberSubdivisionEndpoint lower upper i.succ z -
+        projectionFiberSubdivisionEndpoint lower upper i.castSucc z ≤ epsilon)
+    (hηsmall : η < δ) (hsmall : epsilon + tolerance < δ) (hδ : 0 < δ) :
+    dist x y < δ := by
+  let xbase := forgetLastCoordinate n x
+  let ybase := forgetLastCoordinate n y
+  let xlast := x (Fin.last n)
+  let ylast := y (Fin.last n)
+  have hxform : Fin.snoc xbase xlast = x := by
+    ext j
+    cases j using Fin.lastCases with
+    | cast k => simp [xbase, forgetLastCoordinate, Fin.snoc_castSucc]
+    | last => simp [xlast, Fin.snoc_last]
+  have hyform : Fin.snoc ybase ylast = y := by
+    ext j
+    cases j using Fin.lastCases with
+    | cast k => simp [ybase, forgetLastCoordinate, Fin.snoc_castSucc]
+    | last => simp [ylast, Fin.snoc_last]
+  have hxmem : Fin.snoc xbase xlast ∈
+      projectionFiberSubdivisionTile base lower upper i := by simpa [hxform] using hx
+  have hymem : Fin.snoc ybase ylast ∈
+      projectionFiberSubdivisionTile base lower upper i := by simpa [hyform] using hy
+  have hxm := (mem_projectionFiberSubdivisionTile_snoc_iff
+    base lower upper i xbase xlast).mp hxmem
+  have hym := (mem_projectionFiberSubdivisionTile_snoc_iff
+    base lower upper i ybase ylast).mp hymem
+  have hvarXY := hendpointVariation xbase hxm.1 ybase hym.1 hbaseSmall
+  have hvarYX := hendpointVariation ybase hym.1 xbase hxm.1 (by simpa [dist_comm] using hbaseSmall)
+  have hvarXY' : |projectionFiberSubdivisionEndpoint lower upper i.succ xbase -
+      projectionFiberSubdivisionEndpoint lower upper i.succ ybase| < tolerance := by
+    simpa [Real.dist_eq] using hvarXY
+  have hvarYX' : |projectionFiberSubdivisionEndpoint lower upper i.succ ybase -
+      projectionFiberSubdivisionEndpoint lower upper i.succ xbase| < tolerance := by
+    simpa [Real.dist_eq] using hvarYX
+  have hxwidth := hwidth xbase hxm.1
+  have hywidth := hwidth ybase hym.1
+  have hvarXYle : projectionFiberSubdivisionEndpoint lower upper i.succ xbase -
+      projectionFiberSubdivisionEndpoint lower upper i.succ ybase ≤ tolerance :=
+    (le_abs_self _).trans hvarXY'.le
+  have hvarYXle : projectionFiberSubdivisionEndpoint lower upper i.succ ybase -
+      projectionFiberSubdivisionEndpoint lower upper i.succ xbase ≤ tolerance :=
+    (le_abs_self _).trans hvarYX'.le
+  have hlastUpper : xlast - ylast ≤ epsilon + tolerance := by
+    calc
+      xlast - ylast ≤
+          projectionFiberSubdivisionEndpoint lower upper i.succ xbase -
+            projectionFiberSubdivisionEndpoint lower upper i.castSucc ybase := by
+              linarith [hxm.2.2, hym.2.1]
+      _ = (projectionFiberSubdivisionEndpoint lower upper i.succ xbase -
+            projectionFiberSubdivisionEndpoint lower upper i.succ ybase) +
+          (projectionFiberSubdivisionEndpoint lower upper i.succ ybase -
+            projectionFiberSubdivisionEndpoint lower upper i.castSucc ybase) := by ring
+      _ ≤ tolerance + epsilon := by linarith [hvarXYle, hywidth]
+      _ = epsilon + tolerance := by ring
+  have hlastLower : ylast - xlast ≤ epsilon + tolerance := by
+    calc
+      ylast - xlast ≤
+          projectionFiberSubdivisionEndpoint lower upper i.succ ybase -
+            projectionFiberSubdivisionEndpoint lower upper i.castSucc xbase := by
+              linarith [hym.2.2, hxm.2.1]
+      _ = (projectionFiberSubdivisionEndpoint lower upper i.succ ybase -
+            projectionFiberSubdivisionEndpoint lower upper i.succ xbase) +
+          (projectionFiberSubdivisionEndpoint lower upper i.succ xbase -
+            projectionFiberSubdivisionEndpoint lower upper i.castSucc xbase) := by ring
+      _ ≤ tolerance + epsilon := by linarith [hvarYXle, hxwidth]
+      _ = epsilon + tolerance := by ring
+  have hlastAbs : |xlast - ylast| ≤ epsilon + tolerance := by
+    apply abs_le.mpr
+    constructor
+    · linarith [hlastLower]
+    · exact hlastUpper
+  have hlastNorm : ‖xlast - ylast‖ < δ := by
+    rw [Real.norm_eq_abs]
+    exact lt_of_le_of_lt hlastAbs hsmall
+  rw [dist_eq_norm]
+  apply (pi_norm_lt_iff hδ).2
+  intro j
+  cases j using Fin.lastCases with
+  | cast k =>
+      have hcoord : ‖(xbase - ybase) k‖ ≤ ‖xbase - ybase‖ := norm_le_pi_norm _ k
+      have hcoord' : ‖(x - y) k.castSucc‖ = ‖(xbase - ybase) k‖ := by
+        simp [xbase, ybase, forgetLastCoordinate]
+      rw [hcoord']
+      have hbaseNorm : ‖xbase - ybase‖ < δ := by
+        calc
+          ‖xbase - ybase‖ = dist xbase ybase := by rw [dist_eq_norm]
+          _ < η := by simpa [xbase, ybase] using hbaseSmall
+          _ < δ := hηsmall
+      exact lt_of_le_of_lt hcoord hbaseNorm
+  | last =>
+      simpa [xlast, ylast] using hlastNorm
+
+/-- A compact base gives each refined strip a projected-diameter threshold that guarantees
+ambient diameter below `δ`. The threshold is chosen from uniform continuity of the strip's upper
+endpoint; the strip-width and endpoint-variation budgets add to less than `δ`. -/
+theorem exists_projectionFiberSubdivisionTile_modulus_of_compactBase {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (hbase : IsCompact base) (hlower : Continuous lower) (hupper : Continuous upper)
+    (epsilon tolerance δ : ℝ) (hepsilon : 0 < tolerance)
+    (i : Fin (m + 1))
+    (hwidth : ∀ z ∈ base,
+      projectionFiberSubdivisionEndpoint lower upper i.succ z -
+        projectionFiberSubdivisionEndpoint lower upper i.castSucc z ≤ epsilon)
+    (hbudget : epsilon + tolerance < δ) (hδ : 0 < δ) :
+    ∃ η : ℝ, 0 < η ∧ η < δ ∧ ∀ x y,
+      x ∈ projectionFiberSubdivisionTile base lower upper i →
+      y ∈ projectionFiberSubdivisionTile base lower upper i →
+      dist (forgetLastCoordinate n x) (forgetLastCoordinate n y) < η → dist x y < δ := by
+  obtain ⟨η₀, hη₀, hvariation⟩ :=
+    exists_uniform_projectionFiberSubdivisionEndpoint_variation
+      base lower upper hbase hlower hupper i.succ hepsilon
+  let η := min η₀ (δ / 2)
+  have hη : 0 < η := lt_min hη₀ (half_pos hδ)
+  have hηδ : η < δ := lt_of_le_of_lt (min_le_right _ _) (by linarith)
+  refine ⟨η, hη, hηδ, ?_⟩
+  intro x y hx hy hprojected
+  have hvariation' : ∀ a ∈ base, ∀ b ∈ base, dist a b < η →
+      dist (projectionFiberSubdivisionEndpoint lower upper i.succ a)
+        (projectionFiberSubdivisionEndpoint lower upper i.succ b) < tolerance := by
+    intro a ha b hb hab
+    exact hvariation a ha b hb (lt_of_lt_of_le hab (min_le_left _ _))
+  exact projectionFiberSubdivisionTile_pair_dist_lt base lower upper epsilon tolerance δ η i x y
+    hx hy hprojected hvariation' hwidth hηδ hbudget hδ
+
+/-- Points strictly between the two endpoints of a subdivision strip, fiber by fiber. This
+captures non-overlap of the strip interiors in the newly subdivided coordinate. -/
+def projectionFiberSubdivisionFiberInteriorTile {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (i : Fin (m + 1)) : Set (Fin (n + 1) → ℝ) :=
+  {x | let y := forgetLastCoordinate n x
+    y ∈ base ∧
+      projectionFiberSubdivisionEndpoint lower upper i.castSucc y < x (Fin.last n) ∧
+      x (Fin.last n) <
+        projectionFiberSubdivisionEndpoint lower upper i.succ y}
+
+/-- Membership in a fiberwise interior strip is strict membership between adjacent endpoints. -/
+theorem mem_projectionFiberSubdivisionFiberInteriorTile_iff {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (i : Fin (m + 1)) (x : Fin (n + 1) → ℝ) :
+    x ∈ projectionFiberSubdivisionFiberInteriorTile base lower upper i ↔
+      forgetLastCoordinate n x ∈ base ∧
+        projectionFiberSubdivisionEndpoint lower upper i.castSucc
+          (forgetLastCoordinate n x) < x (Fin.last n) ∧
+        x (Fin.last n) <
+          projectionFiberSubdivisionEndpoint lower upper i.succ
+            (forgetLastCoordinate n x) := by
+  simp [projectionFiberSubdivisionFiberInteriorTile]
+
+/-- Distinct equal-width subtiles have disjoint interiors along each projected fiber. Their closed
+sets may share endpoint seams, which are intentionally excluded here. -/
+theorem disjoint_projectionFiberSubdivisionFiberInteriorTiles {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (horder : ∀ y ∈ base, lower y ≤ upper y)
+    (i j : Fin (m + 1)) (hij : i ≠ j) :
+    projectionFiberSubdivisionFiberInteriorTile base lower upper i ∩
+      projectionFiberSubdivisionFiberInteriorTile base lower upper j = ∅ := by
+  ext x
+  constructor
+  · rintro ⟨hxi, hxj⟩
+    obtain ⟨hy, hlefti, hrighti⟩ :=
+      (mem_projectionFiberSubdivisionFiberInteriorTile_iff
+        base lower upper i x).mp hxi
+    obtain ⟨_, hleftj, hrightj⟩ :=
+      (mem_projectionFiberSubdivisionFiberInteriorTile_iff
+        base lower upper j x).mp hxj
+    rcases lt_or_gt_of_ne hij with hij' | hji'
+    · have hidx : i.succ ≤ j.castSucc := by
+        apply Fin.le_iff_val_le_val.mpr
+        simp
+        omega
+      have hendpoints :
+          projectionFiberSubdivisionEndpoint lower upper i.succ
+              (forgetLastCoordinate n x) ≤
+            projectionFiberSubdivisionEndpoint lower upper j.castSucc
+              (forgetLastCoordinate n x) := by
+        exact (tileScaleInterpolation_monotone_of_le (horder _ hy)) hidx
+      exact (not_lt_of_ge hendpoints) (lt_trans hleftj hrighti)
+    · have hidx : j.succ ≤ i.castSucc := by
+        apply Fin.le_iff_val_le_val.mpr
+        simp
+        omega
+      have hendpoints :
+          projectionFiberSubdivisionEndpoint lower upper j.succ
+              (forgetLastCoordinate n x) ≤
+            projectionFiberSubdivisionEndpoint lower upper i.castSucc
+              (forgetLastCoordinate n x) := by
+        exact (tileScaleInterpolation_monotone_of_le (horder _ hy)) hidx
+      exact (not_lt_of_ge hendpoints) (lt_trans hlefti hrightj)
+  · simp
+
+private def projectionFiberSubdivisionVerticalPath {n : ℕ}
+    (y : Fin n → ℝ) (z : ℝ) (t : ℝ) : Fin (n + 1) → ℝ :=
+  Fin.snoc y (z + t)
+
+private theorem continuous_projectionFiberSubdivisionVerticalPath {n : ℕ}
+    (y : Fin n → ℝ) (z : ℝ) :
+    Continuous (projectionFiberSubdivisionVerticalPath y z) := by
+  apply continuous_pi
+  intro i
+  cases i using Fin.lastCases with
+  | cast j =>
+      simp only [projectionFiberSubdivisionVerticalPath, Fin.snoc_castSucc]
+      exact continuous_const
+  | last =>
+      simp only [projectionFiberSubdivisionVerticalPath, Fin.snoc_last]
+      exact continuous_const.add continuous_id
+
+/-- Every point in the ambient interior of a closed fiber strip lies strictly between its
+vertical endpoints. Perturbing only the last coordinate in either direction would otherwise leave
+the strip while remaining in every neighborhood of the point. -/
+theorem interior_projectionFiberSubdivisionTile_subset_fiberInteriorTile {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (i : Fin (m + 1)) (x : Fin (n + 1) → ℝ)
+    (hx : x ∈ interior (projectionFiberSubdivisionTile base lower upper i)) :
+    x ∈ projectionFiberSubdivisionFiberInteriorTile base lower upper i := by
+  let y := forgetLastCoordinate n x
+  let z := x (Fin.last n)
+  have hxy : Fin.snoc y z = x := by
+    ext j
+    cases j using Fin.lastCases with
+    | cast k => simp [y, z, forgetLastCoordinate, Fin.snoc_castSucc]
+    | last => simp [y, z, Fin.snoc_last]
+  have hz : Fin.snoc y z ∈ interior
+      (projectionFiberSubdivisionTile base lower upper i) := by
+    simpa [hxy] using hx
+  have hpreopen : IsOpen {t : ℝ | projectionFiberSubdivisionVerticalPath y z t ∈
+      interior (projectionFiberSubdivisionTile base lower upper i)} :=
+    isOpen_interior.preimage (continuous_projectionFiberSubdivisionVerticalPath y z)
+  have hzero : (0 : ℝ) ∈ {t : ℝ | projectionFiberSubdivisionVerticalPath y z t ∈
+      interior (projectionFiberSubdivisionTile base lower upper i)} := by
+    simpa [projectionFiberSubdivisionVerticalPath] using hz
+  obtain ⟨r, hr, hball⟩ := (Metric.isOpen_iff.mp hpreopen) 0 hzero
+  have hcoords := (mem_projectionFiberSubdivisionTile_snoc_iff base lower upper i y z).mp
+    (by simpa [hxy] using (interior_subset hx))
+  have hlowstrict : projectionFiberSubdivisionEndpoint lower upper i.castSucc y < z := by
+    by_contra hnot
+    have heq : projectionFiberSubdivisionEndpoint lower upper i.castSucc y = z := by linarith
+    let t : ℝ := -r / 2
+    have hdist : dist t 0 < r := by
+      rw [dist_eq_norm, Real.norm_eq_abs]
+      dsimp [t]
+      simp only [sub_zero]
+      rw [abs_of_neg (by linarith : -r / 2 < 0)]
+      linarith
+    have htm : t ∈ Metric.ball (0 : ℝ) r := by simpa [Metric.mem_ball] using hdist
+    have hpathmem := hball htm
+    have htile : projectionFiberSubdivisionVerticalPath y z t ∈
+        projectionFiberSubdivisionTile base lower upper i := interior_subset hpathmem
+    have hperturbed :=
+      (mem_projectionFiberSubdivisionTile_snoc_iff base lower upper i y (z + t)).mp
+        (by simpa [projectionFiberSubdivisionVerticalPath] using htile)
+    have hbound := hperturbed.2.1
+    dsimp [t] at hbound
+    linarith
+  have hupstrict : z < projectionFiberSubdivisionEndpoint lower upper i.succ y := by
+    by_contra hnot
+    have heq : z = projectionFiberSubdivisionEndpoint lower upper i.succ y := by linarith
+    let t : ℝ := r / 2
+    have hdist : dist t 0 < r := by
+      rw [dist_eq_norm, Real.norm_eq_abs]
+      dsimp [t]
+      simp only [sub_zero]
+      rw [abs_of_pos (by linarith : 0 < r / 2)]
+      linarith
+    have htm : t ∈ Metric.ball (0 : ℝ) r := by simpa [Metric.mem_ball] using hdist
+    have hpathmem := hball htm
+    have htile : projectionFiberSubdivisionVerticalPath y z t ∈
+        projectionFiberSubdivisionTile base lower upper i := interior_subset hpathmem
+    have hperturbed :=
+      (mem_projectionFiberSubdivisionTile_snoc_iff base lower upper i y (z + t)).mp
+        (by simpa [projectionFiberSubdivisionVerticalPath] using htile)
+    have hbound := hperturbed.2.2
+    dsimp [t] at hbound
+    linarith
+  exact (mem_projectionFiberSubdivisionFiberInteriorTile_iff base lower upper i x).2
+    ⟨by simpa [y] using hcoords.1,
+      by simpa [y, z] using hlowstrict,
+      by simpa [y, z] using hupstrict⟩
+
+/-- Distinct fiber subdivision tiles have disjoint ordinary ambient interiors. This upgrades the
+fiberwise interval separation to the full-dimensional interior condition used by the blueprint. -/
+theorem disjoint_projectionFiberSubdivisionTile_ambientInteriors {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (horder : ∀ y ∈ base, lower y ≤ upper y)
+    (i j : Fin (m + 1)) (hij : i ≠ j) :
+    interior (projectionFiberSubdivisionTile base lower upper i) ∩
+      interior (projectionFiberSubdivisionTile base lower upper j) = ∅ := by
+  have hfiber := disjoint_projectionFiberSubdivisionFiberInteriorTiles
+    base lower upper horder i j hij
+  ext x
+  constructor
+  · rintro ⟨hxi, hxj⟩
+    have hmem : x ∈ projectionFiberSubdivisionFiberInteriorTile base lower upper i ∩
+        projectionFiberSubdivisionFiberInteriorTile base lower upper j :=
+      ⟨interior_projectionFiberSubdivisionTile_subset_fiberInteriorTile
+          base lower upper i x hxi,
+        interior_projectionFiberSubdivisionTile_subset_fiberInteriorTile
+          base lower upper j x hxj⟩
+    rw [hfiber] at hmem
+    simpa using hmem
+  · simp
+
+/-- The point on a subdivision seam above `y`, obtained by lifting the shared endpoint into the
+next-dimensional coordinate space. -/
+noncomputable def projectionFiberSubdivisionEndpointGraphPoint {n m : ℕ}
+    (lower upper : (Fin n → ℝ) → ℝ) (i : Fin (m + 2)) (y : Fin n → ℝ) :
+    Fin (n + 1) → ℝ := Fin.snoc y (projectionFiberSubdivisionEndpoint lower upper i y)
+
+/-- The endpoint graph varies continuously with its projected point. -/
+theorem continuous_projectionFiberSubdivisionEndpointGraphPoint {n m : ℕ}
+    (lower upper : (Fin n → ℝ) → ℝ) (i : Fin (m + 2))
+    (hlower : Continuous lower) (hupper : Continuous upper) :
+    Continuous (projectionFiberSubdivisionEndpointGraphPoint lower upper i) := by
+  apply continuous_pi
+  intro j
+  cases j using Fin.lastCases with
+  | cast k =>
+      simp only [projectionFiberSubdivisionEndpointGraphPoint, Fin.snoc_castSucc]
+      exact continuous_apply k
+  | last =>
+      simp only [projectionFiberSubdivisionEndpointGraphPoint, Fin.snoc_last]
+      exact continuous_projectionFiberSubdivisionEndpoint lower upper i hlower hupper
+
+/-- Adjacent closed strips meet exactly on the graph of their common subdivision endpoint. -/
+theorem projectionFiberSubdivisionAdjacentTiles_intersection_eq_graph {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (horder : ∀ y ∈ base, lower y ≤ upper y) (i : Fin m) :
+    projectionFiberSubdivisionTile base lower upper i.castSucc ∩
+      projectionFiberSubdivisionTile base lower upper i.succ =
+    (fun y : Fin n → ℝ =>
+      projectionFiberSubdivisionEndpointGraphPoint lower upper i.succ.castSucc y) '' base := by
+  ext x
+  constructor
+  · rintro ⟨hxleft, hxright⟩
+    let y := forgetLastCoordinate n x
+    let z := x (Fin.last n)
+    have hxy : Fin.snoc y z = x := by
+      ext j
+      cases j using Fin.lastCases with
+      | cast k => simp [y, z, forgetLastCoordinate, Fin.snoc_castSucc]
+      | last => simp [y, z, Fin.snoc_last]
+    have hleft := (mem_projectionFiberSubdivisionTile_snoc_iff
+      base lower upper i.castSucc y z).mp (by simpa [hxy] using hxleft)
+    have hright := (mem_projectionFiberSubdivisionTile_snoc_iff
+      base lower upper i.succ y z).mp (by simpa [hxy] using hxright)
+    have hindex : i.castSucc.succ = i.succ.castSucc := by
+      ext
+      simp
+    have hz : z = projectionFiberSubdivisionEndpoint lower upper i.succ.castSucc y := by
+      apply le_antisymm
+      · calc
+          z ≤ projectionFiberSubdivisionEndpoint lower upper i.castSucc.succ y := hleft.2.2
+          _ = projectionFiberSubdivisionEndpoint lower upper i.succ.castSucc y := by rw [hindex]
+      · exact hright.2.1
+    refine ⟨y, hleft.1, ?_⟩
+    calc
+      Fin.snoc y (projectionFiberSubdivisionEndpoint lower upper i.succ.castSucc y) =
+          Fin.snoc y z := by rw [hz]
+      _ = x := hxy
+  · rintro ⟨y, hy, hxy⟩
+    subst x
+    have hmono := tileScaleInterpolation_monotone_of_le (m := m) (horder y hy)
+    have hindex : i.castSucc.succ = i.succ.castSucc := by
+      ext
+      simp
+    constructor
+    · apply (mem_projectionFiberSubdivisionTile_snoc_iff
+        base lower upper i.castSucc y _).2
+      refine ⟨hy, ?_, ?_⟩
+      · exact hmono (Fin.castSucc_le_succ (i.castSucc))
+      · calc
+          projectionFiberSubdivisionEndpoint lower upper i.succ.castSucc y =
+              projectionFiberSubdivisionEndpoint lower upper i.castSucc.succ y := by rw [← hindex]
+          _ ≤ projectionFiberSubdivisionEndpoint lower upper i.castSucc.succ y := le_rfl
+    · apply (mem_projectionFiberSubdivisionTile_snoc_iff
+        base lower upper i.succ y _).2
+      refine ⟨hy, le_rfl, ?_⟩
+      exact hmono (Fin.castSucc_le_succ i.succ)
+
+/-- The shared seam of two adjacent strips projects onto the whole lower-dimensional base.
+This is the projection compatibility for neighboring tiles in Craciun v3, §7.4.3, Step 2. -/
+theorem projectionFiberSubdivisionAdjacentSeam_projects_onto_base {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (horder : ∀ y ∈ base, lower y ≤ upper y) (i : Fin m) :
+    forgetLastCoordinate n ''
+      (projectionFiberSubdivisionTile base lower upper i.castSucc ∩
+        projectionFiberSubdivisionTile base lower upper i.succ) = base := by
+  rw [projectionFiberSubdivisionAdjacentTiles_intersection_eq_graph base lower upper horder i]
+  ext y
+  constructor
+  · rintro ⟨x, ⟨z, hz, rfl⟩, hproj⟩
+    have hproj' : forgetLastCoordinate n
+        (projectionFiberSubdivisionEndpointGraphPoint lower upper i.succ.castSucc z) = z := by
+      simp [projectionFiberSubdivisionEndpointGraphPoint, forgetLastCoordinate]
+    rw [hproj'] at hproj
+    simpa [hproj] using hz
+  · intro hy
+    refine ⟨projectionFiberSubdivisionEndpointGraphPoint lower upper i.succ.castSucc y,
+      ⟨y, hy, rfl⟩, ?_⟩
+    simp [projectionFiberSubdivisionEndpointGraphPoint, forgetLastCoordinate]
+
+/-- Two fiber strips with the same index over different projected base tiles agree exactly over
+the intersection of those bases. The vertical interpolation is global, so restriction to an old
+face commutes with the one-bit strip construction. -/
+theorem projectionFiberSubdivisionTiles_intersection_eq_over_base_intersection {n m : ℕ}
+    (base₁ base₂ : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (i j : Fin (m + 1)) :
+    projectionFiberSubdivisionTile base₁ lower upper i ∩
+        projectionFiberSubdivisionTile base₂ lower upper j =
+      projectionFiberSubdivisionTile (base₁ ∩ base₂) lower upper i ∩
+        projectionFiberSubdivisionTile (base₁ ∩ base₂) lower upper j := by
+  ext x
+  simp [projectionFiberSubdivisionTile, Set.mem_inter_iff, and_assoc, and_left_comm, and_comm]
+
+/-- Across two old projected faces, neighboring one-bit strips meet on the same endpoint graph
+over their common projected face. This is the overlap compatibility for applying Case 1.2 on
+multiple adjacent lower-dimensional patches. -/
+theorem projectionFiberSubdivisionAdjacentTiles_intersection_eq_graph_over_base_intersection
+    {n m : ℕ} (base₁ base₂ : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (horder : ∀ y ∈ base₁ ∩ base₂, lower y ≤ upper y) (i : Fin m) :
+    projectionFiberSubdivisionTile base₁ lower upper i.castSucc ∩
+        projectionFiberSubdivisionTile base₂ lower upper i.succ =
+      (fun y : Fin n → ℝ =>
+        projectionFiberSubdivisionEndpointGraphPoint lower upper i.succ.castSucc y) ''
+          (base₁ ∩ base₂) := by
+  rw [projectionFiberSubdivisionTiles_intersection_eq_over_base_intersection
+    base₁ base₂ lower upper i.castSucc i.succ]
+  exact projectionFiberSubdivisionAdjacentTiles_intersection_eq_graph
+    (base₁ ∩ base₂) lower upper horder i
+
+/-- Neighboring one-bit fiber strips above two Craciun radial boundary tiles meet exactly on the
+common normalized source tile and the shared fiber endpoint graph. This combines the §8 Step 1
+projective radial seam with the §7.4.3 Case 1.2 common strip subdivision. -/
+theorem radialBoundaryTiles_adjacentFiberStrips_seam_eq {n m : ℕ}
+    (tileA tileB : Set (Fin (n + 1) → ℝ)) (boxUpper : Fin (n + 1) → ℝ)
+    (hA_nonnegative : ∀ x ∈ tileA, ∀ i, 0 ≤ x i)
+    (hA_nonzero : ∀ x ∈ tileA, x ≠ 0)
+    (hA_anchor : ∀ x ∈ tileA, x 0 = 1)
+    (hB_nonnegative : ∀ x ∈ tileB, ∀ i, 0 ≤ x i)
+    (hB_nonzero : ∀ x ∈ tileB, x ≠ 0)
+    (hB_anchor : ∀ x ∈ tileB, x 0 = 1)
+    (hboxUpper : ∀ i, 0 < boxUpper i)
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (horder : ∀ y ∈ base, lower y ≤ upper y) (k : Fin m) :
+    ((radialBoxDiagramTile tileA boxUpper hA_nonnegative hA_nonzero hboxUpper ∩
+        craciunProjectiveDomain) ∩
+      projectionFiberSubdivisionTile base lower upper k.castSucc) ∩
+      ((radialBoxDiagramTile tileB boxUpper hB_nonnegative hB_nonzero hboxUpper ∩
+          craciunProjectiveDomain) ∩
+        projectionFiberSubdivisionTile base lower upper k.succ) =
+      (radialBoxDiagramTile (tileA ∩ tileB) boxUpper
+        (fun x hx i => hA_nonnegative x hx.1 i)
+        (fun x hx => hA_nonzero x hx.1) hboxUpper ∩ craciunProjectiveDomain) ∩
+        (fun y : Fin n → ℝ =>
+          projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc y) '' base := by
+  have hradial := radialBoxDiagramTile_projectiveDomain_intersection_eq tileA tileB boxUpper 0
+    hA_nonnegative hA_nonzero hA_anchor hB_nonnegative hB_nonzero hB_anchor hboxUpper
+  have hfiber := projectionFiberSubdivisionAdjacentTiles_intersection_eq_graph
+    base lower upper horder k
+  ext p
+  constructor
+  · intro hp
+    have hpRadial : p ∈
+        (radialBoxDiagramTile tileA boxUpper hA_nonnegative hA_nonzero hboxUpper ∩
+          craciunProjectiveDomain) ∩
+        (radialBoxDiagramTile tileB boxUpper hB_nonnegative hB_nonzero hboxUpper ∩
+          craciunProjectiveDomain) := ⟨hp.1.1, hp.2.1⟩
+    have hpFiber : p ∈
+        projectionFiberSubdivisionTile base lower upper k.castSucc ∩
+          projectionFiberSubdivisionTile base lower upper k.succ :=
+      ⟨hp.1.2, hp.2.2⟩
+    rw [hradial] at hpRadial
+    rw [hfiber] at hpFiber
+    exact ⟨hpRadial, hpFiber⟩
+  · intro hp
+    have hpRadial : p ∈
+        (radialBoxDiagramTile tileA boxUpper hA_nonnegative hA_nonzero hboxUpper ∩
+          craciunProjectiveDomain) ∩
+        (radialBoxDiagramTile tileB boxUpper hB_nonnegative hB_nonzero hboxUpper ∩
+          craciunProjectiveDomain) := by
+      rw [hradial]
+      exact hp.1
+    have hpFiber : p ∈
+        projectionFiberSubdivisionTile base lower upper k.castSucc ∩
+          projectionFiberSubdivisionTile base lower upper k.succ := by
+      rw [hfiber]
+      exact hp.2
+    exact ⟨⟨hpRadial.1, hpFiber.1⟩, ⟨hpRadial.2, hpFiber.2⟩⟩
+
+/-- Every shared point of neighboring strips over clipped radial tiles has an endpoint-graph
+basepoint in their projected base, and its normalized projective source lies in the common lower
+diagram tile. This is the projected-basepoint/tile-to-face incidence passed to the next induction
+stage (Craciun v3, §§7.4.3 and 8). -/
+theorem exists_radialBoundaryTiles_adjacentFiberStrips_projected_incidence {n m : ℕ}
+    (tileA tileB : Set (Fin (n + 1) → ℝ)) (boxUpper : Fin (n + 1) → ℝ)
+    (hA_nonnegative : ∀ x ∈ tileA, ∀ i, 0 ≤ x i)
+    (hA_nonzero : ∀ x ∈ tileA, x ≠ 0)
+    (hA_anchor : ∀ x ∈ tileA, x 0 = 1)
+    (hB_nonnegative : ∀ x ∈ tileB, ∀ i, 0 ≤ x i)
+    (hB_nonzero : ∀ x ∈ tileB, x ≠ 0)
+    (hB_anchor : ∀ x ∈ tileB, x 0 = 1)
+    (hboxUpper : ∀ i, 0 < boxUpper i)
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (horder : ∀ y ∈ base, lower y ≤ upper y) (k : Fin m)
+    {p : Fin (n + 1) → ℝ}
+    (hp : p ∈
+      ((radialBoxDiagramTile tileA boxUpper hA_nonnegative hA_nonzero hboxUpper ∩
+          craciunProjectiveDomain) ∩
+        projectionFiberSubdivisionTile base lower upper k.castSucc) ∩
+      ((radialBoxDiagramTile tileB boxUpper hB_nonnegative hB_nonzero hboxUpper ∩
+          craciunProjectiveDomain) ∩
+        projectionFiberSubdivisionTile base lower upper k.succ)) :
+    ∃ y, y ∈ base ∧
+      projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc y ∈
+        radialBoxDiagramTile (tileA ∩ tileB) boxUpper
+          (fun x hx i => hA_nonnegative x hx.1 i)
+          (fun x hx => hA_nonzero x hx.1) hboxUpper ∩ craciunProjectiveDomain ∧
+      forgetLastCoordinate n
+        (projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc y) = y ∧
+      (fun i =>
+        projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc y i /
+          projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc y 0) ∈
+        tileA ∩ tileB := by
+  have hseam := radialBoundaryTiles_adjacentFiberStrips_seam_eq
+    tileA tileB boxUpper hA_nonnegative hA_nonzero hA_anchor
+    hB_nonnegative hB_nonzero hB_anchor hboxUpper base lower upper horder k
+  rw [hseam] at hp
+  rcases hp with ⟨hpRadial, hpGraph⟩
+  rcases hpGraph with ⟨y, hy, rfl⟩
+  refine ⟨y, hy, hpRadial, ?_, ?_⟩
+  · simp [projectionFiberSubdivisionEndpointGraphPoint, forgetLastCoordinate]
+  · exact (mem_radialBoxDiagramTile_projectiveDomain_iff (tileA ∩ tileB) boxUpper
+      (fun x hx i => hA_nonnegative x hx.1 i)
+      (fun x hx => hA_nonzero x hx.1)
+      (fun x hx => hA_anchor x hx.1) hboxUpper).mp hpRadial |>.2.2
+
+/-- The projection of the full adjacent-strip overlap is exactly the set of lower basepoints whose
+shared endpoint satisfies the projective-domain, blue-box, and common-source-tile conditions.
+This exact image identity is the lower-dimensional seam patch passed to the next stage of
+Craciun's construction (§§7.4.3 and 8). -/
+theorem radialBoundaryTiles_adjacentFiberStrips_projected_seam_eq {n m : ℕ}
+    (tileA tileB : Set (Fin (n + 1) → ℝ)) (boxUpper : Fin (n + 1) → ℝ)
+    (hA_nonnegative : ∀ x ∈ tileA, ∀ i, 0 ≤ x i)
+    (hA_nonzero : ∀ x ∈ tileA, x ≠ 0)
+    (hA_anchor : ∀ x ∈ tileA, x 0 = 1)
+    (hB_nonnegative : ∀ x ∈ tileB, ∀ i, 0 ≤ x i)
+    (hB_nonzero : ∀ x ∈ tileB, x ≠ 0)
+    (hB_anchor : ∀ x ∈ tileB, x 0 = 1)
+    (hboxUpper : ∀ i, 0 < boxUpper i)
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (horder : ∀ y ∈ base, lower y ≤ upper y) (k : Fin m) :
+    forgetLastCoordinate n ''
+      (((radialBoxDiagramTile tileA boxUpper hA_nonnegative hA_nonzero hboxUpper ∩
+          craciunProjectiveDomain) ∩
+        projectionFiberSubdivisionTile base lower upper k.castSucc) ∩
+      ((radialBoxDiagramTile tileB boxUpper hB_nonnegative hB_nonzero hboxUpper ∩
+          craciunProjectiveDomain) ∩
+        projectionFiberSubdivisionTile base lower upper k.succ)) =
+      {y | y ∈ base ∧
+        projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc y ∈
+          craciunProjectiveDomain ∧
+        (∀ i, projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc y i ≤
+          boxUpper i) ∧
+        (fun i =>
+          projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc y i /
+            projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc y 0) ∈
+          tileA ∩ tileB} := by
+  rw [radialBoundaryTiles_adjacentFiberStrips_seam_eq
+    tileA tileB boxUpper hA_nonnegative hA_nonzero hA_anchor
+    hB_nonnegative hB_nonzero hB_anchor hboxUpper base lower upper horder k]
+  ext y
+  constructor
+  · rintro ⟨p, ⟨hpRadial, hpGraph⟩, hproject⟩
+    rcases hpGraph with ⟨z, hz, rfl⟩
+    have hforget : forgetLastCoordinate n
+        (projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc z) = z := by
+      simp [projectionFiberSubdivisionEndpointGraphPoint, forgetLastCoordinate]
+    rw [hforget] at hproject
+    subst y
+    have hconditions := (mem_radialBoxDiagramTile_projectiveDomain_iff (tileA ∩ tileB)
+      boxUpper (fun x hx i => hA_nonnegative x hx.1 i)
+      (fun x hx => hA_nonzero x hx.1)
+      (fun x hx => hA_anchor x hx.1) hboxUpper).mp hpRadial
+    exact ⟨hz, hconditions.1, hconditions.2.1, hconditions.2.2⟩
+  · rintro ⟨hy, hdomain, hbox, hsource⟩
+    have hRadial := (mem_radialBoxDiagramTile_projectiveDomain_iff (tileA ∩ tileB)
+      boxUpper (fun x hx i => hA_nonnegative x hx.1 i)
+      (fun x hx => hA_nonzero x hx.1)
+      (fun x hx => hA_anchor x hx.1) hboxUpper).mpr
+        ⟨hdomain, hbox, hsource⟩
+    refine ⟨projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc y,
+      ⟨hRadial, ⟨y, hy, rfl⟩⟩, ?_⟩
+    simp [projectionFiberSubdivisionEndpointGraphPoint, forgetLastCoordinate]
+
+/-- A shared endpoint seam is compact over a compact projected base when its boundary graphs are
+continuous. -/
+theorem isCompact_projectionFiberSubdivisionAdjacentSeam {n m : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (hbase : IsCompact base) (hlower : Continuous lower) (hupper : Continuous upper)
+    (i : Fin m) :
+    IsCompact ((fun y : Fin n → ℝ =>
+      projectionFiberSubdivisionEndpointGraphPoint lower upper i.succ.castSucc y) '' base) := by
+  exact hbase.image (continuous_projectionFiberSubdivisionEndpointGraphPoint
+    lower upper i.succ.castSucc hlower hupper)
+
+/-- The lower-dimensional patch obtained by projecting the common seam of adjacent restricted
+radial tiles is compact. It is the intersection of a compact common-source radial tile and the
+compact shared endpoint graph, so it can be passed to the next finite face refinement. -/
+theorem isCompact_radialBoundaryTiles_adjacentFiberStrips_projected_seam {n m : ℕ}
+    (tileA tileB : Set (Fin (n + 1) → ℝ)) (boxUpper : Fin (n + 1) → ℝ)
+    (hA_nonnegative : ∀ x ∈ tileA, ∀ i, 0 ≤ x i)
+    (hA_nonzero : ∀ x ∈ tileA, x ≠ 0)
+    (hA_anchor : ∀ x ∈ tileA, x 0 = 1)
+    (hB_nonnegative : ∀ x ∈ tileB, ∀ i, 0 ≤ x i)
+    (hB_nonzero : ∀ x ∈ tileB, x ≠ 0)
+    (hB_anchor : ∀ x ∈ tileB, x 0 = 1)
+    (hboxUpper : ∀ i, 0 < boxUpper i)
+    (hA_compact : IsCompact tileA) (hB_compact : IsCompact tileB)
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (hbase_compact : IsCompact base) (hlower : Continuous lower)
+    (hupper : Continuous upper) (horder : ∀ y ∈ base, lower y ≤ upper y)
+    (k : Fin m) :
+    IsCompact (forgetLastCoordinate n ''
+      (((radialBoxDiagramTile tileA boxUpper hA_nonnegative hA_nonzero hboxUpper ∩
+          craciunProjectiveDomain) ∩
+        projectionFiberSubdivisionTile base lower upper k.castSucc) ∩
+      ((radialBoxDiagramTile tileB boxUpper hB_nonnegative hB_nonzero hboxUpper ∩
+          craciunProjectiveDomain) ∩
+        projectionFiberSubdivisionTile base lower upper k.succ))) := by
+  have hcommon_source : IsCompact (tileA ∩ tileB) := hA_compact.inter hB_compact
+  have hcommon_radial := isCompact_radialBoxDiagramTile_projectiveDomain
+    (tileA ∩ tileB) boxUpper 0
+    (fun x hx i => hA_nonnegative x hx.1 i)
+    (fun x hx => hA_nonzero x hx.1)
+    (fun x hx => hA_anchor x hx.1) hboxUpper hcommon_source
+  have hendpoint := isCompact_projectionFiberSubdivisionAdjacentSeam
+    base lower upper hbase_compact hlower hupper k
+  have hseam := radialBoundaryTiles_adjacentFiberStrips_seam_eq
+    tileA tileB boxUpper hA_nonnegative hA_nonzero hA_anchor
+    hB_nonnegative hB_nonzero hB_anchor hboxUpper base lower upper
+    horder k
+  rw [hseam]
+  exact (hcommon_radial.inter hendpoint).image
+    (forgetLastCoordinate n).continuous_of_finiteDimensional
+
+/-- A certificate for the bounded Case 1.2 refinement: finitely many compact strips cover the
+filled fiber band, each strip projects onto the whole lower-dimensional base, and each vertical
+fiber width is at most `epsilon`. -/
+structure CompactProjectionFiberTiling {n : ℕ} (base : Set (Fin n → ℝ))
+    (lower upper : (Fin n → ℝ) → ℝ) (epsilon : ℝ) where
+  /-- The number of equal strips in each fiber is `subdivisionCount + 1`. -/
+  subdivisionCount : ℕ
+  /-- A continuous center graph selects one point in every vertical fiber of each strip. -/
+  tile_center : ∀ i : Fin (subdivisionCount + 1), (Fin n → ℝ) → ℝ
+  /-- The selected representative is the midpoint of its equal-width fiber strip, so it cannot
+  lie on a shared endpoint seam when the parent fiber has positive height. -/
+  tile_center_eq_midpoint : ∀ i y,
+    tile_center i y = projectionFiberSubdivisionCenter lower upper i y
+  tile_center_continuous : ∀ i, Continuous (tile_center i)
+  tile_center_mem : ∀ i y, y ∈ base →
+    Fin.snoc y (tile_center i y) ∈
+      projectionFiberSubdivisionTile base lower upper i
+  /-- The graph of the selected center representatives projects onto the entire base of each
+  strip. This retains the projected-basepoint invariant in the tiling certificate. -/
+  tile_center_graph_incidence : ∀ i : Fin (subdivisionCount + 1),
+    projectionFiberSubdivisionCenterGraph base tile_center i ⊆
+        projectionFiberSubdivisionTile base lower upper i ∧
+      forgetLastCoordinate n '' projectionFiberSubdivisionCenterGraph base tile_center i = base
+  /-- Interiors along the subdivided coordinate do not overlap; closed tiles may meet at seams. -/
+  fiber_interiors_disjoint : ∀ i j, i ≠ j →
+    projectionFiberSubdivisionFiberInteriorTile (m := subdivisionCount) base lower upper i ∩
+      projectionFiberSubdivisionFiberInteriorTile (m := subdivisionCount) base lower upper j =
+        ∅
+  /-- The ordinary ambient interiors of distinct closed strip tiles are disjoint. -/
+  ambient_interiors_disjoint : ∀ i j, i ≠ j →
+    interior (projectionFiberSubdivisionTile (m := subdivisionCount) base lower upper i) ∩
+      interior (projectionFiberSubdivisionTile (m := subdivisionCount) base lower upper j) = ∅
+  /-- Adjacent closed strips meet exactly on the continuous graph of their shared endpoint. -/
+  adjacent_tiles_intersect_in_endpointGraph : ∀ i : Fin subdivisionCount,
+    projectionFiberSubdivisionTile base lower upper i.castSucc ∩
+      projectionFiberSubdivisionTile base lower upper i.succ =
+    (fun y : Fin n → ℝ =>
+      projectionFiberSubdivisionEndpointGraphPoint (m := subdivisionCount) lower upper
+        i.succ.castSucc y) '' base
+  /-- The shared seam projects onto the full lower-dimensional base. -/
+  adjacent_seam_projects : ∀ i : Fin subdivisionCount,
+    forgetLastCoordinate n ''
+      (projectionFiberSubdivisionTile base lower upper i.castSucc ∩
+        projectionFiberSubdivisionTile base lower upper i.succ) = base
+  /-- Each shared endpoint graph is compact when the base is compact. -/
+  adjacent_seams_compact : ∀ i : Fin subdivisionCount,
+    IsCompact ((fun y : Fin n → ℝ =>
+      projectionFiberSubdivisionEndpointGraphPoint (m := subdivisionCount) lower upper
+        i.succ.castSucc y) '' base)
+  /-- The subtiles exactly cover the filled band. -/
+  tiles_cover :
+    projectionFiberBand base (fun y => some (lower y)) (fun y => some (upper y)) =
+      ⋃ i : Fin (subdivisionCount + 1),
+        projectionFiberSubdivisionTile base lower upper i
+  /-- Compactness of every subtile, for later extraction of finite local chart covers. -/
+  tile_compact : ∀ i : Fin (subdivisionCount + 1),
+    IsCompact (projectionFiberSubdivisionTile base lower upper i)
+  /-- Every subtile retains the full projection of its parent tile. -/
+  tile_projects : ∀ i : Fin (subdivisionCount + 1),
+    forgetLastCoordinate n '' projectionFiberSubdivisionTile base lower upper i = base
+  /-- Uniform upper bound on the last-coordinate width of every subtile. -/
+  fiber_width_le : ∀ (i : Fin (subdivisionCount + 1)) (y : Fin n → ℝ), y ∈ base →
+    projectionFiberSubdivisionEndpoint lower upper i.succ y -
+      projectionFiberSubdivisionEndpoint lower upper i.castSucc y ≤ epsilon
+
+/-- The actual center chosen by the compact tiling lies in the interior of its strip above an
+interior projected basepoint whenever the fiber has positive height. -/
+theorem CompactProjectionFiberTiling.tile_center_mem_interior
+    {n : ℕ} {base : Set (Fin n → ℝ)} {lower upper : (Fin n → ℝ) → ℝ} {epsilon : ℝ}
+    (tiling : CompactProjectionFiberTiling base lower upper epsilon)
+    (hlower : Continuous lower) (hupper : Continuous upper)
+    (horderStrict : ∀ y ∈ base, lower y < upper y)
+    (i : Fin (tiling.subdivisionCount + 1)) {y : Fin n → ℝ}
+    (hy : y ∈ interior base) :
+    Fin.snoc y (tiling.tile_center i y) ∈
+      interior (projectionFiberSubdivisionTile base lower upper i) := by
+  rw [tiling.tile_center_eq_midpoint]
+  exact projectionFiberSubdivisionCenter_mem_interior_tile base lower upper
+    hlower hupper horderStrict i y hy
+
+/-- A compact tiling's midpoint representative cannot belong to a different closed strip over
+the same projected point when the parent fiber has positive height. -/
+theorem CompactProjectionFiberTiling.tile_center_not_mem_otherTile
+    {n : ℕ} {base : Set (Fin n → ℝ)} {lower upper : (Fin n → ℝ) → ℝ} {epsilon : ℝ}
+    (tiling : CompactProjectionFiberTiling base lower upper epsilon)
+    (horderStrict : ∀ y ∈ base, lower y < upper y)
+    (i j : Fin (tiling.subdivisionCount + 1)) (hij : i ≠ j)
+    {y : Fin n → ℝ} (hy : y ∈ base) :
+    Fin.snoc y (tiling.tile_center i y) ∉
+      projectionFiberSubdivisionTile base lower upper j := by
+  rw [tiling.tile_center_eq_midpoint]
+  exact projectionFiberSubdivisionCenter_not_mem_otherTile base lower upper
+    horderStrict i j hij hy
+
+/-- Restricting adjacent strips to an existing face patch preserves the exact endpoint-graph
+overlap. This is the seam compatibility needed when the lower-dimensional face is cut by the
+one-bit refinement. -/
+theorem CompactProjectionFiberTiling.restricted_adjacent_intersection_eq_seam
+    {n : ℕ} {base : Set (Fin n → ℝ)} {lower upper : (Fin n → ℝ) → ℝ} {epsilon : ℝ}
+    (tiling : CompactProjectionFiberTiling base lower upper epsilon)
+    (facePatch : Set (Fin (n + 1) → ℝ)) (i : Fin tiling.subdivisionCount) :
+    (facePatch ∩ projectionFiberSubdivisionTile base lower upper i.castSucc) ∩
+        (facePatch ∩ projectionFiberSubdivisionTile base lower upper i.succ) =
+      facePatch ∩ (fun y : Fin n → ℝ =>
+        projectionFiberSubdivisionEndpointGraphPoint lower upper i.succ.castSucc y) '' base := by
+  ext x
+  have htiles := tiling.adjacent_tiles_intersect_in_endpointGraph i
+  have htilesAt := congrArg (fun s : Set (Fin (n + 1) → ℝ) => x ∈ s) htiles
+  simp only [Set.mem_inter_iff] at htilesAt ⊢
+  tauto
+
+/-- The projection of a restricted shared seam consists exactly of the old face's projected
+basepoints whose endpoint lift belongs to that face. This records the lower-dimensional incidence
+without incorrectly claiming that a face-restricted seam projects onto the whole parent base. -/
+theorem CompactProjectionFiberTiling.forget_restricted_seam_eq_endpoint_preimage
+    {n : ℕ} {base : Set (Fin n → ℝ)} {lower upper : (Fin n → ℝ) → ℝ} {epsilon : ℝ}
+    (tiling : CompactProjectionFiberTiling base lower upper epsilon)
+    (facePatch : Set (Fin (n + 1) → ℝ)) (i : Fin tiling.subdivisionCount) :
+    forgetLastCoordinate n ''
+        (facePatch ∩ (fun y : Fin n → ℝ =>
+          projectionFiberSubdivisionEndpointGraphPoint lower upper i.succ.castSucc y) '' base) =
+      {y | y ∈ base ∧ projectionFiberSubdivisionEndpointGraphPoint
+        lower upper i.succ.castSucc y ∈ facePatch} := by
+  ext y
+  constructor
+  · rintro ⟨x, ⟨hxface, hxgraph⟩, rfl⟩
+    rcases hxgraph with ⟨z, hz, rfl⟩
+    have hproj : forgetLastCoordinate n
+        (projectionFiberSubdivisionEndpointGraphPoint lower upper i.succ.castSucc z) = z := by
+      simp [projectionFiberSubdivisionEndpointGraphPoint, forgetLastCoordinate]
+    rw [hproj]
+    exact ⟨hz, hxface⟩
+  · intro hy
+    refine ⟨projectionFiberSubdivisionEndpointGraphPoint lower upper i.succ.castSucc y,
+      ⟨hy.2, ?_⟩, ?_⟩
+    · exact ⟨y, hy.1, rfl⟩
+    · simp [projectionFiberSubdivisionEndpointGraphPoint, forgetLastCoordinate]
+
+/-- Compactness of the projected base supplies a uniform bound on the continuous fiber heights.
+Consequently, every positive target width admits a compact finite tiling with exact coverage and
+surjective tile projections. -/
+noncomputable def compactProjectionFiberTiling_of_compactBase {n : ℕ}
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ) (epsilon : ℝ)
+    (hbase : IsCompact base) (hlower : Continuous lower) (hupper : Continuous upper)
+    (horder : ∀ y ∈ base, lower y ≤ upper y) (hepsilon : 0 < epsilon) :
+    CompactProjectionFiberTiling base lower upper epsilon := by
+  classical
+  have hwidthCompact : IsCompact ((fun y => upper y - lower y) '' base) :=
+    hbase.image (hupper.sub hlower)
+  have hwidthBdd : BddAbove ((fun y => upper y - lower y) '' base) :=
+    hwidthCompact.bddAbove
+  let b : ℝ := Classical.choose hwidthBdd
+  have hb := Classical.choose_spec hwidthBdd
+  let height := max b 0
+  have hheight : 0 ≤ height := le_max_right _ _
+  have hwidth : ∀ y ∈ base, upper y - lower y ≤ height := by
+    intro y hy
+    have hbound : upper y - lower y ≤ b :=
+      hb (Set.mem_image_of_mem (fun y => upper y - lower y) hy)
+    exact hbound.trans (le_max_left _ _)
+  have hmExists := exists_uniform_projectionFiberSubdivision
+    base lower upper hheight hwidth hepsilon
+  let m : ℕ := Classical.choose hmExists
+  have hm : ∀ y ∈ base, ∀ i : Fin (m + 1),
+      projectionFiberSubdivisionEndpoint lower upper i.succ y -
+        projectionFiberSubdivisionEndpoint lower upper i.castSucc y ≤ epsilon := by
+    simpa [m] using (Classical.choose_spec hmExists)
+  refine {
+    subdivisionCount := m
+    tile_center := fun i y => projectionFiberSubdivisionCenter lower upper i y
+    tile_center_eq_midpoint := by intro i y; rfl
+    tile_center_continuous := fun i =>
+      continuous_projectionFiberSubdivisionCenter lower upper i hlower hupper
+    tile_center_mem := by
+      intro i y hy
+      exact projectionFiberSubdivisionCenter_mem_tile base lower upper horder i y hy
+    tile_center_graph_incidence := by
+      intro i
+      exact projectionFiberSubdivisionCenterGraph_incidence base lower upper
+        (fun i y => projectionFiberSubdivisionCenter lower upper i y)
+        (by
+          intro i y hy
+          exact projectionFiberSubdivisionCenter_mem_tile base lower upper horder i y hy) i
+    fiber_interiors_disjoint := by
+      intro i j hij
+      exact disjoint_projectionFiberSubdivisionFiberInteriorTiles
+        base lower upper horder i j hij
+    ambient_interiors_disjoint := by
+      intro i j hij
+      exact disjoint_projectionFiberSubdivisionTile_ambientInteriors
+        base lower upper horder i j hij
+    adjacent_tiles_intersect_in_endpointGraph := by
+      intro i
+      exact projectionFiberSubdivisionAdjacentTiles_intersection_eq_graph
+        base lower upper horder i
+    adjacent_seam_projects := by
+      intro i
+      exact projectionFiberSubdivisionAdjacentSeam_projects_onto_base
+        base lower upper horder i
+    adjacent_seams_compact := by
+      intro i
+      exact isCompact_projectionFiberSubdivisionAdjacentSeam
+        base lower upper hbase hlower hupper i
+    tiles_cover := projectionFiberBand_bounded_eq_iUnion_subdivisionTiles
+      base lower upper horder
+    tile_compact := fun i =>
+      isCompact_projectionFiberSubdivisionTile base lower upper hbase hlower hupper horder i
+    tile_projects := fun i =>
+      projectionFiberSubdivisionTile_projects_onto_base base lower upper horder i
+    fiber_width_le := by
+      intro i y hy
+      exact hm y hy i
+  }
+
+/-- A compact face patch contained in a bounded one-bit fiber band, together with the finite
+compact pieces obtained by restricting the strip tiling to that patch. This is the local Case 1.2
+blueprint output: the patch and all its intersections with the new tiles are retained explicitly. -/
+structure CompactOneBitFiberBlueprintRefinement {n : ℕ}
+    (facePatch : Set (Fin (n + 1) → ℝ)) (base : Set (Fin n → ℝ))
+    (lower upper : (Fin n → ℝ) → ℝ) (epsilon : ℝ) where
+  /-- The generated compact tiling of the filled parent band. -/
+  tiling : CompactProjectionFiberTiling base lower upper epsilon
+  /-- The original face patch is exactly covered by its intersections with the strip tiles. -/
+  facePatch_eq_iUnion_tiles :
+    facePatch = ⋃ i : Fin (tiling.subdivisionCount + 1),
+      facePatch ∩ projectionFiberSubdivisionTile base lower upper i
+  /-- Every restricted face piece is compact, ready for finite local-chart extraction. -/
+  facePatch_tile_compact : ∀ i : Fin (tiling.subdivisionCount + 1),
+    IsCompact (facePatch ∩ projectionFiberSubdivisionTile base lower upper i)
+
+/-- Construct the compact one-bit blueprint refinement from a compact projected base, continuous
+bounded boundary graphs, and a compact face patch already known to lie in their filled band. The
+finite covering and compactness of every restricted patch are derived from the equal strip tiling. -/
+noncomputable def compactOneBitFiberBlueprintRefinement_of_compactBand {n : ℕ}
+    (facePatch : Set (Fin (n + 1) → ℝ)) (hfacePatchCompact : IsCompact facePatch)
+    (base : Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (epsilon : ℝ) (hbase : IsCompact base) (hlower : Continuous lower)
+    (hupper : Continuous upper) (horder : ∀ y ∈ base, lower y ≤ upper y)
+    (hepsilon : 0 < epsilon)
+    (hfaceBand : facePatch ⊆
+      projectionFiberBand base (fun y => some (lower y)) (fun y => some (upper y))) :
+    CompactOneBitFiberBlueprintRefinement facePatch base lower upper epsilon := by
+  let tiling := compactProjectionFiberTiling_of_compactBase
+    base lower upper epsilon hbase hlower hupper horder hepsilon
+  refine ⟨tiling, ?_, ?_⟩
+  · ext x
+    constructor
+    · intro hx
+      have hxBand := hfaceBand hx
+      rw [tiling.tiles_cover] at hxBand
+      obtain ⟨i, hi⟩ := Set.mem_iUnion.mp hxBand
+      exact Set.mem_iUnion.mpr ⟨i, ⟨hx, hi⟩⟩
+    · intro hx
+      obtain ⟨i, hi⟩ := Set.mem_iUnion.mp hx
+      exact hi.1
+  · intro i
+    exact hfacePatchCompact.inter (tiling.tile_compact i)
+
+/-- The compact restricted radial boundary family from Craciun v3, §8 Step 1 admits one shared
+one-bit fiber subdivision. We use its coordinate projection as the base and the last blue-box
+coordinate as a constant upper graph; every radial tile lies in this band. The shared subdivision
+is the common strip structure needed before assigning and gluing lower-dimensional face data. -/
+noncomputable def compactProjectiveRadialFamily_fiberRefinement {n : ℕ} {ι : Type*}
+    [Fintype ι]
+    (diagramTile : ι → Set (Fin (n + 1) → ℝ)) (upper : Fin (n + 1) → ℝ)
+    (epsilon : ℝ)
+    (hdiagramNonnegative : ∀ k x, x ∈ diagramTile k → ∀ i, 0 ≤ x i)
+    (hdiagramNonzero : ∀ k x, x ∈ diagramTile k → x ≠ 0)
+    (hdiagramAnchor : ∀ k x, x ∈ diagramTile k → x 0 = 1)
+    (hdiagramCompact : ∀ k, IsCompact (diagramTile k))
+    (hupper : ∀ i, 0 < upper i) (hepsilon : 0 < epsilon)
+    (hdiagramCoversNormalizedDomain : ∀ x,
+      x ∈ craciunProjectiveDomain → x 0 = 1 → (∀ i, x i ≤ upper i) → x ∈ ⋃ k, diagramTile k) :
+    Σ base : Set (Fin n → ℝ),
+      CompactOneBitFiberBlueprintRefinement
+        (⋃ k, radialBoxDiagramTile (diagramTile k) upper
+          (hdiagramNonnegative k) (hdiagramNonzero k) hupper ∩ craciunProjectiveDomain)
+        base (fun _ => 0) (fun _ => upper (Fin.last n)) epsilon := by
+  let facePatch : Set (Fin (n + 1) → ℝ) :=
+    ⋃ k, radialBoxDiagramTile (diagramTile k) upper
+      (hdiagramNonnegative k) (hdiagramNonzero k) hupper ∩ craciunProjectiveDomain
+  have hfaceCompact : IsCompact facePatch :=
+    (isCompact_and_covers_projectiveRadialTiles diagramTile upper hdiagramNonnegative
+      hdiagramAnchor hdiagramCompact hupper hdiagramCoversNormalizedDomain).1
+  let base : Set (Fin n → ℝ) := forgetLastCoordinate n '' facePatch
+  have hprojection : Continuous (forgetLastCoordinate n) :=
+    (forgetLastCoordinate n).continuous_of_finiteDimensional
+  have hbaseCompact : IsCompact base := by
+    exact hfaceCompact.image hprojection
+  have hupperPositive : 0 < upper (Fin.last n) := hupper (Fin.last n)
+  have hband : facePatch ⊆ projectionFiberBand base
+      (fun _ => some (0 : ℝ)) (fun _ => some (upper (Fin.last n))) := by
+    intro x hx
+    obtain ⟨k, hk⟩ := Set.mem_iUnion.mp hx
+    have hbox := radialBoxDiagramTile_subset_box (diagramTile k) upper
+      (hdiagramNonnegative k) (hdiagramNonzero k) hupper hk.1
+    apply (mem_projectionFiberBand_bounded_iff base (fun _ => 0)
+      (fun _ => upper (Fin.last n)) x).2
+    refine ⟨⟨x, hx, rfl⟩, ?_, ?_⟩
+    · exact (hbox (Fin.last n)).1
+    · exact (hbox (Fin.last n)).2
+  refine ⟨base, ?_⟩
+  exact compactOneBitFiberBlueprintRefinement_of_compactBand facePatch hfaceCompact base
+    (fun _ => 0) (fun _ => upper (Fin.last n)) epsilon hbaseCompact continuous_const
+    continuous_const (fun y hy => le_of_lt hupperPositive) hepsilon hband
+
+/-- A finite family of lower-dimensional base tiles refined by one shared fiber subdivision. Using
+one global tiling is essential: adjacent lower-dimensional patches then use identical endpoint
+graphs on their overlaps, so the higher-dimensional pieces glue along the same seams. -/
+structure CompactOneBitFiberPatchCover {n : ℕ} {ι : Type*} [Fintype ι]
+    (facePatch : Set (Fin (n + 1) → ℝ)) (base : Set (Fin n → ℝ))
+    (baseTile : ι → Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (epsilon : ℝ) where
+  /-- One compact strip tiling over the union base supplies a common subdivision count and common
+  endpoint graphs to every lower-dimensional patch. -/
+  tiling : CompactProjectionFiberTiling base lower upper epsilon
+  /-- Every lower-dimensional base tile is contained in the parent base. -/
+  baseTile_subset : ∀ i, baseTile i ⊆ base
+  /-- The projected base tiles have disjoint ordinary interiors. -/
+  baseTile_interiors_disjoint : ∀ i j, i ≠ j →
+    interior (baseTile i) ∩ interior (baseTile j) = ∅
+  /-- Adjacent strips above any two projected base tiles meet on their shared endpoint graph over
+  the overlap of those bases. This is the seam-compatibility invariant passed to the next
+  induction stage. -/
+  baseTile_adjacent_seam : ∀ i j,
+    (∀ y ∈ baseTile i ∩ baseTile j, lower y ≤ upper y) →
+    ∀ k : Fin tiling.subdivisionCount,
+      (facePatch ∩ projectionFiberSubdivisionTile (baseTile i) lower upper k.castSucc) ∩
+          (facePatch ∩ projectionFiberSubdivisionTile (baseTile j) lower upper k.succ) =
+        facePatch ∩ (fun y : Fin n → ℝ =>
+          projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc y) ''
+            (baseTile i ∩ baseTile j)
+  /-- For arbitrary strip indices, the overlap of two lifted lower-dimensional patches is exactly
+  the common face patch over the intersection of their projected bases. This includes degenerate
+  fibers, where even nonadjacent closed strips may meet. -/
+  baseTile_strip_overlap : ∀ i j (k l : Fin (tiling.subdivisionCount + 1)),
+    (facePatch ∩ projectionFiberSubdivisionTile (baseTile i) lower upper k) ∩
+        (facePatch ∩ projectionFiberSubdivisionTile (baseTile j) lower upper l) =
+      facePatch ∩ (projectionFiberSubdivisionTile (baseTile i ∩ baseTile j) lower upper k ∩
+        projectionFiberSubdivisionTile (baseTile i ∩ baseTile j) lower upper l)
+  /-- The face patch is exactly covered by its intersections with all generated strips. -/
+  facePatch_eq_iUnion_tiles :
+    facePatch = ⋃ p : Σ i : ι, Fin (tiling.subdivisionCount + 1),
+      facePatch ∩ projectionFiberSubdivisionTile (baseTile p.1) lower upper p.2
+  /-- Every restricted face piece is compact. -/
+  facePatch_tile_compact : ∀ p : Σ i : ι, Fin (tiling.subdivisionCount + 1),
+    IsCompact (facePatch ∩ projectionFiberSubdivisionTile (baseTile p.1) lower upper p.2)
+  /-- All refined face patches have pairwise disjoint ordinary ambient interiors. -/
+  facePatch_tile_interiors_disjoint : ∀ p q : Σ i : ι,
+      Fin (tiling.subdivisionCount + 1), p ≠ q →
+    interior (facePatch ∩ projectionFiberSubdivisionTile (baseTile p.1) lower upper p.2) ∩
+      interior (facePatch ∩ projectionFiberSubdivisionTile (baseTile q.1) lower upper q.2) = ∅
+
+/-- The midpoint representatives of a refined one-bit patch project onto the interior of its
+lower-dimensional base tile and lie in the ambient interior of the corresponding lifted strip.
+This is the concrete tile-to-face incidence for the Case 1.2 refinement when its fiber is
+nondegenerate. -/
+theorem CompactOneBitFiberPatchCover.centerGraph_interior_incidence
+    {n : ℕ} {ι : Type*} [Fintype ι]
+    {facePatch : Set (Fin (n + 1) → ℝ)} {base : Set (Fin n → ℝ)}
+    {baseTile : ι → Set (Fin n → ℝ)} {lower upper : (Fin n → ℝ) → ℝ}
+    {epsilon : ℝ}
+    (cover : CompactOneBitFiberPatchCover facePatch base baseTile lower upper epsilon)
+    (hlower : Continuous lower) (hupper : Continuous upper)
+    (horderStrict : ∀ y ∈ base, lower y < upper y)
+    (p : Σ i : ι, Fin (cover.tiling.subdivisionCount + 1)) :
+    projectionFiberSubdivisionCenterGraph (interior (baseTile p.1))
+        (fun _ y => cover.tiling.tile_center p.2 y) p.2 ⊆
+        interior (projectionFiberSubdivisionTile (baseTile p.1) lower upper p.2) ∧
+      forgetLastCoordinate n ''
+        projectionFiberSubdivisionCenterGraph (interior (baseTile p.1))
+          (fun _ y => cover.tiling.tile_center p.2 y) p.2 = interior (baseTile p.1) := by
+  constructor
+  · rintro x ⟨y, hy, rfl⟩
+    change Fin.snoc y (cover.tiling.tile_center p.2 y) ∈
+      interior (projectionFiberSubdivisionTile (baseTile p.1) lower upper p.2)
+    rw [cover.tiling.tile_center_eq_midpoint]
+    exact projectionFiberSubdivisionCenter_mem_interior_tile (baseTile p.1) lower upper
+      hlower hupper (fun y hy => horderStrict y (cover.baseTile_subset p.1 hy)) p.2 y hy
+  · ext y
+    constructor
+    · rintro ⟨x, ⟨z, hz, rfl⟩, hproj⟩
+      have hproj' : forgetLastCoordinate n (Fin.snoc z (cover.tiling.tile_center p.2 z)) = z := by
+        simp [forgetLastCoordinate]
+      rw [hproj'] at hproj
+      simpa [hproj] using hz
+    · intro hy
+      refine ⟨Fin.snoc y (cover.tiling.tile_center p.2 y), ?_, ?_⟩
+      · exact ⟨y, hy, rfl⟩
+      · simp [forgetLastCoordinate]
+
+/-- When the Case 1.2 parent patch is the full bounded fiber band, each selected midpoint lies
+in its restricted chart patch. This is the membership bridge that lets a wall label proved on the
+whole patch apply at the Craciun tile basepoint. -/
+theorem CompactOneBitFiberPatchCover.center_lift_mem_band_patch
+    {n : ℕ} {ι : Type*} [Fintype ι]
+    {facePatch : Set (Fin (n + 1) → ℝ)} {base : Set (Fin n → ℝ)}
+    {baseTile : ι → Set (Fin n → ℝ)} {lower upper : (Fin n → ℝ) → ℝ}
+    {epsilon : ℝ}
+    (cover : CompactOneBitFiberPatchCover facePatch base baseTile lower upper epsilon)
+    (hfaceEq : facePatch =
+      projectionFiberBand base (fun y => some (lower y)) (fun y => some (upper y)))
+    (horder : ∀ y ∈ base, lower y ≤ upper y)
+    (p : Σ i : ι, Fin (cover.tiling.subdivisionCount + 1))
+    {y : Fin n → ℝ} (hy : y ∈ baseTile p.1) :
+    Fin.snoc y (cover.tiling.tile_center p.2 y) ∈
+      facePatch ∩ projectionFiberSubdivisionTile (baseTile p.1) lower upper p.2 := by
+  have hbase : y ∈ base := cover.baseTile_subset p.1 hy
+  have hcenterMem := cover.tiling.tile_center_mem p.2 y hbase
+  constructor
+  · have hband : Fin.snoc y (cover.tiling.tile_center p.2 y) ∈
+        projectionFiberBand base (fun y => some (lower y)) (fun y => some (upper y)) :=
+      projectionFiberSubdivisionTile_subset_band base lower upper horder p.2 hcenterMem
+    exact hfaceEq.symm ▸ hband
+  · apply (mem_projectionFiberSubdivisionTile_snoc_iff
+      (baseTile p.1) lower upper p.2 y (cover.tiling.tile_center p.2 y)).2
+    have hcoords := (mem_projectionFiberSubdivisionTile_snoc_iff
+      base lower upper p.2 y (cover.tiling.tile_center p.2 y)).mp hcenterMem
+    exact ⟨hy, hcoords.2.1, hcoords.2.2⟩
+
+/-- Craciun v3, §7.4.3, Step 2: every nonempty restricted tile has an actual basepoint on the
+face patch, and its coordinate projection lies in the corresponding lower-dimensional tile. This
+is the incidence datum for arbitrary restricted patches; it does not presume that the face patch
+fills the parent band or that the midpoint graph lies on the face. -/
+theorem CompactOneBitFiberPatchCover.exists_restricted_tile_basepoint_incidence
+    {n : ℕ} {ι : Type*} [Fintype ι]
+    {facePatch : Set (Fin (n + 1) → ℝ)} {base : Set (Fin n → ℝ)}
+    {baseTile : ι → Set (Fin n → ℝ)} {lower upper : (Fin n → ℝ) → ℝ}
+    {epsilon : ℝ}
+    (cover : CompactOneBitFiberPatchCover facePatch base baseTile lower upper epsilon)
+    (p : Σ i : ι, Fin (cover.tiling.subdivisionCount + 1))
+    (hne : (facePatch ∩ projectionFiberSubdivisionTile
+      (baseTile p.1) lower upper p.2).Nonempty) :
+    ∃ x, x ∈ facePatch ∩ projectionFiberSubdivisionTile
+      (baseTile p.1) lower upper p.2 ∧
+      forgetLastCoordinate n x ∈ baseTile p.1 := by
+  obtain ⟨x, hx⟩ := hne
+  have htile := hx.2
+  have hprojected : forgetLastCoordinate n x ∈ baseTile p.1 := by
+    change (let y := forgetLastCoordinate n x
+      y ∈ baseTile p.1 ∧ projectionFiberSubdivisionEndpoint lower upper p.2.castSucc y ≤
+        x (Fin.last n) ∧ x (Fin.last n) ≤
+          projectionFiberSubdivisionEndpoint lower upper p.2.succ y) at htile
+    exact htile.1
+  exact ⟨x, hx, hprojected⟩
+
+/-- The midpoint representative of one strip cannot lie in any different closed strip over the
+same restricted lower-dimensional base tile. The only overlaps left between those refined patches
+are therefore the endpoint seams identified by the adjacent-tile compatibility theorem. -/
+theorem CompactOneBitFiberPatchCover.center_lift_not_mem_other_strip
+    {n : ℕ} {ι : Type*} [Fintype ι]
+    {facePatch : Set (Fin (n + 1) → ℝ)} {base : Set (Fin n → ℝ)}
+    {baseTile : ι → Set (Fin n → ℝ)} {lower upper : (Fin n → ℝ) → ℝ}
+    {epsilon : ℝ}
+    (cover : CompactOneBitFiberPatchCover facePatch base baseTile lower upper epsilon)
+    (horderStrict : ∀ y ∈ base, lower y < upper y)
+    (i : ι) (j k : Fin (cover.tiling.subdivisionCount + 1)) (hjk : j ≠ k)
+    {y : Fin n → ℝ} (hy : y ∈ baseTile i) :
+    Fin.snoc y (cover.tiling.tile_center j y) ∉
+      projectionFiberSubdivisionTile (baseTile i) lower upper k := by
+  intro hmem
+  have hparent := cover.tiling.tile_center_not_mem_otherTile horderStrict j k hjk
+    (cover.baseTile_subset i hy)
+  exact hparent ((projectionFiberSubdivisionTile_mono (cover.baseTile_subset i)
+    lower upper k) hmem)
+
+/-- Each restricted patch in a compact one-bit cover inherits a projected scale which controls its
+ambient diameter. This packages the fiber-width certificate with uniform continuity of the strip
+endpoint; it is the estimate needed before assigning one fixed local wall to a refined patch. -/
+theorem CompactOneBitFiberPatchCover.restrictedTile_diameter_control
+    {n : ℕ} {ι : Type*} [Fintype ι]
+    {facePatch : Set (Fin (n + 1) → ℝ)} {base : Set (Fin n → ℝ)}
+    {baseTile : ι → Set (Fin n → ℝ)} {lower upper : (Fin n → ℝ) → ℝ}
+    {epsilon : ℝ}
+    (cover : CompactOneBitFiberPatchCover facePatch base baseTile lower upper epsilon)
+    (hbaseTileCompact : ∀ i, IsCompact (baseTile i))
+    (hlower : Continuous lower) (hupper : Continuous upper)
+    (δ tolerance : ℝ) (htolerance : 0 < tolerance)
+    (hbudget : epsilon + tolerance < δ) (hδ : 0 < δ) :
+    ∀ p : Σ i : ι, Fin (cover.tiling.subdivisionCount + 1),
+      ∃ η : ℝ, 0 < η ∧ η < δ ∧
+        ∀ x y,
+          x ∈ facePatch ∩ projectionFiberSubdivisionTile (baseTile p.1) lower upper p.2 →
+          y ∈ facePatch ∩ projectionFiberSubdivisionTile (baseTile p.1) lower upper p.2 →
+          dist (forgetLastCoordinate n x) (forgetLastCoordinate n y) < η → dist x y < δ := by
+  intro p
+  obtain ⟨η, hη, hηδ, hdiam⟩ := exists_projectionFiberSubdivisionTile_modulus_of_compactBase
+    (baseTile p.1) lower upper (hbaseTileCompact p.1) hlower hupper
+    epsilon tolerance δ htolerance p.2
+    (by
+      intro z hz
+      exact cover.tiling.fiber_width_le p.2 z (cover.baseTile_subset p.1 hz)) hbudget hδ
+  refine ⟨η, hη, hηδ, ?_⟩
+  intro x y hx hy hprojected
+  exact hdiam x y hx.2 hy.2 hprojected
+
+/-- Neighboring one-bit strips above two lower-dimensional tiles meet on the endpoint graph over
+their common projected face. The shared count makes this seam canonical even when the lower tiles
+were assembled independently. -/
+theorem CompactOneBitFiberPatchCover.adjacent_base_tiles_share_seam
+    {n : ℕ} {ι : Type*} [Fintype ι]
+    {facePatch : Set (Fin (n + 1) → ℝ)} {base : Set (Fin n → ℝ)}
+    {baseTile : ι → Set (Fin n → ℝ)} {lower upper : (Fin n → ℝ) → ℝ} {epsilon : ℝ}
+    (cover : CompactOneBitFiberPatchCover facePatch base baseTile lower upper epsilon)
+    (i j : ι) (horder : ∀ y ∈ baseTile i ∩ baseTile j, lower y ≤ upper y)
+    (k : Fin cover.tiling.subdivisionCount) :
+    (facePatch ∩ projectionFiberSubdivisionTile (baseTile i) lower upper k.castSucc) ∩
+        (facePatch ∩ projectionFiberSubdivisionTile (baseTile j) lower upper k.succ) =
+      facePatch ∩ (fun y : Fin n → ℝ =>
+        projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc y) ''
+          (baseTile i ∩ baseTile j) := by
+  exact cover.baseTile_adjacent_seam i j horder k
+
+/-- The shared endpoint seam of two neighboring restricted patches is compact. This packages
+the geometric overlap from Craciun v3, §7.4.3 with the compact tile certificates, so a wall
+margin on both incident tiles can be made uniform on their common seam before the pieces are
+glued. -/
+theorem CompactOneBitFiberPatchCover.adjacent_base_tiles_shared_seam_compact
+    {n : ℕ} {ι : Type*} [Fintype ι]
+    {facePatch : Set (Fin (n + 1) → ℝ)} {base : Set (Fin n → ℝ)}
+    {baseTile : ι → Set (Fin n → ℝ)} {lower upper : (Fin n → ℝ) → ℝ} {epsilon : ℝ}
+    (cover : CompactOneBitFiberPatchCover facePatch base baseTile lower upper epsilon)
+    (i j : ι)
+    (horder : ∀ y ∈ baseTile i ∩ baseTile j, lower y ≤ upper y)
+    (k : Fin cover.tiling.subdivisionCount) :
+    IsCompact (facePatch ∩ (fun y : Fin n → ℝ =>
+      projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc y) ''
+        (baseTile i ∩ baseTile j)) := by
+  rw [← cover.adjacent_base_tiles_share_seam i j horder k]
+  exact (cover.facePatch_tile_compact ⟨i, k.castSucc⟩).inter
+    (cover.facePatch_tile_compact ⟨j, k.succ⟩)
+
+/-- Lift a finite compact cover of a projected base with pairwise disjoint interiors to a finite
+cover of a compact face patch in a bounded fiber band. A single subdivision over the full base
+guarantees exact coverage, compactness, pairwise ambient-interior disjointness, and aligned seams. -/
+noncomputable def compactOneBitFiberPatchCover_of_compactBand {n : ℕ} {ι : Type*}
+    [Fintype ι] (facePatch : Set (Fin (n + 1) → ℝ)) (hfaceCompact : IsCompact facePatch)
+    (base : Set (Fin n → ℝ)) (baseTile : ι → Set (Fin n → ℝ))
+    (lower upper : (Fin n → ℝ) → ℝ) (epsilon : ℝ)
+    (hbaseCover : base = ⋃ i, baseTile i)
+    (hbaseTileCompact : ∀ i, IsCompact (baseTile i))
+    (hbaseTileInteriorsDisjoint : ∀ i j, i ≠ j →
+      interior (baseTile i) ∩ interior (baseTile j) = ∅)
+    (hlower : Continuous lower) (hupper : Continuous upper)
+    (horder : ∀ y ∈ base, lower y ≤ upper y)
+    (hepsilon : 0 < epsilon)
+    (hfaceBand : facePatch ⊆
+      projectionFiberBand base (fun y => some (lower y)) (fun y => some (upper y))) :
+    CompactOneBitFiberPatchCover facePatch base baseTile lower upper epsilon := by
+  classical
+  have hbaseCompact : IsCompact base := by
+    rw [hbaseCover]
+    exact isCompact_iUnion hbaseTileCompact
+  let htileBase : ∀ i, baseTile i ⊆ base := by
+    intro i y hy
+    rw [hbaseCover]
+    exact Set.mem_iUnion.mpr ⟨i, hy⟩
+  let tiling := compactProjectionFiberTiling_of_compactBase
+    base lower upper epsilon hbaseCompact hlower hupper horder hepsilon
+  refine ⟨tiling, htileBase, hbaseTileInteriorsDisjoint, ?_, ?_, ?_, ?_, ?_⟩
+  · intro i j horderIJ k
+    ext x
+    have htiles := projectionFiberSubdivisionAdjacentTiles_intersection_eq_graph_over_base_intersection
+      (baseTile i) (baseTile j) lower upper horderIJ k
+    have htilesAt := congrArg (fun s : Set (Fin (n + 1) → ℝ) => x ∈ s) htiles
+    simp only [Set.mem_inter_iff] at htilesAt ⊢
+    tauto
+  · intro i j k l
+    ext x
+    have htiles := projectionFiberSubdivisionTiles_intersection_eq_over_base_intersection
+      (baseTile i) (baseTile j) lower upper k l
+    have htilesAt := congrArg (fun s : Set (Fin (n + 1) → ℝ) => x ∈ s) htiles
+    simp only [Set.mem_inter_iff] at htilesAt ⊢
+    tauto
+  · ext x
+    constructor
+    · intro hx
+      have hxBand := hfaceBand hx
+      obtain ⟨hybase, hlow, hhigh⟩ :=
+        (mem_projectionFiberBand_bounded_iff base lower upper x).mp hxBand
+      rw [hbaseCover] at hybase
+      obtain ⟨i, hy⟩ := Set.mem_iUnion.mp hybase
+      have hxLocal : x ∈ projectionFiberBand (baseTile i)
+          (fun y => some (lower y)) (fun y => some (upper y)) := by
+        apply (mem_projectionFiberBand_bounded_iff (baseTile i) lower upper x).2
+        exact ⟨hy, hlow, hhigh⟩
+      rw [projectionFiberBand_bounded_eq_iUnion_subdivisionTiles
+        (m := tiling.subdivisionCount) (baseTile i) lower upper
+        (fun y hy => horder y (htileBase i hy))] at hxLocal
+      obtain ⟨j, htile⟩ := Set.mem_iUnion.mp hxLocal
+      exact Set.mem_iUnion.mpr ⟨⟨i, j⟩, ⟨hx, htile⟩⟩
+    · intro hx
+      obtain ⟨p, hpatch, _⟩ := Set.mem_iUnion.mp hx
+      exact hpatch
+  · intro p
+    exact hfaceCompact.inter (isCompact_projectionFiberSubdivisionTile
+      (baseTile p.1) lower upper (hbaseTileCompact p.1) hlower hupper
+      (fun y hy => horder y (htileBase p.1 hy)) p.2)
+  · intro p q hpq
+    rcases p with ⟨i, k⟩
+    rcases q with ⟨j, ℓ⟩
+    have hpatch_i :
+        interior (facePatch ∩ projectionFiberSubdivisionTile (baseTile i) lower upper k) ⊆
+          interior (projectionFiberSubdivisionTile (baseTile i) lower upper k) :=
+      interior_mono Set.inter_subset_right
+    have hpatch_j :
+        interior (facePatch ∩ projectionFiberSubdivisionTile (baseTile j) lower upper ℓ) ⊆
+          interior (projectionFiberSubdivisionTile (baseTile j) lower upper ℓ) :=
+      interior_mono Set.inter_subset_right
+    have htiles :
+        interior (projectionFiberSubdivisionTile (baseTile i) lower upper k) ∩
+          interior (projectionFiberSubdivisionTile (baseTile j) lower upper ℓ) = ∅ := by
+      by_cases hij : i = j
+      · subst j
+        have hkl : k ≠ ℓ := by
+          intro hkl
+          apply hpq
+          cases hkl
+          rfl
+        exact disjoint_projectionFiberSubdivisionTile_ambientInteriors
+          (baseTile i) lower upper (fun y hy => horder y (htileBase i hy)) k ℓ hkl
+      · exact disjoint_projectionFiberSubdivisionTile_ambientInteriors_of_disjoint_baseInteriors
+          (baseTile i) (baseTile j) lower upper
+          (fun y hy => horder y (htileBase i hy))
+          (fun y hy => horder y (htileBase j hy)) k ℓ
+          (hbaseTileInteriorsDisjoint i j hij)
+    ext x
+    constructor
+    · intro hx
+      have htilemem : x ∈
+          interior (projectionFiberSubdivisionTile (baseTile i) lower upper k) ∩
+            interior (projectionFiberSubdivisionTile (baseTile j) lower upper ℓ) :=
+        ⟨hpatch_i hx.1, hpatch_j hx.2⟩
+      rw [htiles] at htilemem
+      simpa using htilemem
+    · simp
+
+/-- Consume the common §7.3 scale and the lifted Case 1.1 graph sections to construct compact
+Case 1.2 bands for a finite directed family of one-bit boundary pairs. Each band expands outward
+by the selected common tube radius, so it contains the restricted radius-tubes around both
+inherited boundary graphs, not only their center sections. The common projected base is tiled by
+intersections of the two inherited base covers, and the returned `CompactOneBitFiberPatchCover`
+retains compactness, exact coverage, pairwise interior disjointness, and seam identities. -/
+theorem CompactZeroBitFiberPatchCover.exists_common_scale_and_oneBit_fills
+    {n : ℕ} {ι τ : Type*} [Fintype ι] [Fintype τ]
+    (face : ι → Set (Fin (n + 1) → ℝ))
+    (base : ι → Set (Fin n → ℝ))
+    (tiles : ι → τ → Set (Fin n → ℝ))
+    (margin faceRadius : ι → ℝ)
+    (cover : ∀ i, CompactZeroBitFiberPatchCover (face i) (base i) (tiles i)
+      (margin i) (faceRadius i))
+    (neighborhood : ι → ι → Set (Fin (n + 1) → ℝ))
+    (hOpen : ∀ i j, i ≠ j → IsOpen (neighborhood i j))
+    (hFace : ∀ i j, i ≠ j → face i ∩ face j ⊆ neighborhood i j)
+    (oneBitBoundary : ι → ι → Prop)
+    (hOneBitDifferent : ∀ i j, oneBitBoundary i j → i ≠ j)
+    (hcenterOrder : ∀ i j, oneBitBoundary i j → ∀ y ∈ base i ∩ base j,
+      (cover i).center y ≤ (cover j).center y)
+    (cap : ℝ) (hcap : 0 < cap) :
+    ∃ extension : ι → C(Fin n → ℝ, ℝ),
+      (∀ i y, y ∈ base i → extension i y = (cover i).center y) ∧
+      ∃ radius : ℝ, 0 < radius ∧ radius < cap ∧
+        (∀ i j, i ≠ j →
+          zeroBitPreBlueprintNeighborhood (face i) (base i)
+              (fun p => if p = criticalFacetBinaryWord n then radius else 0)
+              (criticalFacetBinaryWord n) ∩
+            zeroBitPreBlueprintNeighborhood (face j) (base j)
+              (fun p => if p = criticalFacetBinaryWord n then radius else 0)
+              (criticalFacetBinaryWord n) ⊆ neighborhood i j) ∧
+        (∀ i j, oneBitBoundary i j →
+          ∃ refinement : CompactOneBitFiberPatchCover
+              (projectionFiberBand (base i ∩ base j)
+                (fun y => some (extension i y - radius)) (fun y => some (extension j y + radius)))
+              (base i ∩ base j)
+              (fun p : τ × τ => tiles i p.1 ∩ tiles j p.2)
+              (fun y => extension i y - radius) (fun y => extension j y + radius) radius,
+            face i ∩ {x | forgetLastCoordinate n x ∈ base j} ⊆
+              projectionFiberBand (base i ∩ base j)
+                (fun y => some (extension i y - radius)) (fun y => some (extension j y + radius)) ∧
+            face j ∩ {x | forgetLastCoordinate n x ∈ base i} ⊆
+              projectionFiberBand (base i ∩ base j)
+                (fun y => some (extension i y - radius)) (fun y => some (extension j y + radius)) ∧
+            projectionFiberTube (base i ∩ base j) (extension i) radius ⊆
+              projectionFiberBand (base i ∩ base j)
+                (fun y => some (extension i y - radius)) (fun y => some (extension j y + radius)) ∧
+            projectionFiberTube (base i ∩ base j) (extension j) radius ⊆
+              projectionFiberBand (base i ∩ base j)
+                (fun y => some (extension i y - radius)) (fun y => some (extension j y + radius))) := by
+  classical
+  let extension : ι → C(Fin n → ℝ, ℝ) := fun i =>
+    Classical.choose (cover i).exists_continuous_center_extension
+  have hextension : ∀ i y, y ∈ base i → extension i y = (cover i).center y := by
+    intro i y hy
+    exact Classical.choose_spec (cover i).exists_continuous_center_extension y hy
+  obtain ⟨radius, hradius, hcapRadius, hscale⟩ :=
+    CompactZeroBitFiberPatchCover.exists_common_criticalFacet_scale
+      face base tiles margin faceRadius cover neighborhood hOpen hFace cap hcap
+  refine ⟨extension, hextension, radius, hradius, hcapRadius, hscale, ?_⟩
+  intro i j hboundary
+  have hij := hOneBitDifferent i j hboundary
+  let basePair := base i ∩ base j
+  let lower : (Fin n → ℝ) → ℝ := fun y => extension i y - radius
+  let upper : (Fin n → ℝ) → ℝ := fun y => extension j y + radius
+  let band := projectionFiberBand basePair (fun y => some (lower y))
+    (fun y => some (upper y))
+  have hbasePair : IsCompact basePair :=
+    (cover i).base_isCompact.inter (cover j).base_isCompact
+  have hcenterOrderExt : ∀ y ∈ basePair, extension i y ≤ extension j y := by
+    intro y hy
+    rw [hextension i y hy.1, hextension j y hy.2]
+    exact hcenterOrder i j hboundary y hy
+  have horder : ∀ y ∈ basePair, lower y ≤ upper y := by
+    intro y hy
+    change extension i y - radius ≤ extension j y + radius
+    have hcenter := hcenterOrderExt y hy
+    linarith [hradius.le]
+  have hlowerContinuous : Continuous lower := by
+    change Continuous (fun y => extension i y - radius)
+    exact (extension i).continuous.sub continuous_const
+  have hupperContinuous : Continuous upper := by
+    change Continuous (fun y => extension j y + radius)
+    exact (extension j).continuous.add continuous_const
+  have hbandCompact : IsCompact band :=
+    isCompact_projectionFiberBand_bounded basePair lower upper hbasePair
+      hlowerContinuous hupperContinuous horder
+  let baseTile : τ × τ → Set (Fin n → ℝ) := fun p => tiles i p.1 ∩ tiles j p.2
+  have hbaseCover : basePair = ⋃ p : τ × τ, baseTile p := by
+    change base i ∩ base j = ⋃ p : τ × τ, tiles i p.1 ∩ tiles j p.2
+    rw [(cover i).baseTile_cover, (cover j).baseTile_cover]
+    ext y
+    simp [Set.mem_iUnion, and_assoc, and_left_comm, and_comm]
+  have hbaseTileCompact : ∀ p, IsCompact (baseTile p) := by
+    intro p
+    have hleftTile : IsCompact (tiles i p.1) := by
+      rw [← (cover i).tile_tube_projects p.1]
+      exact (cover i).tile_tube_compact p.1 |>.image
+        (forgetLastCoordinate n).continuous_of_finiteDimensional
+    have hrightTile : IsCompact (tiles j p.2) := by
+      rw [← (cover j).tile_tube_projects p.2]
+      exact (cover j).tile_tube_compact p.2 |>.image
+        (forgetLastCoordinate n).continuous_of_finiteDimensional
+    exact hleftTile.inter hrightTile
+  have hbaseTileInteriorsDisjoint : ∀ p q, p ≠ q →
+      interior (baseTile p) ∩ interior (baseTile q) = ∅ := by
+    intro p q hpq
+    by_cases hfirst : p.1 = q.1
+    · have hsecond : p.2 ≠ q.2 := by
+        intro hsecond
+        apply hpq
+        exact Prod.ext hfirst hsecond
+      have hdisjoint := (cover j).baseTile_interiors_disjoint p.2 q.2 hsecond
+      apply Set.eq_empty_iff_forall_notMem.mpr
+      intro y hy
+      have hyBase : y ∈ interior (tiles j p.2) ∩ interior (tiles j q.2) :=
+        ⟨interior_mono Set.inter_subset_right hy.1,
+          interior_mono Set.inter_subset_right hy.2⟩
+      rw [hdisjoint] at hyBase
+      exact hyBase
+    · have hdisjoint := (cover i).baseTile_interiors_disjoint p.1 q.1 hfirst
+      apply Set.eq_empty_iff_forall_notMem.mpr
+      intro y hy
+      have hyBase : y ∈ interior (tiles i p.1) ∩ interior (tiles i q.1) :=
+        ⟨interior_mono Set.inter_subset_left hy.1,
+          interior_mono Set.inter_subset_left hy.2⟩
+      rw [hdisjoint] at hyBase
+      exact hyBase
+  let refinement := compactOneBitFiberPatchCover_of_compactBand
+    band hbandCompact basePair baseTile lower upper radius hbaseCover hbaseTileCompact
+    hbaseTileInteriorsDisjoint hlowerContinuous hupperContinuous horder
+    hradius Set.Subset.rfl
+  have hleft : face i ∩ {x | forgetLastCoordinate n x ∈ base j} ⊆ band := by
+    intro x hx
+    let y := forgetLastCoordinate n x
+    have hyi : y ∈ base i := by
+      exact (mem_projectionFiberTube_iff (base i) (cover i).center (faceRadius i) x).mp
+        ((cover i).facePatch_subset_tube hx.1) |>.1
+    have hyj : y ∈ base j := hx.2
+    have hcenterEq : extension i y = x (Fin.last n) := by
+      calc
+        extension i y = (cover i).center y := hextension i y hyi
+        _ = x (Fin.last n) := by
+          simpa [y] using (cover i).center_graph_on_face x hx.1
+    have hcenterOrderAt := hcenterOrderExt y ⟨hyi, hyj⟩
+    apply (mem_projectionFiberBand_bounded_iff basePair lower upper x).2
+    refine ⟨⟨hyi, hyj⟩, ?_, ?_⟩
+    · change extension i y - radius ≤ x (Fin.last n)
+      rw [hcenterEq]
+      linarith [hradius.le]
+    · change x (Fin.last n) ≤ extension j y + radius
+      rw [← hcenterEq]
+      linarith
+  have hright : face j ∩ {x | forgetLastCoordinate n x ∈ base i} ⊆ band := by
+    intro x hx
+    let y := forgetLastCoordinate n x
+    have hyi : y ∈ base i := hx.2
+    have hyj : y ∈ base j := by
+      exact (mem_projectionFiberTube_iff (base j) (cover j).center (faceRadius j) x).mp
+        ((cover j).facePatch_subset_tube hx.1) |>.1
+    have hcenterEq : extension j y = x (Fin.last n) := by
+      calc
+        extension j y = (cover j).center y := hextension j y hyj
+        _ = x (Fin.last n) := by
+          simpa [y] using (cover j).center_graph_on_face x hx.1
+    have hcenterOrderAt := hcenterOrderExt y ⟨hyi, hyj⟩
+    apply (mem_projectionFiberBand_bounded_iff basePair lower upper x).2
+    refine ⟨⟨hyi, hyj⟩, ?_, ?_⟩
+    · change extension i y - radius ≤ x (Fin.last n)
+      rw [← hcenterEq]
+      linarith
+    · change x (Fin.last n) ≤ extension j y + radius
+      rw [hcenterEq]
+      linarith [hradius.le]
+  have hleftTube : projectionFiberTube basePair (extension i) radius ⊆ band := by
+    intro x hx
+    obtain ⟨hy, hwidth⟩ := (mem_projectionFiberTube_iff basePair (extension i) radius x).mp hx
+    let y := forgetLastCoordinate n x
+    have hcenterOrderAt : extension i y ≤ extension j y := hcenterOrderExt y hy
+    apply (mem_projectionFiberBand_bounded_iff basePair lower upper x).2
+    refine ⟨hy, ?_, ?_⟩
+    · change extension i y - radius ≤ x (Fin.last n)
+      have hwidth' := abs_le.mp hwidth
+      linarith
+    · change x (Fin.last n) ≤ extension j y + radius
+      have hwidth' := abs_le.mp hwidth
+      linarith
+  have hrightTube : projectionFiberTube basePair (extension j) radius ⊆ band := by
+    intro x hx
+    obtain ⟨hy, hwidth⟩ := (mem_projectionFiberTube_iff basePair (extension j) radius x).mp hx
+    let y := forgetLastCoordinate n x
+    have hcenterOrderAt : extension i y ≤ extension j y := hcenterOrderExt y hy
+    apply (mem_projectionFiberBand_bounded_iff basePair lower upper x).2
+    refine ⟨hy, ?_, ?_⟩
+    · change extension i y - radius ≤ x (Fin.last n)
+      have hwidth' := abs_le.mp hwidth
+      linarith
+    · change x (Fin.last n) ≤ extension j y + radius
+      have hwidth' := abs_le.mp hwidth
+      linarith
+  exact ⟨refinement, hleft, hright, hleftTube, hrightTube⟩
+
+
+/-- The §7.4.3 graph-level one-bit fill can be chosen below every inherited positive face scale
+by the single multiplicative factor that works on all binary last-zero chains.  Consequently each
+equal strip subdivision produced by the returned compact fill is also below that same fraction of
+every incident face scale. -/
+theorem CompactZeroBitFiberPatchCover.exists_common_scale_and_oneBit_fills_along_binary_chains
+    {n : ℕ} {ι τ : Type*} [Fintype ι] [Fintype τ]
+    (face : ι → Set (Fin (n + 1) → ℝ))
+    (base : ι → Set (Fin n → ℝ))
+    (tiles : ι → τ → Set (Fin n → ℝ))
+    (margin faceRadius : ι → ℝ)
+    (cover : ∀ i, CompactZeroBitFiberPatchCover (face i) (base i) (tiles i)
+      (margin i) (faceRadius i))
+    (hfaceRadius : ∀ i, 0 < faceRadius i)
+    (neighborhood : ι → ι → Set (Fin (n + 1) → ℝ))
+    (hOpen : ∀ i j, i ≠ j → IsOpen (neighborhood i j))
+    (hFace : ∀ i j, i ≠ j → face i ∩ face j ⊆ neighborhood i j)
+    (oneBitBoundary : ι → ι → Prop)
+    (hOneBitDifferent : ∀ i j, oneBitBoundary i j → i ≠ j)
+    (hcenterOrder : ∀ i j, oneBitBoundary i j → ∀ y ∈ base i ∩ base j,
+      (cover i).center y ≤ (cover j).center y) :
+    ∃ ρ : ℝ, 0 < ρ ∧ ρ < 1 ∧
+      ∃ extension : ι → C(Fin n → ℝ, ℝ),
+        (∀ i y, y ∈ base i → extension i y = (cover i).center y) ∧
+        ∃ radius : ℝ, 0 < radius ∧
+          (∀ i, radius < ρ * faceRadius i) ∧
+          (∀ i j, i ≠ j →
+            zeroBitPreBlueprintNeighborhood (face i) (base i)
+                (fun p => if p = criticalFacetBinaryWord n then radius else 0)
+                (criticalFacetBinaryWord n) ∩
+              zeroBitPreBlueprintNeighborhood (face j) (base j)
+                (fun p => if p = criticalFacetBinaryWord n then radius else 0)
+                (criticalFacetBinaryWord n) ⊆ neighborhood i j) ∧
+          (∀ i j, oneBitBoundary i j →
+            ∃ refinement : CompactOneBitFiberPatchCover
+                (projectionFiberBand (base i ∩ base j)
+                  (fun y => some (extension i y - radius)) (fun y => some (extension j y + radius)))
+                (base i ∩ base j)
+                (fun p : τ × τ => tiles i p.1 ∩ tiles j p.2)
+                (fun y => extension i y - radius) (fun y => extension j y + radius) radius,
+              face i ∩ {x | forgetLastCoordinate n x ∈ base j} ⊆
+                projectionFiberBand (base i ∩ base j)
+                  (fun y => some (extension i y - radius)) (fun y => some (extension j y + radius)) ∧
+              face j ∩ {x | forgetLastCoordinate n x ∈ base i} ⊆
+                projectionFiberBand (base i ∩ base j)
+                  (fun y => some (extension i y - radius)) (fun y => some (extension j y + radius)) ∧
+              projectionFiberTube (base i ∩ base j) (extension i) radius ⊆
+                projectionFiberBand (base i ∩ base j)
+                  (fun y => some (extension i y - radius)) (fun y => some (extension j y + radius)) ∧
+              projectionFiberTube (base i ∩ base j) (extension j) radius ⊆
+                projectionFiberBand (base i ∩ base j)
+                  (fun y => some (extension i y - radius)) (fun y => some (extension j y + radius)) ∧
+              ∀ (k : Fin (refinement.tiling.subdivisionCount + 1))
+                (y : Fin n → ℝ),
+                y ∈ base i ∩ base j →
+                  projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.succ y -
+                    projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.castSucc y <
+                      ρ * faceRadius i ∧
+                  projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.succ y -
+                    projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.castSucc y <
+                      ρ * faceRadius j) := by
+  classical
+  have hq0 : (0 : ℝ) < 1 / 2 := by norm_num
+  have hq1 : (1 / 2 : ℝ) < 1 := by norm_num
+  obtain ⟨ρ, hρpos, hρlt, _hordinary, _hallOnes⟩ :=
+    exists_uniform_coherentBinaryWordTileScale_separation (n := n + 1) hq0 hq1
+  have hfloor : ∃ scale : ℝ, 0 < scale ∧ ∀ i, scale ≤ faceRadius i := by
+    by_cases hι : Nonempty ι
+    · let values : Finset ℝ := Finset.univ.image faceRadius
+      have hvalues : values.Nonempty := by
+        obtain ⟨i⟩ := hι
+        exact ⟨faceRadius i,
+          Finset.mem_image.mpr ⟨i, Finset.mem_univ i, rfl⟩⟩
+      let scale : ℝ := values.min' hvalues
+      have hmem : scale ∈ values := by
+        exact Finset.min'_mem values hvalues
+      obtain ⟨i, _hi, hvalue⟩ := Finset.mem_image.mp hmem
+      refine ⟨scale, ?_, ?_⟩
+      · rw [← hvalue]
+        exact hfaceRadius i
+      · intro j
+        exact Finset.min'_le values (faceRadius j)
+          (Finset.mem_image.mpr ⟨j, Finset.mem_univ j, rfl⟩)
+    · exact ⟨1, by norm_num, fun i => (hι ⟨i⟩).elim⟩
+  obtain ⟨scale, hscalePos, hscaleLe⟩ := hfloor
+  have hcap : 0 < ρ * scale := mul_pos hρpos hscalePos
+  obtain ⟨extension, hextension, radius, hradius, hradiusCap, hconstraints, hfills⟩ :=
+    CompactZeroBitFiberPatchCover.exists_common_scale_and_oneBit_fills
+      face base tiles margin faceRadius cover neighborhood hOpen hFace oneBitBoundary
+      hOneBitDifferent hcenterOrder (ρ * scale) hcap
+  refine ⟨ρ, hρpos, hρlt, extension, hextension, radius, hradius, ?_, hconstraints, ?_⟩
+  · intro i
+    calc
+      radius < ρ * scale := hradiusCap
+      _ ≤ ρ * faceRadius i := mul_le_mul_of_nonneg_left (hscaleLe i) hρpos.le
+  · intro i j hboundary
+    obtain ⟨refinement, hleft, hright, hleftTube, hrightTube⟩ := hfills i j hboundary
+    refine ⟨refinement, hleft, hright, hleftTube, hrightTube, ?_⟩
+    intro k y hy
+    constructor
+    · calc
+        projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.succ y -
+            projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.castSucc y ≤
+              radius := refinement.tiling.fiber_width_le k y hy
+        _ < ρ * faceRadius i := by
+          calc
+            radius < ρ * scale := hradiusCap
+            _ ≤ ρ * faceRadius i :=
+              mul_le_mul_of_nonneg_left (hscaleLe i) hρpos.le
+    · calc
+        projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.succ y -
+            projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.castSucc y ≤
+              radius := refinement.tiling.fiber_width_le k y hy
+        _ < ρ * faceRadius j := by
+          calc
+            radius < ρ * scale := hradiusCap
+            _ ≤ ρ * faceRadius j :=
+              mul_le_mul_of_nonneg_left (hscaleLe j) hρpos.le
+
+
+
+/-- Consume the arbitrary-word common ratio in the finite Case 1.1/1.2 construction. For every
+zero-ending word, the selected graph tube fits inside its full Craciun pre-blueprint; all tube
+overlaps remain inside inherited face neighborhoods, and the same radius drives the compatible
+Case 1.2 strip fills with the binary-chain width bound. -/
+theorem CompactZeroBitFiberPatchCover.exists_common_scale_and_oneBit_fills_for_craciun_words
+    {n : ℕ} {ι τ : Type*} [Fintype ι] [Fintype τ]
+    (face : ι → Set (Fin (n + 1) → ℝ))
+    (base : ι → Set (Fin n → ℝ))
+    (tiles : ι → τ → Set (Fin n → ℝ))
+    (margin faceRadius : ι → ℝ)
+    (cover : ∀ i, CompactZeroBitFiberPatchCover (face i) (base i) (tiles i)
+      (margin i) (faceRadius i))
+    (hfaceRadius : ∀ i, 0 < faceRadius i)
+    (word : ι → List Bool)
+    (hwordLength : ∀ i, (word i).length ≤ n + 1)
+    (hwordLast : ∀ i, (word i).getLast? = some false)
+    (neighborhood : ι → ι → Set (Fin (n + 1) → ℝ))
+    (hOpen : ∀ i j, i ≠ j → IsOpen (neighborhood i j))
+    (hFace : ∀ i j, i ≠ j → face i ∩ face j ⊆ neighborhood i j)
+    (oneBitBoundary : ι → ι → Prop)
+    (hOneBitDifferent : ∀ i j, oneBitBoundary i j → i ≠ j)
+    (hcenterOrder : ∀ i j, oneBitBoundary i j → ∀ y ∈ base i ∩ base j,
+      (cover i).center y ≤ (cover j).center y)
+    (oneBitWord : {p : ι × ι // oneBitBoundary p.1 p.2} → List Bool)
+    (hOneBitWordLength : ∀ p, (oneBitWord p).length ≤ n + 1)
+    (hOneBitWordLast : ∀ p, (oneBitWord p).getLast? = some true) :
+    ∃ ρ : ℝ, 0 < ρ ∧ ρ < 1 ∧
+      ∃ q : ℝ, 0 < q ∧ q < 1 ∧
+        ∃ extension : ι → C(Fin n → ℝ, ℝ),
+          (∀ i y, y ∈ base i → extension i y = (cover i).center y) ∧
+          ∃ radius : ℝ, 0 < radius ∧
+            (∀ i, radius < ρ * faceRadius i) ∧
+            (∀ i, radius < craciunBinaryWordEpsilon (n + 1) q (word i)) ∧
+            (∀ p, radius < coherentBinaryWordTileScale (n + 1) q (oneBitWord p)
+              (hOneBitWordLength p)) ∧
+            (∀ i,
+              projectionFiberTube (base i) (extension i) radius ⊆
+                zeroBitPreBlueprintNeighborhood (face i) (base i)
+                  (craciunBinaryWordEpsilon (n + 1) q) (word i)) ∧
+            (∀ i j, i ≠ j →
+              zeroBitPreBlueprintNeighborhood (face i) (base i)
+                  (craciunBinaryWordEpsilon (n + 1) q) (word i) ∩
+                zeroBitPreBlueprintNeighborhood (face j) (base j)
+                  (craciunBinaryWordEpsilon (n + 1) q) (word j) ⊆ neighborhood i j) ∧
+            (∀ i j, i ≠ j →
+              projectionFiberTube (base i) (extension i) radius ∩
+                projectionFiberTube (base j) (extension j) radius ⊆ neighborhood i j) ∧
+            (∀ i j (hboundary : oneBitBoundary i j),
+              ∃ refinement : CompactOneBitFiberPatchCover
+                  (projectionFiberBand (base i ∩ base j)
+                    (fun y => some (extension i y - radius)) (fun y => some (extension j y + radius)))
+                  (base i ∩ base j)
+                  (fun p : τ × τ => tiles i p.1 ∩ tiles j p.2)
+                  (fun y => extension i y - radius) (fun y => extension j y + radius) radius,
+                face i ∩ {x | forgetLastCoordinate n x ∈ base j} ⊆
+                  projectionFiberBand (base i ∩ base j)
+                    (fun y => some (extension i y - radius)) (fun y => some (extension j y + radius)) ∧
+                face j ∩ {x | forgetLastCoordinate n x ∈ base i} ⊆
+                  projectionFiberBand (base i ∩ base j)
+                    (fun y => some (extension i y - radius)) (fun y => some (extension j y + radius)) ∧
+                projectionFiberTube (base i ∩ base j) (extension i) radius ⊆
+                  projectionFiberBand (base i ∩ base j)
+                    (fun y => some (extension i y - radius)) (fun y => some (extension j y + radius)) ∧
+                projectionFiberTube (base i ∩ base j) (extension j) radius ⊆
+                  projectionFiberBand (base i ∩ base j)
+                    (fun y => some (extension i y - radius)) (fun y => some (extension j y + radius)) ∧
+                ∀ (k : Fin (refinement.tiling.subdivisionCount + 1))
+                  (y : Fin n → ℝ),
+                  y ∈ base i ∩ base j →
+                    projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.succ y -
+                      projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.castSucc y <
+                        ρ * faceRadius i ∧
+                    projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.succ y -
+                      projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.castSucc y <
+                        ρ * faceRadius j ∧
+                    projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.succ y -
+                      projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.castSucc y <
+                        craciunBinaryWordEpsilon (n + 1) q (word i) ∧
+                    projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.succ y -
+                      projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.castSucc y <
+                        craciunBinaryWordEpsilon (n + 1) q (word j) ∧
+                    projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.succ y -
+                      projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.castSucc y <
+                        coherentBinaryWordTileScale (n + 1) q
+                          (oneBitWord ⟨(i, j), hboundary⟩)
+                          (hOneBitWordLength ⟨(i, j), hboundary⟩)) := by
+  classical
+  have hqCap : (0 : ℝ) < 1 / 2 := by norm_num
+  obtain ⟨q, hq, hqone, _hqcap, hpreOverlap⟩ :=
+    CompactZeroBitFiberPatchCover.exists_common_craciunRatio_scale
+      face base tiles margin faceRadius cover word neighborhood hOpen hFace
+      (1 / 2) hqCap
+  have hwordWidth : ∀ i, 0 < craciunBinaryWordEpsilon (n + 1) q (word i) := by
+    intro i
+    exact craciunBinaryWordEpsilon_pos_of_getLast_false hq (word i)
+      (hwordLength i) (hwordLast i)
+  have htildeWidth : ∀ p, 0 < coherentBinaryWordTileScale (n + 1) q
+      (oneBitWord p) (hOneBitWordLength p) := by
+    intro p
+    exact coherentBinaryWordTileScale_pos_of_getLast_true hq hqone
+      (oneBitWord p) (hOneBitWordLength p) (hOneBitWordLast p)
+  have htildeFloor : ∃ floor : ℝ, 0 < floor ∧
+      ∀ p, floor ≤ coherentBinaryWordTileScale (n + 1) q
+        (oneBitWord p) (hOneBitWordLength p) := by
+    by_cases hpairs : Nonempty {p : ι × ι // oneBitBoundary p.1 p.2}
+    · let widths : Finset ℝ := Finset.univ.image
+        (fun p : {p : ι × ι // oneBitBoundary p.1 p.2} =>
+          coherentBinaryWordTileScale (n + 1) q (oneBitWord p) (hOneBitWordLength p))
+      have hwidths : widths.Nonempty := by
+        obtain ⟨p⟩ := hpairs
+        exact ⟨coherentBinaryWordTileScale (n + 1) q (oneBitWord p)
+            (hOneBitWordLength p),
+          Finset.mem_image.mpr ⟨p, Finset.mem_univ _, rfl⟩⟩
+      let floor := widths.min' hwidths
+      have hfloorMem : floor ∈ widths := Finset.min'_mem widths hwidths
+      obtain ⟨p, _, hfloorEq⟩ := Finset.mem_image.mp hfloorMem
+      refine ⟨floor, ?_, ?_⟩
+      · rw [← hfloorEq]
+        exact htildeWidth p
+      · intro p
+        exact Finset.min'_le widths
+          (coherentBinaryWordTileScale (n + 1) q (oneBitWord p)
+            (hOneBitWordLength p))
+          (Finset.mem_image.mpr ⟨p, Finset.mem_univ _, rfl⟩)
+    · exact ⟨1, by norm_num, fun p => (hpairs ⟨p⟩).elim⟩
+  obtain ⟨tildeFloor, htildeFloorPos, htildeFloorLe⟩ := htildeFloor
+  have hprofileFloor : ∃ floor : ℝ, 0 < floor ∧
+      ∀ i, floor ≤ craciunBinaryWordEpsilon (n + 1) q (word i) := by
+    by_cases hι : Nonempty ι
+    · let widths : Finset ℝ := Finset.univ.image
+        (fun i => craciunBinaryWordEpsilon (n + 1) q (word i))
+      have hwidths : widths.Nonempty := by
+        obtain ⟨i⟩ := hι
+        exact ⟨craciunBinaryWordEpsilon (n + 1) q (word i),
+          Finset.mem_image.mpr ⟨i, Finset.mem_univ _, rfl⟩⟩
+      let floor := widths.min' hwidths
+      have hfloorMem : floor ∈ widths := Finset.min'_mem widths hwidths
+      obtain ⟨i₀, _, hfloorEq⟩ := Finset.mem_image.mp hfloorMem
+      refine ⟨floor, ?_, ?_⟩
+      · rw [← hfloorEq]
+        exact hwordWidth i₀
+      · intro i
+        exact Finset.min'_le widths
+          (craciunBinaryWordEpsilon (n + 1) q (word i))
+          (Finset.mem_image.mpr ⟨i, Finset.mem_univ _, rfl⟩)
+    · exact ⟨1, by norm_num, fun i => (hι ⟨i⟩).elim⟩
+  obtain ⟨profileFloor, hprofileFloorPos, hprofileFloorLe⟩ := hprofileFloor
+  obtain ⟨ρ, hρ, hρone, _hordinary, _hallOnes⟩ :=
+    exists_uniform_coherentBinaryWordTileScale_separation (n := n + 1) hq hqone
+  have hfaceFloor : ∃ scale : ℝ, 0 < scale ∧ ∀ i, scale ≤ faceRadius i := by
+    by_cases hι : Nonempty ι
+    · let values : Finset ℝ := Finset.univ.image faceRadius
+      have hvalues : values.Nonempty := by
+        obtain ⟨i⟩ := hι
+        exact ⟨faceRadius i, Finset.mem_image.mpr ⟨i, Finset.mem_univ _, rfl⟩⟩
+      let scale := values.min' hvalues
+      have hscaleMem : scale ∈ values := Finset.min'_mem values hvalues
+      obtain ⟨i₀, _, hscaleEq⟩ := Finset.mem_image.mp hscaleMem
+      refine ⟨scale, ?_, ?_⟩
+      · rw [← hscaleEq]
+        exact hfaceRadius i₀
+      · intro i
+        exact Finset.min'_le values (faceRadius i)
+          (Finset.mem_image.mpr ⟨i, Finset.mem_univ _, rfl⟩)
+    · exact ⟨1, by norm_num, fun i => (hι ⟨i⟩).elim⟩
+  obtain ⟨scale, hscalePos, hscaleLe⟩ := hfaceFloor
+  let fillCap := min (min (ρ * scale) profileFloor) tildeFloor
+  have hfillCap : 0 < fillCap :=
+    lt_min (lt_min (mul_pos hρ hscalePos) hprofileFloorPos) htildeFloorPos
+  obtain ⟨extension, hextension, radius, hradius, hradiusCap, _hcritical, hfills⟩ :=
+    CompactZeroBitFiberPatchCover.exists_common_scale_and_oneBit_fills
+      face base tiles margin faceRadius cover neighborhood hOpen hFace oneBitBoundary
+      hOneBitDifferent hcenterOrder fillCap hfillCap
+  have hradiusFace : ∀ i, radius < ρ * faceRadius i := by
+    intro i
+    calc
+      radius < fillCap := hradiusCap
+      _ ≤ min (ρ * scale) profileFloor := min_le_left _ _
+      _ ≤ ρ * scale := min_le_left _ _
+      _ ≤ ρ * faceRadius i := mul_le_mul_of_nonneg_left (hscaleLe i) hρ.le
+  have hradiusWord : ∀ i,
+      radius < craciunBinaryWordEpsilon (n + 1) q (word i) := by
+    intro i
+    calc
+      radius < fillCap := hradiusCap
+      _ ≤ min (ρ * scale) profileFloor := min_le_left _ _
+      _ ≤ profileFloor := min_le_right _ _
+      _ ≤ craciunBinaryWordEpsilon (n + 1) q (word i) := hprofileFloorLe i
+  have hradiusTilde : ∀ p,
+      radius < coherentBinaryWordTileScale (n + 1) q (oneBitWord p)
+        (hOneBitWordLength p) := by
+    intro p
+    calc
+      radius < fillCap := hradiusCap
+      _ ≤ tildeFloor := min_le_right _ _
+      _ ≤ coherentBinaryWordTileScale (n + 1) q (oneBitWord p)
+          (hOneBitWordLength p) := htildeFloorLe p
+  have htube : ∀ i,
+      projectionFiberTube (base i) (extension i) radius ⊆
+        zeroBitPreBlueprintNeighborhood (face i) (base i)
+          (craciunBinaryWordEpsilon (n + 1) q) (word i) := by
+    intro i
+    have hlastWidth : radius ≤ craciunBinaryWordEpsilon (n + 1) q
+        ((word i).take (n + 1)) := by
+      rw [List.take_of_length_le (hwordLength i)]
+      exact (hradiusWord i).le
+    exact projectionFiberTube_subset_zeroBitPreBlueprintNeighborhood
+      (face i) (base i) (base i) (extension i) radius
+      (craciunBinaryWordEpsilon (n + 1) q) (word i)
+      (fun p => craciunBinaryWordEpsilon_nonneg (n := n + 1) hq p)
+      hlastWidth Set.Subset.rfl (by
+        intro y hy
+        rw [hextension i y hy]
+        exact (cover i).center_lift_mem_face hy)
+  have htubeOverlap : ∀ i j, i ≠ j →
+      projectionFiberTube (base i) (extension i) radius ∩
+        projectionFiberTube (base j) (extension j) radius ⊆ neighborhood i j := by
+    intro i j hij
+    exact (Set.inter_subset_inter (htube i) (htube j)).trans (hpreOverlap i j hij)
+  refine ⟨ρ, hρ, hρone, q, hq, hqone, extension, hextension, radius, hradius,
+    hradiusFace, hradiusWord, hradiusTilde, htube, hpreOverlap, htubeOverlap, ?_⟩
+  intro i j hboundary
+  obtain ⟨refinement, hleft, hright, hleftTube, hrightTube⟩ := hfills i j hboundary
+  refine ⟨refinement, hleft, hright, hleftTube, hrightTube, ?_⟩
+  intro k y hy
+  constructor
+  · calc
+      projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.succ y -
+          projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.castSucc y ≤
+            radius := refinement.tiling.fiber_width_le k y hy
+      _ < ρ * faceRadius i := hradiusFace i
+  · constructor
+    · calc
+        projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.succ y -
+            projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.castSucc y ≤
+              radius := refinement.tiling.fiber_width_le k y hy
+        _ < ρ * faceRadius j := hradiusFace j
+    · constructor
+      · calc
+          projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.succ y -
+              projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.castSucc y ≤
+                radius := refinement.tiling.fiber_width_le k y hy
+          _ < craciunBinaryWordEpsilon (n + 1) q (word i) := hradiusWord i
+      · constructor
+        · calc
+            projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.succ y -
+                projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.castSucc y ≤
+                  radius := refinement.tiling.fiber_width_le k y hy
+            _ < craciunBinaryWordEpsilon (n + 1) q (word j) := hradiusWord j
+        · calc
+            projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.succ y -
+                projectionFiberSubdivisionEndpoint (fun y => extension i y - radius)
+                          (fun y => extension j y + radius) k.castSucc y ≤
+                  radius := refinement.tiling.fiber_width_le k y hy
+            _ < coherentBinaryWordTileScale (n + 1) q
+                (oneBitWord ⟨(i, j), hboundary⟩)
+                (hOneBitWordLength ⟨(i, j), hboundary⟩) :=
+              hradiusTilde ⟨(i, j), hboundary⟩
+
+/-- Craciun v3, §8 Step 1 followed by §7.4.3 Case 1.2: clip a finite family of compact
+projective radial tiles to the projective domain, project those pieces to the lower-dimensional
+base, and refine the resulting bounded fiber band with one shared strip subdivision. The only
+lower-dimensional blueprint datum used here is that the projected pieces cover their union and
+have disjoint interiors; the higher-dimensional cover, compactness, and common-seam identities
+are constructed by `compactOneBitFiberPatchCover_of_compactBand`. -/
+noncomputable def compactProjectiveRadialFamily_patchCover {n : ℕ} {ι : Type*}
+    [Fintype ι]
+    (diagramTile : ι → Set (Fin (n + 1) → ℝ)) (upper : Fin (n + 1) → ℝ)
+    (epsilon : ℝ)
+    (hdiagramNonnegative : ∀ k x, x ∈ diagramTile k → ∀ i, 0 ≤ x i)
+    (hdiagramNonzero : ∀ k x, x ∈ diagramTile k → x ≠ 0)
+    (hdiagramAnchor : ∀ k x, x ∈ diagramTile k → x 0 = 1)
+    (hdiagramCompact : ∀ k, IsCompact (diagramTile k))
+    (hupper : ∀ i, 0 < upper i) (hepsilon : 0 < epsilon)
+    (hdiagramCoversNormalizedDomain : ∀ x,
+      x ∈ craciunProjectiveDomain → x 0 = 1 → (∀ i, x i ≤ upper i) → x ∈ ⋃ k, diagramTile k)
+    (hprojectedInteriorsDisjoint : ∀ i j, i ≠ j →
+      interior (forgetLastCoordinate n ''
+        (radialBoxDiagramTile (diagramTile i) upper
+          (hdiagramNonnegative i) (hdiagramNonzero i) hupper ∩ craciunProjectiveDomain)) ∩
+      interior (forgetLastCoordinate n ''
+        (radialBoxDiagramTile (diagramTile j) upper
+          (hdiagramNonnegative j) (hdiagramNonzero j) hupper ∩ craciunProjectiveDomain)) = ∅) :
+    CompactOneBitFiberPatchCover
+      (⋃ k, radialBoxDiagramTile (diagramTile k) upper
+        (hdiagramNonnegative k) (hdiagramNonzero k) hupper ∩ craciunProjectiveDomain)
+      (forgetLastCoordinate n ''
+        (⋃ k, radialBoxDiagramTile (diagramTile k) upper
+          (hdiagramNonnegative k) (hdiagramNonzero k) hupper ∩ craciunProjectiveDomain))
+      (fun k => forgetLastCoordinate n ''
+        (radialBoxDiagramTile (diagramTile k) upper
+          (hdiagramNonnegative k) (hdiagramNonzero k) hupper ∩ craciunProjectiveDomain))
+      (fun _ => 0) (fun _ => upper (Fin.last n)) epsilon := by
+  let radialPatch : ι → Set (Fin (n + 1) → ℝ) := fun k =>
+    radialBoxDiagramTile (diagramTile k) upper
+      (hdiagramNonnegative k) (hdiagramNonzero k) hupper ∩ craciunProjectiveDomain
+  let facePatch : Set (Fin (n + 1) → ℝ) := ⋃ k, radialPatch k
+  let base : Set (Fin n → ℝ) := forgetLastCoordinate n '' facePatch
+  let baseTile : ι → Set (Fin n → ℝ) := fun k => forgetLastCoordinate n '' radialPatch k
+  have hbaseCover : base = ⋃ k, baseTile k := by
+    change forgetLastCoordinate n '' (⋃ k, radialPatch k) = ⋃ k, forgetLastCoordinate n '' radialPatch k
+    exact Set.image_iUnion
+  have hbaseTileCompact : ∀ k, IsCompact (baseTile k) := by
+    intro k
+    change IsCompact (forgetLastCoordinate n '' radialPatch k)
+    exact (isCompact_radialBoxDiagramTile_projectiveDomain (diagramTile k) upper 0
+      (hdiagramNonnegative k) (hdiagramNonzero k) (hdiagramAnchor k) hupper
+      (hdiagramCompact k)).image
+        ((forgetLastCoordinate n).continuous_of_finiteDimensional)
+  have hfaceCompact : IsCompact facePatch := by
+    change IsCompact (⋃ k, radialPatch k)
+    exact (isCompact_and_covers_projectiveRadialTiles diagramTile upper
+      hdiagramNonnegative hdiagramAnchor hdiagramCompact hupper
+      hdiagramCoversNormalizedDomain).1
+  have hbaseTileInteriorsDisjoint : ∀ i j, i ≠ j →
+      interior (baseTile i) ∩ interior (baseTile j) = ∅ := by
+    exact hprojectedInteriorsDisjoint
+  have hupperPositive : 0 < upper (Fin.last n) := hupper (Fin.last n)
+  have horder : ∀ y ∈ base, (fun _ : Fin n → ℝ => 0) y ≤ upper (Fin.last n) := by
+    intro y hy
+    exact le_of_lt hupperPositive
+  have hfaceBand : facePatch ⊆ projectionFiberBand base
+      (fun _ => some (0 : ℝ)) (fun _ => some (upper (Fin.last n))) := by
+    intro x hx
+    obtain ⟨k, hk⟩ := Set.mem_iUnion.mp hx
+    have hbox := radialBoxDiagramTile_subset_box (diagramTile k) upper
+      (hdiagramNonnegative k) (hdiagramNonzero k) hupper hk.1
+    apply (mem_projectionFiberBand_bounded_iff base (fun _ => 0)
+      (fun _ => upper (Fin.last n)) x).2
+    refine ⟨⟨x, hx, rfl⟩, ?_, ?_⟩
+    · exact (hbox (Fin.last n)).1
+    · exact (hbox (Fin.last n)).2
+  change CompactOneBitFiberPatchCover facePatch base baseTile
+    (fun _ => 0) (fun _ => upper (Fin.last n)) epsilon
+  exact compactOneBitFiberPatchCover_of_compactBand facePatch hfaceCompact base baseTile
+    (fun _ => 0) (fun _ => upper (Fin.last n)) epsilon hbaseCover hbaseTileCompact
+    hbaseTileInteriorsDisjoint continuous_const continuous_const horder hepsilon hfaceBand
+
+/-- A compact Euclidean base admits a finite closed refinement of arbitrarily small diameter
+whose members have pairwise disjoint interiors. Start with a finite cover by small closed balls,
+then assign each point to the least ball containing it, removing the interiors of earlier balls.
+This is the finite small-base subdivision needed by Craciun v3's repeated face refinement. -/
+structure CompactSmallBaseTiling {n : ℕ} (base : Set (Fin n → ℝ)) (eta : ℝ) where
+  count : ℕ
+  tile : Fin count → Set (Fin n → ℝ)
+  covers : base = ⋃ i, tile i
+  tile_compact : ∀ i, IsCompact (tile i)
+  interiors_disjoint : ∀ i j, i ≠ j → interior (tile i) ∩ interior (tile j) = ∅
+  tile_diameter_lt : ∀ i x, x ∈ tile i → ∀ y, y ∈ tile i → dist x y < eta
+
+noncomputable def exists_compact_small_interior_disjoint_cover {n : ℕ}
+    (base : Set (Fin n → ℝ)) (hbase : IsCompact base) {η : ℝ} (hη : 0 < η) :
+    CompactSmallBaseTiling base η := by
+  classical
+  let r : ℝ := η / 3
+  have hr : 0 < r := by dsimp [r]; positivity
+  let V : base → Set (Fin n → ℝ) := fun x => Metric.ball x.1 r
+  have hopen : ∀ x : base, IsOpen (V x) := fun _ => Metric.isOpen_ball
+  have hcover : base ⊆ ⋃ x : base, V x := by
+    intro x hx
+    exact Set.mem_iUnion.mpr ⟨⟨x, hx⟩, Metric.mem_ball_self hr⟩
+  have hfinite : ∃ centers : Finset base, base ⊆ ⋃ x ∈ centers, V x :=
+    hbase.elim_finite_subcover V hopen hcover
+  let centers : Finset base := Classical.choose hfinite
+  have hcenters : base ⊆ ⋃ x ∈ centers, V x := Classical.choose_spec hfinite
+  let I := {x : base // x ∈ centers}
+  letI : Fintype I := Fintype.ofFinite I
+  let m : ℕ := Fintype.card I
+  let e : I ≃ Fin m := Fintype.equivFin I
+  let center : Fin m → Fin n → ℝ := fun i => (e.symm i).1.1
+  let smallTile : Fin m → Set (Fin n → ℝ) := fun i => base ∩ Metric.closedBall (center i) r
+  let members (x : Fin n → ℝ) : Finset (Fin m) :=
+    Finset.univ.filter (fun i => x ∈ smallTile i)
+  let earlierInterior (i : Fin m) : Set (Fin n → ℝ) :=
+    ⋃ j : Fin m, if j < i then interior (smallTile j) else ∅
+  let baseTile (i : Fin m) : Set (Fin n → ℝ) :=
+    smallTile i \ earlierInterior i
+  have hbaseeq : base = ⋃ i, baseTile i := by
+    ext x
+    constructor
+    · intro hx
+      have hmems : (members x).Nonempty := by
+        obtain ⟨p, hpcover⟩ := Set.mem_iUnion.mp (hcenters hx)
+        obtain ⟨hp, hpx⟩ := Set.mem_iUnion.mp hpcover
+        let i : Fin m := e ⟨p, hp⟩
+        have hcenter : center i = p.1 := by simp [center, i]
+        have hclosed : x ∈ Metric.closedBall (center i) r := by
+          rw [Metric.mem_closedBall, hcenter]
+          exact le_of_lt (by simpa [V] using hpx)
+        exact ⟨i, Finset.mem_filter.mpr ⟨Finset.mem_univ _, ⟨hx, hclosed⟩⟩⟩
+      let i := (members x).min' hmems
+      have hi : i ∈ members x := Finset.min'_mem _ _
+      have hsmall : x ∈ smallTile i := (Finset.mem_filter.mp hi).2
+      have hnotEarlier : x ∉ earlierInterior i := by
+        intro hxEarlier
+        obtain ⟨j, hxEarlier⟩ := Set.mem_iUnion.mp hxEarlier
+        by_cases hj : j < i
+        · have hxInterior : x ∈ interior (smallTile j) := by
+            simpa [earlierInterior, hj] using hxEarlier
+          have hxSmall : x ∈ smallTile j := interior_subset hxInterior
+          have hjmem : j ∈ members x := Finset.mem_filter.mpr ⟨Finset.mem_univ _, hxSmall⟩
+          have hminle : i ≤ j := Finset.min'_le _ _ hjmem
+          exact (not_lt_of_ge hminle) hj
+        · simp [earlierInterior, hj] at hxEarlier
+      exact Set.mem_iUnion.mpr ⟨i, by
+        change x ∈ smallTile i \ earlierInterior i
+        exact ⟨hsmall, hnotEarlier⟩⟩
+    · intro hx
+      obtain ⟨i, hi⟩ := Set.mem_iUnion.mp hx
+      exact hi.1.1
+  have hsmallCompact : ∀ i, IsCompact (smallTile i) := by
+    intro i
+    exact hbase.inter_right Metric.isClosed_closedBall
+  have htileCompact : ∀ i, IsCompact (baseTile i) := by
+    intro i
+    have hopenEarlier : IsOpen (earlierInterior i) := by
+      apply isOpen_iUnion
+      intro j
+      by_cases hj : j < i
+      · simp [earlierInterior, hj, isOpen_interior]
+      · simp [earlierInterior, hj]
+    have hclosed : IsClosed
+        (earlierInterior i)ᶜ :=
+      hopenEarlier.isClosed_compl
+    change IsCompact (smallTile i ∩ (earlierInterior i)ᶜ)
+    exact (hsmallCompact i).inter_right hclosed
+  have htileSubset : ∀ i, baseTile i ⊆ smallTile i := fun i => Set.diff_subset
+  have hinteriorSubset : ∀ i, interior (baseTile i) ⊆ interior (smallTile i) :=
+    fun i => interior_mono (htileSubset i)
+  have hdisjoint : ∀ i j, i ≠ j →
+      interior (baseTile i) ∩ interior (baseTile j) = ∅ := by
+    intro i j hij
+    rcases lt_or_gt_of_ne hij with hij' | hji
+    · ext x
+      constructor
+      · intro hx
+        have hxi : x ∈ interior (smallTile i) := hinteriorSubset i hx.1
+        have hxj : x ∈ baseTile j := interior_subset hx.2
+        have hremove : x ∈ earlierInterior j := by
+          exact Set.mem_iUnion.mpr ⟨i, by simp [earlierInterior, hij', hxi]⟩
+        exact (hxj.2 hremove).elim
+      · simp
+    · rw [Set.inter_comm]
+      ext x
+      constructor
+      · intro hx
+        have hxj : x ∈ interior (smallTile j) := hinteriorSubset j hx.1
+        have hxi : x ∈ baseTile i := interior_subset hx.2
+        have hremove : x ∈ earlierInterior i := by
+          exact Set.mem_iUnion.mpr ⟨j, by simp [earlierInterior, hji, hxj]⟩
+        exact (hxi.2 hremove).elim
+      · simp
+  have hdiameter : ∀ i x, x ∈ baseTile i → ∀ y, y ∈ baseTile i → dist x y < η := by
+    intro i x hx y hy
+    have hxball : dist x (center i) ≤ r := (Metric.mem_closedBall.mp hx.1.2)
+    have hyball : dist y (center i) ≤ r := (Metric.mem_closedBall.mp hy.1.2)
+    calc
+      dist x y ≤ dist x (center i) + dist (center i) y := dist_triangle x (center i) y
+      _ ≤ r + r := add_le_add hxball (by simpa [dist_comm] using hyball)
+      _ < η := by dsimp [r]; linarith
+  exact ⟨m, baseTile, hbaseeq, htileCompact, hdisjoint, hdiameter⟩
+
+/-- Craciun v3, §8 Step 1 and §7.4.3 Case 1.2, with the scale refinement made explicit: a
+finite compact projective radial family yields a restricted one-bit cover whose projected base
+tiles have diameter below any prescribed positive tolerance. The finite small-base partition is
+constructed from compactness, so the local wall-chart selection can use the tile diameter directly
+instead of requiring it as an external property of the lower-dimensional blueprint. -/
+noncomputable def compactProjectiveRadialFamily_smallPatchCover {n : ℕ} {ι : Type*}
+    [Fintype ι]
+    (diagramTile : ι → Set (Fin (n + 1) → ℝ)) (upper : Fin (n + 1) → ℝ)
+    (epsilon eta : ℝ)
+    (hdiagramNonnegative : ∀ k x, x ∈ diagramTile k → ∀ i, 0 ≤ x i)
+    (hdiagramNonzero : ∀ k x, x ∈ diagramTile k → x ≠ 0)
+    (hdiagramAnchor : ∀ k x, x ∈ diagramTile k → x 0 = 1)
+    (hdiagramCompact : ∀ k, IsCompact (diagramTile k))
+    (hupper : ∀ i, 0 < upper i) (hepsilon : 0 < epsilon) (heta : 0 < eta)
+    (hdiagramCoversNormalizedDomain : ∀ x,
+      x ∈ craciunProjectiveDomain → x 0 = 1 → (∀ i, x i ≤ upper i) → x ∈ ⋃ k, diagramTile k) :
+    Σ m : ℕ, Σ baseTile : Fin m → Set (Fin n → ℝ),
+      {cover : CompactOneBitFiberPatchCover
+        (⋃ k, radialBoxDiagramTile (diagramTile k) upper
+          (hdiagramNonnegative k) (hdiagramNonzero k) hupper ∩ craciunProjectiveDomain)
+        (forgetLastCoordinate n ''
+          (⋃ k, radialBoxDiagramTile (diagramTile k) upper
+            (hdiagramNonnegative k) (hdiagramNonzero k) hupper ∩ craciunProjectiveDomain))
+        baseTile (fun _ => 0) (fun _ => upper (Fin.last n)) epsilon //
+        (∀ i a, a ∈ baseTile i → ∀ b, b ∈ baseTile i → dist a b < eta) } := by
+  classical
+  let facePatch : Set (Fin (n + 1) → ℝ) :=
+    ⋃ k, radialBoxDiagramTile (diagramTile k) upper
+      (hdiagramNonnegative k) (hdiagramNonzero k) hupper ∩ craciunProjectiveDomain
+  let base : Set (Fin n → ℝ) := forgetLastCoordinate n '' facePatch
+  have hfaceCompact : IsCompact facePatch := by
+    exact (isCompact_and_covers_projectiveRadialTiles diagramTile upper
+      hdiagramNonnegative hdiagramAnchor hdiagramCompact hupper
+      hdiagramCoversNormalizedDomain).1
+  have hbaseCompact : IsCompact base := by
+    exact hfaceCompact.image ((forgetLastCoordinate n).continuous_of_finiteDimensional)
+  obtain ⟨m, baseTile, hbaseCover, htileCompact, htileDisjoint, hsmall⟩ :=
+    exists_compact_small_interior_disjoint_cover base hbaseCompact heta
+  have hupperPositive : 0 < upper (Fin.last n) := hupper (Fin.last n)
+  have horder : ∀ y ∈ base, (fun _ : Fin n → ℝ => 0) y ≤ upper (Fin.last n) := by
+    intro y hy
+    exact le_of_lt hupperPositive
+  have hfaceBand : facePatch ⊆ projectionFiberBand base
+      (fun _ => some (0 : ℝ)) (fun _ => some (upper (Fin.last n))) := by
+    intro x hx
+    obtain ⟨k, hk⟩ := Set.mem_iUnion.mp hx
+    have hbox := radialBoxDiagramTile_subset_box (diagramTile k) upper
+      (hdiagramNonnegative k) (hdiagramNonzero k) hupper hk.1
+    apply (mem_projectionFiberBand_bounded_iff base (fun _ => 0)
+      (fun _ => upper (Fin.last n)) x).2
+    refine ⟨⟨x, hx, rfl⟩, ?_, ?_⟩
+    · exact (hbox (Fin.last n)).1
+    · exact (hbox (Fin.last n)).2
+  have cover : CompactOneBitFiberPatchCover facePatch base baseTile
+      (fun _ => 0) (fun _ => upper (Fin.last n)) epsilon :=
+    compactOneBitFiberPatchCover_of_compactBand facePatch hfaceCompact base baseTile
+      (fun _ => 0) (fun _ => upper (Fin.last n)) epsilon hbaseCover htileCompact
+      htileDisjoint continuous_const continuous_const horder hepsilon hfaceBand
+  exact ⟨m, baseTile, cover, hsmall⟩
+
+/-- Refine each projected projective diagram tile into small compact pieces without losing its
+parent-tile index. This preserves the lower-dimensional blueprint incidence while adding the
+diameter bound needed by local chart selection (Craciun v3, §7.4.3 Case 1.2). -/
+noncomputable def compactProjectiveRadialFamily_smallPatchCover_refiningDiagramTiles
+    {n : ℕ} {ι : Type*} [Fintype ι]
+    (diagramTile : ι → Set (Fin (n + 1) → ℝ)) (upper : Fin (n + 1) → ℝ)
+    (epsilon eta : ℝ)
+    (hdiagramNonnegative : ∀ k x, x ∈ diagramTile k → ∀ i, 0 ≤ x i)
+    (hdiagramNonzero : ∀ k x, x ∈ diagramTile k → x ≠ 0)
+    (hdiagramAnchor : ∀ k x, x ∈ diagramTile k → x 0 = 1)
+    (hdiagramCompact : ∀ k, IsCompact (diagramTile k))
+    (hupper : ∀ i, 0 < upper i) (hepsilon : 0 < epsilon) (heta : 0 < eta)
+    (hdiagramCoversNormalizedDomain : ∀ x,
+      x ∈ craciunProjectiveDomain → x 0 = 1 → (∀ i, x i ≤ upper i) → x ∈ ⋃ k, diagramTile k)
+    (hprojectedInteriorsDisjoint : ∀ i j, i ≠ j →
+      interior (forgetLastCoordinate n ''
+        (radialBoxDiagramTile (diagramTile i) upper
+          (hdiagramNonnegative i) (hdiagramNonzero i) hupper ∩ craciunProjectiveDomain)) ∩
+      interior (forgetLastCoordinate n ''
+        (radialBoxDiagramTile (diagramTile j) upper
+          (hdiagramNonnegative j) (hdiagramNonzero j) hupper ∩ craciunProjectiveDomain)) = ∅) :
+    Σ m : ℕ, Σ baseTile : ι × Fin m → Set (Fin n → ℝ),
+      {cover : CompactOneBitFiberPatchCover
+        (⋃ k, radialBoxDiagramTile (diagramTile k) upper
+          (hdiagramNonnegative k) (hdiagramNonzero k) hupper ∩ craciunProjectiveDomain)
+        (forgetLastCoordinate n ''
+          (⋃ k, radialBoxDiagramTile (diagramTile k) upper
+            (hdiagramNonnegative k) (hdiagramNonzero k) hupper ∩ craciunProjectiveDomain))
+        baseTile (fun _ => 0) (fun _ => upper (Fin.last n)) epsilon //
+        (∀ p a, a ∈ baseTile p → ∀ b, b ∈ baseTile p → dist a b < eta) ∧
+        (forgetLastCoordinate n ''
+          (⋃ k, radialBoxDiagramTile (diagramTile k) upper
+            (hdiagramNonnegative k) (hdiagramNonzero k) hupper ∩ craciunProjectiveDomain)) =
+          ⋃ p, baseTile p ∧
+        (∀ p, IsCompact (baseTile p)) ∧
+        (∀ p q, p ≠ q → interior (baseTile p) ∩ interior (baseTile q) = ∅) } := by
+  classical
+  let radialPatch : ι → Set (Fin (n + 1) → ℝ) := fun k =>
+    radialBoxDiagramTile (diagramTile k) upper
+      (hdiagramNonnegative k) (hdiagramNonzero k) hupper ∩ craciunProjectiveDomain
+  let facePatch : Set (Fin (n + 1) → ℝ) := ⋃ k, radialPatch k
+  let base : Set (Fin n → ℝ) := forgetLastCoordinate n '' facePatch
+  let projectedTile : ι → Set (Fin n → ℝ) := fun k =>
+    forgetLastCoordinate n '' radialPatch k
+  have hfaceCompact : IsCompact facePatch := by
+    change IsCompact (⋃ k, radialPatch k)
+    exact (isCompact_and_covers_projectiveRadialTiles diagramTile upper
+      hdiagramNonnegative hdiagramAnchor hdiagramCompact hupper
+      hdiagramCoversNormalizedDomain).1
+  have hbaseCompact : IsCompact base :=
+    hfaceCompact.image (forgetLastCoordinate n).continuous_of_finiteDimensional
+  have hprojectedCompact : ∀ k, IsCompact (projectedTile k) := by
+    intro k
+    change IsCompact (forgetLastCoordinate n '' radialPatch k)
+    exact (isCompact_radialBoxDiagramTile_projectiveDomain (diagramTile k) upper 0
+      (hdiagramNonnegative k) (hdiagramNonzero k) (hdiagramAnchor k) hupper
+      (hdiagramCompact k)).image
+        (forgetLastCoordinate n).continuous_of_finiteDimensional
+  obtain ⟨m, smallTile, hsmallCover, hsmallCompact, hsmallDisjoint, hsmall⟩ :=
+    exists_compact_small_interior_disjoint_cover base hbaseCompact heta
+  let baseTile : ι × Fin m → Set (Fin n → ℝ) := fun p =>
+    projectedTile p.1 ∩ smallTile p.2
+  have hbaseCover : base = ⋃ p, baseTile p := by
+    ext y
+    constructor
+    · intro hy
+      have hprojectedCover : base = ⋃ k, projectedTile k := by
+        change forgetLastCoordinate n '' (⋃ k, radialPatch k) =
+          ⋃ k, forgetLastCoordinate n '' radialPatch k
+        exact Set.image_iUnion
+      rw [hprojectedCover] at hy
+      obtain ⟨k, hk⟩ := Set.mem_iUnion.mp hy
+      have hsmall : y ∈ ⋃ j, smallTile j := by
+        rw [← hsmallCover]
+        rw [hprojectedCover]
+        exact hy
+      obtain ⟨j, hj⟩ := Set.mem_iUnion.mp hsmall
+      exact Set.mem_iUnion.mpr ⟨(k, j), ⟨hk, hj⟩⟩
+    · intro hy
+      obtain ⟨p, hp⟩ := Set.mem_iUnion.mp hy
+      have hprojectedCover : base = ⋃ k, projectedTile k := by
+        change forgetLastCoordinate n '' (⋃ k, radialPatch k) =
+          ⋃ k, forgetLastCoordinate n '' radialPatch k
+        exact Set.image_iUnion
+      rw [hprojectedCover]
+      exact Set.mem_iUnion.mpr ⟨p.1, hp.1⟩
+  have hbaseTileCompact : ∀ p, IsCompact (baseTile p) := by
+    intro p
+    exact (hprojectedCompact p.1).inter (hsmallCompact p.2)
+  have hbaseTileDisjoint : ∀ p q, p ≠ q →
+      interior (baseTile p) ∩ interior (baseTile q) = ∅ := by
+    intro p q hpq
+    by_cases hparent : p.1 = q.1
+    · have hchild : p.2 ≠ q.2 := by
+        intro h
+        apply hpq
+        cases p
+        cases q
+        simp_all
+      have hleft : interior (baseTile p) ⊆ interior (smallTile p.2) :=
+        interior_mono Set.inter_subset_right
+      have hright : interior (baseTile q) ⊆ interior (smallTile q.2) :=
+        interior_mono Set.inter_subset_right
+      ext x
+      constructor
+      · intro hx
+        have hxsmall : x ∈ interior (smallTile p.2) ∩ interior (smallTile q.2) :=
+          ⟨hleft hx.1, hright hx.2⟩
+        rw [hsmallDisjoint p.2 q.2 hchild] at hxsmall
+        exact hxsmall
+      · simp
+    · have hleft : interior (baseTile p) ⊆ interior (projectedTile p.1) :=
+        interior_mono Set.inter_subset_left
+      have hright : interior (baseTile q) ⊆ interior (projectedTile q.1) :=
+        interior_mono Set.inter_subset_left
+      ext x
+      constructor
+      · intro hx
+        have hxparent : x ∈ interior (projectedTile p.1) ∩
+            interior (projectedTile q.1) := ⟨hleft hx.1, hright hx.2⟩
+        rw [hprojectedInteriorsDisjoint p.1 q.1 hparent] at hxparent
+        exact hxparent
+      · simp
+  have hupperPositive : 0 < upper (Fin.last n) := hupper (Fin.last n)
+  have horder : ∀ y ∈ base, (fun _ : Fin n → ℝ => 0) y ≤ upper (Fin.last n) := by
+    intro y hy
+    exact le_of_lt hupperPositive
+  have hfaceBand : facePatch ⊆ projectionFiberBand base
+      (fun _ => some (0 : ℝ)) (fun _ => some (upper (Fin.last n))) := by
+    intro x hx
+    obtain ⟨k, hk⟩ := Set.mem_iUnion.mp hx
+    have hbox := radialBoxDiagramTile_subset_box (diagramTile k) upper
+      (hdiagramNonnegative k) (hdiagramNonzero k) hupper hk.1
+    apply (mem_projectionFiberBand_bounded_iff base (fun _ => 0)
+      (fun _ => upper (Fin.last n)) x).2
+    refine ⟨⟨x, hx, rfl⟩, ?_, ?_⟩
+    · exact (hbox (Fin.last n)).1
+    · exact (hbox (Fin.last n)).2
+  have cover : CompactOneBitFiberPatchCover facePatch base baseTile
+      (fun _ => 0) (fun _ => upper (Fin.last n)) epsilon :=
+    compactOneBitFiberPatchCover_of_compactBand facePatch hfaceCompact base baseTile
+      (fun _ => 0) (fun _ => upper (Fin.last n)) epsilon hbaseCover hbaseTileCompact
+      hbaseTileDisjoint continuous_const continuous_const horder hepsilon hfaceBand
+  have hsmallRefined : ∀ p a, a ∈ baseTile p → ∀ b, b ∈ baseTile p → dist a b < eta := by
+    intro p a ha b hb
+    exact hsmall p.2 a ha.2 b hb.2
+  exact ⟨m, baseTile,
+    ⟨cover, hsmallRefined, hbaseCover, hbaseTileCompact, hbaseTileDisjoint⟩⟩
+
+/-- Craciun v3, §8 Step 1: restrict a compact one-bit blueprint to a closed projective domain by
+intersecting every tile patch with that domain. The clipped family still covers the clipped face,
+its pieces remain compact, and the common fiber subdivision preserves every seam and overlap
+identity. Empty clipped tiles are retained as empty members of the same finite index family. -/
+def CompactOneBitFiberPatchCover.restrict_to_closedDomain
+    {n : ℕ} {ι : Type*} [Fintype ι]
+    {facePatch : Set (Fin (n + 1) → ℝ)} {base : Set (Fin n → ℝ)}
+    {baseTile : ι → Set (Fin n → ℝ)} {lower upper : (Fin n → ℝ) → ℝ}
+    {epsilon : ℝ}
+    (cover : CompactOneBitFiberPatchCover facePatch base baseTile lower upper epsilon)
+    (domain : Set (Fin (n + 1) → ℝ)) (hdomain : IsClosed domain) :
+    CompactOneBitFiberPatchCover (facePatch ∩ domain) base baseTile lower upper epsilon := by
+  refine {
+    tiling := cover.tiling
+    baseTile_subset := cover.baseTile_subset
+    baseTile_interiors_disjoint := cover.baseTile_interiors_disjoint
+    baseTile_adjacent_seam := ?_
+    baseTile_strip_overlap := ?_
+    facePatch_eq_iUnion_tiles := ?_
+    facePatch_tile_compact := ?_
+    facePatch_tile_interiors_disjoint := ?_
+  }
+  · intro i j horder k
+    ext x
+    have hseam := cover.baseTile_adjacent_seam i j horder k
+    have hseamAt := congrArg (fun s : Set (Fin (n + 1) → ℝ) => x ∈ s) hseam
+    simp only [Set.mem_inter_iff] at hseamAt ⊢
+    tauto
+  · intro i j k l
+    ext x
+    have hoverlap := cover.baseTile_strip_overlap i j k l
+    have hoverlapAt := congrArg (fun s : Set (Fin (n + 1) → ℝ) => x ∈ s) hoverlap
+    simp only [Set.mem_inter_iff] at hoverlapAt ⊢
+    tauto
+  · ext x
+    simp only [Set.mem_inter_iff, Set.mem_iUnion]
+    constructor
+    · rintro ⟨hxface, hxdomain⟩
+      obtain ⟨p, hpatch⟩ := Set.mem_iUnion.mp
+        ((cover.facePatch_eq_iUnion_tiles).symm ▸ hxface)
+      exact ⟨p, ⟨hxface, hxdomain⟩, hpatch.2⟩
+    · rintro ⟨p, ⟨hxface, hxdomain⟩, htile⟩
+      exact ⟨hxface, hxdomain⟩
+  · intro p
+    have hcompact := (cover.facePatch_tile_compact p).inter_right hdomain
+    simpa [Set.inter_assoc, Set.inter_left_comm, Set.inter_comm] using hcompact
+  · intro p q hpq
+    apply Set.eq_empty_iff_forall_notMem.mpr
+    intro x hx
+    have hpatchPsubset : facePatch ∩ domain ∩
+        projectionFiberSubdivisionTile (baseTile p.1) lower upper p.2 ⊆
+        facePatch ∩ projectionFiberSubdivisionTile (baseTile p.1) lower upper p.2 := by
+      intro y hy
+      exact ⟨hy.1.1, hy.2⟩
+    have hpatchQsubset : facePatch ∩ domain ∩
+        projectionFiberSubdivisionTile (baseTile q.1) lower upper q.2 ⊆
+        facePatch ∩ projectionFiberSubdivisionTile (baseTile q.1) lower upper q.2 := by
+      intro y hy
+      exact ⟨hy.1.1, hy.2⟩
+    have hold : x ∈ interior
+        (facePatch ∩ projectionFiberSubdivisionTile (baseTile p.1) lower upper p.2) ∩
+        interior (facePatch ∩ projectionFiberSubdivisionTile (baseTile q.1) lower upper q.2) := by
+      exact ⟨interior_mono hpatchPsubset hx.1, interior_mono hpatchQsubset hx.2⟩
+    rw [cover.facePatch_tile_interiors_disjoint p q hpq] at hold
+    exact hold
+
+/-- A nonempty tile after clipping to a closed domain has a basepoint inside that domain, and the
+basepoint still projects to the corresponding lower-dimensional tile. This is the tile-incidence
+datum required by Craciun v3, §8 Step 1 when the restricted blueprint is used in the next fill. -/
+theorem CompactOneBitFiberPatchCover.exists_restrictedDomain_tile_basepoint_incidence
+    {n : ℕ} {ι : Type*} [Fintype ι]
+    {facePatch : Set (Fin (n + 1) → ℝ)} {base : Set (Fin n → ℝ)}
+    {baseTile : ι → Set (Fin n → ℝ)} {lower upper : (Fin n → ℝ) → ℝ}
+    {epsilon : ℝ}
+    (cover : CompactOneBitFiberPatchCover facePatch base baseTile lower upper epsilon)
+    (domain : Set (Fin (n + 1) → ℝ)) (hdomain : IsClosed domain)
+    (p : Σ i : ι, Fin (cover.tiling.subdivisionCount + 1))
+    (hne : ((facePatch ∩ domain) ∩ projectionFiberSubdivisionTile
+      (baseTile p.1) lower upper p.2).Nonempty) :
+    ∃ x, x ∈ (facePatch ∩ domain) ∩ projectionFiberSubdivisionTile
+      (baseTile p.1) lower upper p.2 ∧ x ∈ domain ∧
+      forgetLastCoordinate n x ∈ baseTile p.1 := by
+  let restricted := cover.restrict_to_closedDomain domain hdomain
+  obtain ⟨x, hx, hprojected⟩ := restricted.exists_restricted_tile_basepoint_incidence p hne
+  exact ⟨x, hx, hx.1.2, hprojected⟩
+
+/-- Craciun v3, §8 Step 1 followed by §8 Step 2: if two clipped neighboring patches over lower
+tiles have a nonempty intersection, their shared endpoint seam has a projected basepoint in the
+intersection of those lower tiles. Its endpoint-graph lift remains in the clipped face patch.
+This is the incidence datum needed to pass the clipped seam to the lower-dimensional boundary
+construction. -/
+theorem CompactOneBitFiberPatchCover.exists_restrictedDomain_adjacent_seam_basepoint
+    {n : ℕ} {ι : Type*} [Fintype ι]
+    {facePatch : Set (Fin (n + 1) → ℝ)} {base : Set (Fin n → ℝ)}
+    {baseTile : ι → Set (Fin n → ℝ)} {lower upper : (Fin n → ℝ) → ℝ}
+    {epsilon : ℝ}
+    (cover : CompactOneBitFiberPatchCover facePatch base baseTile lower upper epsilon)
+    (domain : Set (Fin (n + 1) → ℝ)) (hdomain : IsClosed domain)
+    (i j : ι) (horder : ∀ y ∈ baseTile i ∩ baseTile j, lower y ≤ upper y)
+    (k : Fin cover.tiling.subdivisionCount)
+    (hne : (((facePatch ∩ domain) ∩
+        projectionFiberSubdivisionTile (baseTile i) lower upper k.castSucc) ∩
+      ((facePatch ∩ domain) ∩
+        projectionFiberSubdivisionTile (baseTile j) lower upper k.succ)).Nonempty) :
+    ∃ y, y ∈ baseTile i ∩ baseTile j ∧
+      projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc y ∈
+        facePatch ∩ domain ∧
+      forgetLastCoordinate n
+        (projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc y) = y := by
+  let restricted := cover.restrict_to_closedDomain domain hdomain
+  have hseam := restricted.adjacent_base_tiles_share_seam i j horder k
+  obtain ⟨x, hx⟩ := hne
+  have hx' : x ∈ (facePatch ∩ domain) ∩
+      (fun y : Fin n → ℝ =>
+        projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc y) ''
+        (baseTile i ∩ baseTile j) := by
+    have hseamAt := congrArg (fun s : Set (Fin (n + 1) → ℝ) => x ∈ s) hseam
+    exact hseamAt.mp hx
+  rcases hx' with ⟨hxface, y, hy, rfl⟩
+  refine ⟨y, hy, hxface, ?_⟩
+  simp [projectionFiberSubdivisionEndpointGraphPoint, forgetLastCoordinate]
+
+/-- Craciun v3, §8 Step 1 followed by §8 Step 2: after clipping a parent-labeled one-bit
+refinement, the projection of the common seam is exactly the lower-dimensional seam patch whose
+endpoint lift remains in the clipped face. The two parent tile labels are retained in the
+intersection `baseTile i ∩ baseTile j`, so the next lower-dimensional fill receives the precise
+shared incidence domain rather than only a pointwise witness. -/
+theorem CompactOneBitFiberPatchCover.restrictedDomain_adjacent_seam_projects_exactly
+    {n : ℕ} {ι : Type*} [Fintype ι]
+    {facePatch : Set (Fin (n + 1) → ℝ)} {base : Set (Fin n → ℝ)}
+    {baseTile : ι → Set (Fin n → ℝ)} {lower upper : (Fin n → ℝ) → ℝ}
+    {epsilon : ℝ}
+    (cover : CompactOneBitFiberPatchCover facePatch base baseTile lower upper epsilon)
+    (domain : Set (Fin (n + 1) → ℝ))
+    (i j : ι) (horder : ∀ y ∈ baseTile i ∩ baseTile j, lower y ≤ upper y)
+    (k : Fin cover.tiling.subdivisionCount) :
+    forgetLastCoordinate n ''
+        (((facePatch ∩ domain) ∩
+            projectionFiberSubdivisionTile (baseTile i) lower upper k.castSucc) ∩
+          ((facePatch ∩ domain) ∩
+            projectionFiberSubdivisionTile (baseTile j) lower upper k.succ)) =
+      {y | y ∈ baseTile i ∩ baseTile j ∧
+        projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc y ∈
+          facePatch ∩ domain} := by
+  have hseamRaw := cover.adjacent_base_tiles_share_seam i j horder k
+  have hseam :
+      (((facePatch ∩ domain) ∩
+          projectionFiberSubdivisionTile (baseTile i) lower upper k.castSucc) ∩
+        ((facePatch ∩ domain) ∩
+          projectionFiberSubdivisionTile (baseTile j) lower upper k.succ)) =
+        (facePatch ∩ domain) ∩
+          (fun y : Fin n → ℝ =>
+            projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc y) ''
+            (baseTile i ∩ baseTile j) := by
+    ext x
+    have hseamAt := congrArg (fun s : Set (Fin (n + 1) → ℝ) => x ∈ s) hseamRaw
+    simp only [Set.mem_inter_iff] at hseamAt ⊢
+    constructor
+    · rintro ⟨⟨⟨hface, hdom⟩, hi⟩, ⟨⟨_, _⟩, hj⟩⟩
+      have horiginal := hseamAt.mp ⟨⟨hface, hi⟩, ⟨hface, hj⟩⟩
+      exact ⟨⟨hface, hdom⟩, horiginal.2⟩
+    · rintro ⟨⟨hface, hdom⟩, hgraph⟩
+      have horiginal := hseamAt.mpr ⟨hface, hgraph⟩
+      rcases horiginal with ⟨⟨_, hi⟩, ⟨_, hj⟩⟩
+      exact ⟨⟨⟨hface, hdom⟩, hi⟩, ⟨⟨hface, hdom⟩, hj⟩⟩
+  rw [hseam]
+  ext y
+  have hindex : k.succ.castSucc = k.castSucc.succ := by
+    apply Fin.ext
+    simp
+  constructor
+  · rintro ⟨x, ⟨hpatch, ⟨z, hz, rfl⟩⟩, hxy⟩
+    have hforget : forgetLastCoordinate n
+        (projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc z) = z := by
+      simp [projectionFiberSubdivisionEndpointGraphPoint, forgetLastCoordinate]
+    have hyz : y = z := hxy.symm.trans hforget
+    have hgraphy :
+        projectionFiberSubdivisionEndpointGraphPoint lower upper k.castSucc.succ y ∈
+          facePatch ∩ domain := by
+      rw [hyz]
+      simpa [hindex] using hpatch
+    exact ⟨hyz ▸ hz, hgraphy⟩
+  · rintro ⟨hy, hgraph⟩
+    have hgraphRaw :
+        projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc y ∈
+          facePatch ∩ domain := by
+      simpa [hindex] using hgraph
+    refine ⟨projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc y,
+      ⟨hgraphRaw, ⟨y, hy, rfl⟩⟩, ?_⟩
+    simp [projectionFiberSubdivisionEndpointGraphPoint, forgetLastCoordinate]
+
+/-- The clipped lower-dimensional seam patch from
+`restrictedDomain_adjacent_seam_projects_exactly` is compact. This is the compact incidence
+domain required when the next induction stage fills the common face of two parent-labeled tiles. -/
+theorem CompactOneBitFiberPatchCover.isCompact_restrictedDomain_adjacent_seam
+    {n : ℕ} {ι : Type*} [Fintype ι]
+    {facePatch : Set (Fin (n + 1) → ℝ)} {base : Set (Fin n → ℝ)}
+    {baseTile : ι → Set (Fin n → ℝ)} {lower upper : (Fin n → ℝ) → ℝ}
+    {epsilon : ℝ}
+    (cover : CompactOneBitFiberPatchCover facePatch base baseTile lower upper epsilon)
+    (domain : Set (Fin (n + 1) → ℝ)) (hdomain : IsClosed domain)
+    (i j : ι) (horder : ∀ y ∈ baseTile i ∩ baseTile j, lower y ≤ upper y)
+    (k : Fin cover.tiling.subdivisionCount) :
+    IsCompact {y | y ∈ baseTile i ∩ baseTile j ∧
+      projectionFiberSubdivisionEndpointGraphPoint lower upper k.succ.castSucc y ∈
+        facePatch ∩ domain} := by
+  rw [← cover.restrictedDomain_adjacent_seam_projects_exactly domain i j horder k]
+  have hleft : IsCompact ((facePatch ∩ domain) ∩
+      projectionFiberSubdivisionTile (baseTile i) lower upper k.castSucc) := by
+    simpa [Set.inter_assoc, Set.inter_left_comm, Set.inter_comm] using
+      (cover.facePatch_tile_compact ⟨i, k.castSucc⟩).inter_right hdomain
+  have hright : IsCompact ((facePatch ∩ domain) ∩
+      projectionFiberSubdivisionTile (baseTile j) lower upper k.succ) := by
+    simpa [Set.inter_assoc, Set.inter_left_comm, Set.inter_comm] using
+      (cover.facePatch_tile_compact ⟨j, k.succ⟩).inter_right hdomain
+  exact (hleft.inter hright).image
+    (forgetLastCoordinate n).continuous_of_finiteDimensional
+
+/-- The one-bit Case 1.2 cover in Craciun v3, §7.4.3, with its projected base tiling constructed
+from compactness. The new-coordinate strips are then subdivided by
+`compactOneBitFiberPatchCover_of_compactBand`; each resulting face piece is compact and the pieces
+have pairwise disjoint interiors. -/
+theorem compactOneBitFiberPatchCover_of_compactBase {n : ℕ}
+    (facePatch : Set (Fin (n + 1) → ℝ)) (hfaceCompact : IsCompact facePatch)
+    (base : Set (Fin n → ℝ)) (hbaseCompact : IsCompact base)
+    (lower upper : (Fin n → ℝ) → ℝ) (epsilon patchRadius : ℝ)
+    (hlower : Continuous lower) (hupper : Continuous upper)
+    (horder : ∀ y ∈ base, lower y ≤ upper y) (hepsilon : 0 < epsilon)
+    (hpatchRadius : 0 < patchRadius)
+    (hfaceBand : facePatch ⊆
+      projectionFiberBand base (fun y => some (lower y)) (fun y => some (upper y))) :
+    ∃ (cover : CompactFinitePatchCover base patchRadius),
+      letI : Fintype cover.Index := cover.fintypeIndex
+      Nonempty (CompactOneBitFiberPatchCover facePatch base cover.patch lower upper
+        epsilon) := by
+  classical
+  let cover := compactFinitePatchCover_of_compact base hbaseCompact hpatchRadius
+  refine ⟨cover, ?_⟩
+  letI : Fintype cover.Index := cover.fintypeIndex
+  exact ⟨compactOneBitFiberPatchCover_of_compactBand facePatch hfaceCompact base
+    cover.patch lower upper epsilon cover.cover cover.patch_compact
+    cover.patch_interiors_disjoint hlower hupper
+    horder hepsilon hfaceBand⟩
+
+/-- The Case 1.2 strip refinement with each resulting strip retaining the chamber label of its
+projected base tile. The projection of a whole strip tile is exactly its base tile, so chamber
+ownership survives the subdivision in the added coordinate. -/
+structure CompactOneBitLabeledFiberPatchCover {n : ℕ} {ι : Type*} [Fintype ι]
+    (facePatch : Set (Fin (n + 1) → ℝ)) (base : Set (Fin n → ℝ))
+    (baseTile : ι → Set (Fin n → ℝ)) (lower upper : (Fin n → ℝ) → ℝ)
+    (epsilon : ℝ) {κ : Type*} [Fintype κ] (region : κ → Set (Fin n → ℝ)) where
+  cover : CompactOneBitFiberPatchCover facePatch base baseTile lower upper epsilon
+  label : (p : Σ i : ι, Fin (cover.tiling.subdivisionCount + 1)) → κ
+  projected_piece_subset_region : ∀ p,
+    forgetLastCoordinate n ''
+      (facePatch ∩ projectionFiberSubdivisionTile (baseTile p.1) lower upper p.2) ⊆
+        region (label p)
+  /-- A centered representative for every nonempty restricted strip patch. -/
+  basepoint : (p : Σ i : ι, Fin (cover.tiling.subdivisionCount + 1)) →
+    (facePatch ∩ projectionFiberSubdivisionTile (baseTile p.1) lower upper p.2).Nonempty →
+      Fin (n + 1) → ℝ
+  /-- The representative lies in the corresponding subdivided strip. -/
+  basepoint_mem_tile : ∀ (p : Σ i : ι, Fin (cover.tiling.subdivisionCount + 1))
+      (hp : (facePatch ∩
+        projectionFiberSubdivisionTile (baseTile p.1) lower upper p.2).Nonempty),
+    basepoint p hp ∈ projectionFiberSubdivisionTile (baseTile p.1) lower upper p.2
+  /-- The basepoint projects into the lower-dimensional tile that generated this strip. -/
+  basepoint_projects_into_baseTile : ∀
+      (p : Σ i : ι, Fin (cover.tiling.subdivisionCount + 1))
+      (hp : (facePatch ∩
+        projectionFiberSubdivisionTile (baseTile p.1) lower upper p.2).Nonempty),
+    forgetLastCoordinate n (basepoint p hp) ∈ baseTile p.1
+  /-- The representative projects into the chamber assigned to its base tile. -/
+  basepoint_projects_into_region : ∀ (p : Σ i : ι, Fin (cover.tiling.subdivisionCount + 1))
+      (hp : (facePatch ∩
+        projectionFiberSubdivisionTile (baseTile p.1) lower upper p.2).Nonempty),
+    forgetLastCoordinate n (basepoint p hp) ∈ region (label p)
+
+/-- Craciun v3, §7.4.3, one-bit Case 1.2 with fan-chamber ownership preserved through the
+vertical strip subdivision. First make the projected base tiles small enough to lie in one open
+chamber, then subdivide every fiber with the shared tiling; every refined strip projects into the original
+labeled base tile. -/
+theorem compactOneBitLabeledFiberPatchCover_of_openChambers {n : ℕ}
+    (facePatch : Set (Fin (n + 1) → ℝ)) (hfaceCompact : IsCompact facePatch)
+    (base : Set (Fin n → ℝ)) (hbaseCompact : IsCompact base)
+    (lower upper : (Fin n → ℝ) → ℝ) (epsilon maxMesh : ℝ)
+    (hlower : Continuous lower) (hupper : Continuous upper)
+    (horder : ∀ y ∈ base, lower y ≤ upper y) (hepsilon : 0 < epsilon)
+    (hmaxMesh : 0 < maxMesh)
+    (hfaceBand : facePatch ⊆
+      projectionFiberBand base (fun y => some (lower y)) (fun y => some (upper y)))
+    {κ : Type*} [Fintype κ] (region : κ → Set (Fin n → ℝ))
+    (hregionOpen : ∀ i, IsOpen (region i))
+    (hregionCover : base ⊆ ⋃ i, region i) :
+    ∃ mesh : ℝ, 0 < mesh ∧ mesh ≤ maxMesh ∧
+      ∃ labeled : CompactLabeledPatchCover base mesh region,
+        letI : Fintype labeled.cover.Index := labeled.cover.fintypeIndex
+        Nonempty (CompactOneBitLabeledFiberPatchCover facePatch base labeled.cover.patch
+          lower upper epsilon region) := by
+  classical
+  obtain ⟨mesh, hmesh, hmeshBound, hlabeled⟩ :=
+    compactLabeledPatchCover_of_finiteOpenCover
+      base hbaseCompact region hregionOpen hregionCover maxMesh hmaxMesh
+  obtain ⟨labeled⟩ := hlabeled
+  letI : Fintype labeled.cover.Index := labeled.cover.fintypeIndex
+  let cover := compactOneBitFiberPatchCover_of_compactBand facePatch hfaceCompact base
+    labeled.cover.patch lower upper epsilon
+    labeled.cover.cover labeled.cover.patch_compact labeled.cover.patch_interiors_disjoint
+    hlower hupper horder hepsilon hfaceBand
+  let basepoint : (p : Σ i : labeled.cover.Index,
+      Fin (cover.tiling.subdivisionCount + 1)) →
+      (facePatch ∩ projectionFiberSubdivisionTile
+        (labeled.cover.patch p.1) lower upper p.2).Nonempty → Fin (n + 1) → ℝ :=
+    fun p hp =>
+      let x := Classical.choose hp
+      Fin.snoc (forgetLastCoordinate n x)
+        (cover.tiling.tile_center p.2 (forgetLastCoordinate n x))
+  let basepointProjection : ∀ (p : Σ i : labeled.cover.Index,
+      Fin (cover.tiling.subdivisionCount + 1))
+      (hp : (facePatch ∩ projectionFiberSubdivisionTile
+        (labeled.cover.patch p.1) lower upper p.2).Nonempty),
+      forgetLastCoordinate n (basepoint p hp) ∈ labeled.cover.patch p.1 := by
+    intro p hp
+    let x := Classical.choose hp
+    have hx := Classical.choose_spec hp
+    have hy : forgetLastCoordinate n x ∈ labeled.cover.patch p.1 := by
+      have hpiece := hx.2
+      change (let y := forgetLastCoordinate n x
+        y ∈ labeled.cover.patch p.1 ∧ _) at hpiece
+      exact hpiece.1
+    simpa [basepoint, x, forgetLastCoordinate] using hy
+  refine ⟨mesh, hmesh, hmeshBound, labeled, ?_⟩
+  refine ⟨⟨cover, fun p => labeled.label p.1, ?_, basepoint, ?_, basepointProjection, ?_⟩⟩
+  · intro p y hy
+    rcases hy with ⟨x, hx, hxy⟩
+    have htile := hx.2
+    change forgetLastCoordinate n x ∈ labeled.cover.patch p.1 ∧ _ at htile
+    apply labeled.patch_subset_region p.1
+    simpa [hxy] using htile.1
+  · intro p hp
+    let x := Classical.choose hp
+    have hx := Classical.choose_spec hp
+    have hy : forgetLastCoordinate n x ∈ labeled.cover.patch p.1 := by
+      have hpiece := hx.2
+      change (let y := forgetLastCoordinate n x
+        y ∈ labeled.cover.patch p.1 ∧ _) at hpiece
+      exact hpiece.1
+    have hybase := labeled.cover.patch_subset p.1 hy
+    have hcenter := cover.tiling.tile_center_mem p.2 (forgetLastCoordinate n x) hybase
+    have hcoords := (mem_projectionFiberSubdivisionTile_snoc_iff base lower upper p.2
+      (forgetLastCoordinate n x) (cover.tiling.tile_center p.2 (forgetLastCoordinate n x))).mp hcenter
+    apply (mem_projectionFiberSubdivisionTile_snoc_iff
+      (labeled.cover.patch p.1) lower upper p.2
+      (forgetLastCoordinate n x)
+      (cover.tiling.tile_center p.2 (forgetLastCoordinate n x))).2
+    exact ⟨hy, hcoords.2.1, hcoords.2.2⟩
+  · intro p hp
+    exact labeled.patch_subset_region p.1 (basepointProjection p hp)
 
 /-! ## The ruled-surface step -/
 
@@ -346,4 +8721,56 @@ theorem inductionStep_of_ruledBuild {f : E → E} {x₀ : E} {ι : Type*} [Finty
 
 end DifferentialInclusion
 
+end CRNT
+
+namespace CRNT
+namespace ZeroSeparatingInduction
+
+/-- An interior point of a covered base that is not interior to one closed tile must also belong
+to a different tile. This supplies an actual pair-labeled seam predecessor for finite tile
+refinement. -/
+theorem CompactSmallBaseTiling.boundary_incident_tile {n : ℕ}
+    {base : Set (Fin n → ℝ)} {eta : ℝ}
+    (T : CompactSmallBaseTiling base eta) {i : Fin T.count} {x : Fin n → ℝ}
+    (hxb : x ∈ interior base)
+    (hxnot : x ∉ interior (T.tile i)) :
+    ∃ j : Fin T.count, j ≠ i ∧ x ∈ T.tile j := by
+  classical
+  let others : Set (Fin n → ℝ) := ⋃ j : Fin T.count, if j = i then ∅ else T.tile j
+  have hclosed : IsClosed others := isClosed_iUnion_of_finite fun j => by
+    by_cases hji : j = i
+    · simp [hji]
+    · simpa [others, hji] using (T.tile_compact j).isClosed
+  by_contra hfound
+  have hnone : ∀ j : Fin T.count, j ≠ i → x ∉ T.tile j := by
+    intro j hji hxj
+    exact hfound ⟨j, hji, hxj⟩
+  have hxOthers : x ∉ others := by
+    intro hx
+    simp only [others, Set.mem_iUnion] at hx
+    obtain ⟨j, hj⟩ := hx
+    by_cases hji : j = i
+    · simp [hji] at hj
+    · exact hnone j hji (by simpa [hji] using hj)
+  have hhood := Filter.inter_mem (isOpen_interior.mem_nhds hxb)
+      (hclosed.isOpen_compl.mem_nhds hxOthers)
+  have hsubset : interior base ∩ othersᶜ ⊆ T.tile i := by
+    intro y hy
+    have hybase : y ∈ base := interior_subset hy.1
+    have hycover : y ∈ ⋃ j : Fin T.count, T.tile j := by
+      rw [← T.covers]
+      exact hybase
+    obtain ⟨j, hyj⟩ := Set.mem_iUnion.mp hycover
+    by_cases hji : j = i
+    · simpa [hji] using hyj
+    · have hyOthers : y ∈ others := by
+        apply Set.mem_iUnion.mpr
+        exact ⟨j, by simp [hji, hyj]⟩
+      exact (hy.2 hyOthers).elim
+  have hxint : x ∈ interior (T.tile i) := by
+    apply mem_interior_iff_mem_nhds.mpr
+    exact Filter.mem_of_superset hhood hsubset
+  exact hxnot hxint
+
+end ZeroSeparatingInduction
 end CRNT

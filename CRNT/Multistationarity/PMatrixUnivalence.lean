@@ -145,10 +145,10 @@ theorem IsPMatrix.eq_zero_of_mulVec_nonpos {n : ℕ} {A : Matrix (Fin n) (Fin n)
       linarith [hθnn]
     rw [hxθb, hθ0, zero_smul]
 
-/-- **Gale–Nikaido Corollary 1.** For a P-matrix there is a uniform `λ > 0` such that every
-nonnegative vector `v` has a component of `A *ᵥ v` at least `λ‖v‖`. By Theorem 1, on the compact set
+/-- **Gale–Nikaido Corollary 1.** For a P-matrix there is a uniform `lam > 0` such that every
+nonnegative vector `v` has a component of `A *ᵥ v` at least `lam‖v‖`. By Theorem 1, on the compact set
 of nonnegative unit vectors the maximal component of `A *ᵥ ·` is everywhere positive, so it attains a
-positive minimum `λ`; scaling recovers the bound for all `v ≥ 0`. -/
+positive minimum `lam`; scaling recovers the bound for all `v ≥ 0`. -/
 theorem IsPMatrix.exists_pos_le_mulVec {n : ℕ} {A : Matrix (Fin (n + 1)) (Fin (n + 1)) ℝ}
     (hA : A.IsPMatrix) :
     ∃ lam : ℝ, 0 < lam ∧ ∀ v : Fin (n + 1) → ℝ, 0 ≤ v → ∃ i, lam * ‖v‖ ≤ (A *ᵥ v) i := by

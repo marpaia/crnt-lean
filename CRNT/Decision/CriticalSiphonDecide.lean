@@ -1,4 +1,5 @@
 import CRNT.Decision.ConservationConeStrict
+import CRNT.Stoich.RationalVector
 import CRNT.Decision.RationalFarkasDecide
 
 /-!
@@ -187,15 +188,6 @@ namespace Network
 open RationalFarkas
 
 variable {S : Type} [DecidableEq S] [Fintype S]
-
-/-- The rational reaction coefficient `target s − source s` of reaction `r` at species `s`. The real
-reaction vector is its cast: `reactionVector r s = ((reactionCoeffQ r s : ℚ) : ℝ)`. -/
-def reactionCoeffQ (N : Network S) (r : N.R) (s : S) : ℚ :=
-  ((N.reaction r).target s : ℚ) - ((N.reaction r).source s : ℚ)
-
-@[simp] theorem cast_reactionCoeffQ (N : Network S) (r : N.R) (s : S) :
-    ((N.reactionCoeffQ r s : ℚ) : ℝ) = N.reactionVector r s := by
-  simp only [reactionCoeffQ, Rat.cast_sub, Rat.cast_natCast, reactionVector_apply]
 
 /-- A row of the encoded system from a rational coefficient function on species and a bound, indexing
 the variables through an explicit species enumeration `e : S ≃ Fin (Fintype.card S)`. The variable

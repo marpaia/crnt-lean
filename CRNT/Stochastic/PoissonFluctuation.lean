@@ -203,9 +203,9 @@ intensity `r = V · a` (a fixed per-volume rate `a`), the volume-scaled count ha
 Kurtz fluctuation residual to zero. -/
 theorem variance_scaled_intensity_poissonMeasure {V : ℝ} (hV : 0 < V) (a : ℝ≥0) :
     variance (fun n : ℕ => (n : ℝ) / V)
-        (poissonMeasure (⟨V, hV.le⟩ * a)) = (a : ℝ) / V := by
+        (poissonMeasure (NNReal.mk V hV.le * a)) = (a : ℝ) / V := by
   rw [variance_scaled_id_poissonMeasure]
-  have hcoe : ((⟨V, hV.le⟩ * a : ℝ≥0) : ℝ) = V * a := by
+  have hcoe : ((NNReal.mk V hV.le * a : ℝ≥0) : ℝ) = V * a := by
     rw [NNReal.coe_mul]; rfl
   rw [hcoe, sq]
   field_simp
@@ -220,18 +220,19 @@ at most `a / (V · δ²)`:
 
 This is Chebyshev's inequality applied to the `O(1/V)` variance bound. -/
 theorem meas_scaled_centered_poisson_ge_le {V : ℝ} (hV : 0 < V) (a : ℝ≥0) {δ : ℝ} (hδ : 0 < δ) :
-    (poissonMeasure (⟨V, hV.le⟩ * a))
+    (poissonMeasure (NNReal.mk V hV.le * a))
         {n : ℕ | δ ≤ |(n : ℝ) / V - a|} ≤ ENNReal.ofReal ((a : ℝ) / (V * δ ^ 2)) := by
-  have hcoe : ((⟨V, hV.le⟩ * a : ℝ≥0) : ℝ) = V * a := by
+  have hcoe : ((NNReal.mk V hV.le * a : ℝ≥0) : ℝ) = V * a := by
     rw [NNReal.coe_mul]; rfl
   have hsmul : (fun n : ℕ => (n : ℝ) / V) = fun n : ℕ => V⁻¹ * (n : ℝ) := by
     funext n; rw [div_eq_inv_mul]
-  have hmean : ∫ n, ((n : ℝ) / V) ∂(poissonMeasure (⟨V, hV.le⟩ * a)) = a := by
+  have hmean : ∫ n, ((n : ℝ) / V) ∂(poissonMeasure (NNReal.mk V hV.le * a)) = a := by
     rw [hsmul, integral_const_mul, integral_id_poissonMeasure, hcoe]
     field_simp
-  have hMemLp : MemLp (fun n : ℕ => (n : ℝ) / V) 2 (poissonMeasure (⟨V, hV.le⟩ * a)) := by
+  have hMemLp : MemLp (fun n : ℕ => (n : ℝ) / V) 2
+      (poissonMeasure (NNReal.mk V hV.le * a)) := by
     rw [memLp_two_iff_integrable_sq (by fun_prop), integrable_poissonMeasure_iff]
-    refine ((summable_pmf_mul_sq (⟨V, hV.le⟩ * a)).mul_left (V⁻¹ ^ 2)).congr (fun n => ?_)
+    refine ((summable_pmf_mul_sq (NNReal.mk V hV.le * a)).mul_left (V⁻¹ ^ 2)).congr (fun n => ?_)
     rw [Real.norm_eq_abs, abs_of_nonneg (by positivity), div_pow]
     field_simp
   have hcheb := meas_ge_le_variance_div_sq hMemLp hδ

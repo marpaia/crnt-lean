@@ -134,9 +134,9 @@ theorem `massAction_forwardInvariant_nonneg` phrases its `hLip`. The functional 
 the dissipativity bound is the genuine residual structural certificate, while on the face
 itself the field-sum over `P` vanishes unconditionally
 (`faceSum_deriv_witness_eq_zero_on_siphonFace`). -/
-theorem siphonFace_forwardInvariant (N : Network S) (κ : RateConstants N)
+theorem siphonFace_forwardInvariant_forward (N : Network S) (κ : RateConstants N)
     {P : Finset S} {γ : ℝ → Concentration S} {L : ℝ}
-    (hderiv : ∀ t, HasDerivAt γ (N.massActionVectorField κ (γ t)) t)
+    (hderiv : ∀ t, 0 ≤ t → HasDerivAt γ (N.massActionVectorField κ (γ t)) t)
     (hnn : ∀ t, 0 ≤ t → (γ t).Nonnegative)
     (hdiss : ∀ t, 0 ≤ t →
       deriv (fun u => faceSum P (γ u)) t ≤ L * faceSum P (γ t) ∨ faceSum P (γ t) ≤ 0)
@@ -145,21 +145,24 @@ theorem siphonFace_forwardInvariant (N : Network S) (κ : RateConstants N)
   -- the scalar face functional along the curve
   set g : ℝ → ℝ := fun u => faceSum P (γ u) with hg
   -- per-coordinate derivatives of the Pi-valued curve
-  have hcoord : ∀ t s, HasDerivAt (fun u => γ u s) (N.massActionVectorField κ (γ t) s) t :=
-    fun t s => (hasDerivAt_pi.mp (hderiv t)) s
+  have hcoord : ∀ t, 0 ≤ t → ∀ s,
+      HasDerivAt (fun u => γ u s) (N.massActionVectorField κ (γ t) s) t :=
+    fun t ht s => (hasDerivAt_pi.mp (hderiv t ht)) s
   -- `g` is differentiable with derivative the sum of the coordinate derivatives
-  have hgderiv : ∀ t, HasDerivAt g (∑ s ∈ P, N.massActionVectorField κ (γ t) s) t := by
-    intro t
+  have hgderiv : ∀ t, 0 ≤ t →
+      HasDerivAt g (∑ s ∈ P, N.massActionVectorField κ (γ t) s) t := by
+    intro t ht
     have hsum := HasDerivAt.sum (u := P) (A := fun s => fun u => γ u s)
-      (fun s (_ : s ∈ P) => hcoord t s)
+      (fun s (_ : s ∈ P) => hcoord t ht s)
     have hfun : (∑ s ∈ P, fun u => γ u s) = g := by
       funext u; simp [hg, faceSum]
     rw [hfun] at hsum
     exact hsum
-  have hgderivval : ∀ t, deriv g t = ∑ s ∈ P, N.massActionVectorField κ (γ t) s :=
-    fun t => (hgderiv t).deriv
-  have hgd : ∀ t, HasDerivAt g (deriv g t) t := by
-    intro t; rw [hgderivval t]; exact hgderiv t
+  have hgderivval : ∀ t, 0 ≤ t →
+      deriv g t = ∑ s ∈ P, N.massActionVectorField κ (γ t) s :=
+    fun t ht => (hgderiv t ht).deriv
+  have hgd : ∀ t, 0 ≤ t → HasDerivAt g (deriv g t) t := by
+    intro t ht; rw [hgderivval t ht]; exact hgderiv t ht
   -- start: `g 0 = 0`
   have hg0 : g 0 = 0 := ((mem_siphonFace_iff N).mp h0).2
   -- the upper Nagumo lemma needs the dissipativity bound on the whole line where `g > 0`;
@@ -173,21 +176,43 @@ theorem siphonFace_forwardInvariant (N : Network S) (κ : RateConstants N)
   -- We prove `g t ≤ 0` for `t ≥ 0` directly, mirroring the lower lemma's crossing argument
   -- on `z = g · exp(-L·)`, using `hdiss` only at forward times.
   have hgle : ∀ t, 0 ≤ t → g t ≤ 0 := by
-    have hcont : Continuous g := by
-      rw [continuous_iff_continuousAt]; exact fun t => (hgd t).continuousAt
+    have hcont : ContinuousOn g (Set.Ici 0) := by
+      intro t ht
+      exact (hgd t ht).continuousAt.continuousWithinAt
     intro T hT
     by_contra hgT
     rw [not_le] at hgT
     -- the closed, nonempty, bounded-above set of "good" times in `[0, T]` where `g ≤ 0`
-    set A : Set ℝ := Set.Icc 0 T ∩ {t | g t ≤ 0} with hA
-    have hAne : A.Nonempty := ⟨0, ⟨le_refl 0, hT⟩, hg0.le⟩
-    have hAcl : IsClosed A := isClosed_Icc.inter (isClosed_le hcont continuous_const)
-    have hAbdd : BddAbove A := ⟨T, fun t ht => ht.1.2⟩
+    have hcontIcc : ContinuousOn g (Set.Icc 0 T) :=
+      hcont.mono (fun _ ht => Set.mem_Ici.mpr ht.1)
+    set A' : Set (Set.Icc 0 T) := {t | g t ≤ 0} with hA'
+    have hA'closed : IsClosed A' := by
+      change IsClosed ((fun t : Set.Icc 0 T => g t) ⁻¹' Set.Iic 0)
+      exact isClosed_Iic.preimage hcontIcc.domRestrict
+    have hIccCompact : IsCompact (Set.univ : Set (Set.Icc 0 T)) := by
+      letI : CompactSpace (Set.Icc 0 T) :=
+        (isCompact_iff_compactSpace).mp (isCompact_Icc : IsCompact (Set.Icc 0 T))
+      exact isCompact_univ
+    have hA'compact : IsCompact A' :=
+      hIccCompact.of_isClosed_subset hA'closed (Set.subset_univ _)
+    set A : Set ℝ := (fun t : Set.Icc 0 T => (t : ℝ)) '' A' with hA
+    have hAmem : ∀ t, t ∈ A ↔ t ∈ Set.Icc 0 T ∧ g t ≤ 0 := by
+      intro t
+      simp [hA, hA', and_comm, and_left_comm, and_assoc]
+    have hAne : A.Nonempty := by
+      refine ⟨0, (hAmem 0).mpr ?_⟩
+      exact ⟨⟨le_rfl, hT⟩, hg0.le⟩
+    have hAcompact : IsCompact A := by
+      rw [hA]
+      exact hA'compact.image continuous_subtype_val
+    have hAcl : IsClosed A := hAcompact.isClosed
+    have hAbdd : BddAbove A := ⟨T, fun t ht => (hAmem t).mp ht |>.1.2⟩
     set t₀ := sSup A with ht₀def
     have ht₀A : t₀ ∈ A := hAcl.csSup_mem hAne hAbdd
-    have ht₀0 : 0 ≤ t₀ := ht₀A.1.1
-    have ht₀T : t₀ ≤ T := ht₀A.1.2
-    have hgt₀ : g t₀ ≤ 0 := ht₀A.2
+    have ht₀mem := (hAmem t₀).mp ht₀A
+    have ht₀0 : 0 ≤ t₀ := ht₀mem.1.1
+    have ht₀T : t₀ ≤ T := ht₀mem.1.2
+    have hgt₀ : g t₀ ≤ 0 := ht₀mem.2
     have ht₀ltT : t₀ < T :=
       lt_of_le_of_ne ht₀T (fun h => absurd (h ▸ hgt₀) (not_le.mpr hgT))
     -- after `t₀` (up to `T`) the function is strictly positive
@@ -195,12 +220,15 @@ theorem siphonFace_forwardInvariant (N : Network S) (κ : RateConstants N)
       intro t htlt htle
       by_contra hle
       rw [not_lt] at hle
-      exact absurd (le_csSup hAbdd ⟨⟨le_trans ht₀0 htlt.le, htle⟩, hle⟩) (not_le.mpr htlt)
+      have htm : t ∈ A := (hAmem t).mpr
+        ⟨⟨le_trans ht₀0 htlt.le, htle⟩, hle⟩
+      exact absurd (le_csSup hAbdd htm) (not_le.mpr htlt)
     -- `g t₀ = 0` by continuity
     have hgt₀eq : g t₀ = 0 := by
       refine le_antisymm hgt₀ ?_
       have htend : Filter.Tendsto g (nhdsWithin t₀ (Set.Ioi t₀)) (nhds (g t₀)) :=
-        (hcont.continuousAt).continuousWithinAt.tendsto
+        (hcont.continuousWithinAt (Set.mem_Ici.mpr ht₀0)).tendsto.mono_left
+          (nhdsWithin_mono _ (fun t ht => Set.mem_Ici.mpr (le_trans ht₀0 ht.le)))
       refine ge_of_tendsto htend ?_
       have hlt : ∀ᶠ t in nhdsWithin t₀ (Set.Ioi t₀), t < T :=
         eventually_nhdsWithin_of_eventually_nhds (eventually_lt_nhds ht₀ltT)
@@ -210,23 +238,33 @@ theorem siphonFace_forwardInvariant (N : Network S) (κ : RateConstants N)
       exact (hpos_after t ht₀t htT.le).le
     -- `z = g · exp(-L·)` is nonincreasing on `[t₀, T]`
     set z : ℝ → ℝ := fun t => g t * Real.exp (-L * t) with hz
-    have hzd : ∀ t, HasDerivAt z ((deriv g t + (-L) * g t) * Real.exp (-L * t)) t := by
-      intro t
+    have hzd : ∀ t, 0 ≤ t →
+        HasDerivAt z ((deriv g t + (-L) * g t) * Real.exp (-L * t)) t := by
+      intro t ht
       have he : HasDerivAt (fun s => Real.exp (-L * s)) (Real.exp (-L * t) * (-L)) t := by
         simpa using (((hasDerivAt_id t).const_mul (-L))).exp
-      have hm := (hgd t).mul he
+      have hm := (hgd t ht).mul he
       have hval : deriv g t * Real.exp (-L * t) + g t * (Real.exp (-L * t) * (-L))
           = (deriv g t + (-L) * g t) * Real.exp (-L * t) := by ring
       rw [hz, ← hval]; exact hm
-    have hzcont : Continuous z :=
-      hcont.mul (Real.continuous_exp.comp (continuous_const.mul continuous_id))
+    have hzcont : ContinuousOn z (Set.Icc t₀ T) := by
+      have hgcont : ContinuousOn g (Set.Icc t₀ T) :=
+        hcont.mono (fun _ ht => Set.mem_Ici.mpr (le_trans ht₀0 ht.1))
+      have hecont : ContinuousOn (fun t : ℝ => Real.exp (-L * t)) (Set.Icc t₀ T) := by
+        fun_prop
+      rw [hz]
+      exact hgcont.mul hecont
     have hanti : AntitoneOn z (Set.Icc t₀ T) := by
-      refine antitoneOn_of_deriv_nonpos (convex_Icc t₀ T) hzcont.continuousOn
-        (fun t _ => (hzd t).differentiableAt.differentiableWithinAt) (fun t ht => ?_)
+      refine antitoneOn_of_deriv_nonpos (convex_Icc t₀ T) hzcont
+        (fun t ht => by
+          rw [interior_Icc, Set.mem_Ioo] at ht
+          have htge : 0 ≤ t := le_trans ht₀0 ht.1.le
+          exact (hzd t htge).differentiableAt.differentiableWithinAt)
+        (fun t ht => ?_)
       rw [interior_Icc, Set.mem_Ioo] at ht
-      rw [(hzd t).deriv]
-      have hgt : 0 < g t := hpos_after t ht.1 ht.2.le
       have htge : 0 ≤ t := le_trans ht₀0 ht.1.le
+      rw [(hzd t htge).deriv]
+      have hgt : 0 < g t := hpos_after t ht.1 ht.2.le
       -- activate the dissipativity disjunct: `g t > 0` rules out `g t ≤ 0`
       have hbound : deriv g t ≤ L * g t := by
         rcases hdiss t htge with hb | hc
@@ -244,6 +282,18 @@ theorem siphonFace_forwardInvariant (N : Network S) (κ : RateConstants N)
   have hge : 0 ≤ g t := faceSum_nonneg (hnn t ht)
   have hgeq : faceSum P (γ t) = 0 := le_antisymm (hgle t ht) hge
   exact (mem_siphonFace_iff N).mpr ⟨hnn t ht, hgeq⟩
+
+/-- Siphon-face invariance for a solution defined at every real time. The forward-time form
+`siphonFace_forwardInvariant_forward` only needs the differential equation for `t ≥ 0`. -/
+theorem siphonFace_forwardInvariant (N : Network S) (κ : RateConstants N)
+    {P : Finset S} {γ : ℝ → Concentration S} {L : ℝ}
+    (hderiv : ∀ t, HasDerivAt γ (N.massActionVectorField κ (γ t)) t)
+    (hnn : ∀ t, 0 ≤ t → (γ t).Nonnegative)
+    (hdiss : ∀ t, 0 ≤ t →
+      deriv (fun u => faceSum P (γ u)) t ≤ L * faceSum P (γ t) ∨ faceSum P (γ t) ≤ 0)
+    (h0 : γ 0 ∈ N.SiphonFace P) :
+    ∀ t, 0 ≤ t → γ t ∈ N.SiphonFace P :=
+  N.siphonFace_forwardInvariant_forward κ (fun t _ => hderiv t) hnn hdiss h0
 
 /-- **The derivative witness of the face functional vanishes on a siphon face.** On the
 face of a siphon `P`, the sum over `P` of the mass-action field components — the natural

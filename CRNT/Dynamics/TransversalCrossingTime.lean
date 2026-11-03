@@ -22,11 +22,11 @@ first-return primitive; this is the foundational piece those need.
 The crossing condition `Φ x t ∈ S` is the scalar equation
 `g(x, t) = ⟪Φ x t − p₀, n⟫ = 0`. Two partials govern it:
 
-* The **temporal** partial is the transversal speed `∂_t g(x, t) = ⟪f(Φ x t), n⟫`. It comes
+* The **temporal** partialDeriv is the transversal speed `∂_t g(x, t) = ⟪f(Φ x t), n⟫`. It comes
   for free from the integral-curve law `HasDerivAt (Φ x) (f (Φ x t)) t` and is proved here
   (`TransversalSection.hasDeriv_time`). At the crossing it equals `⟪f p₀, n⟫ ≠ 0`, which is the
   nondegeneracy the implicit function theorem requires.
-* The **spatial** partial `∂_x g(x, t)` is the inner product of the section normal with the
+* The **spatial** partialDeriv `∂_x g(x, t)` is the inner product of the section normal with the
   flow's spatial derivative `D_x Φ x t` (the variational/monodromy operator). The spatial
   regularity of a flow is the differentiable dependence on initial conditions, which `Mathlib`
   does not provide for a general Lipschitz field; it is recorded here as DATA on the section,
@@ -66,7 +66,7 @@ variable {E : Type*} [NormedAddCommGroup E] [InnerProductSpace ℝ E] [CompleteS
 /-- **A nonzero scalar derivative is invertible.** Scaling `ℝ →L[ℝ] ℝ` by a nonzero constant
 `c`, the continuous linear map `toSpanSingleton ℝ c : r ↦ r · c`, is a continuous linear
 automorphism of `ℝ` — the nondegeneracy the implicit function theorem requires of the temporal
-partial. -/
+partialDeriv. -/
 theorem toSpanSingleton_isInvertible {c : ℝ} (hc : c ≠ 0) :
     (ContinuousLinearMap.toSpanSingleton ℝ c).IsInvertible := by
   refine ⟨ContinuousLinearEquiv.unitsEquivAut ℝ (Units.mk0 c hc), ?_⟩
@@ -81,7 +81,7 @@ through each state, `flow x` solving `ẏ = field y` with `flow x 0 = x`), an af
 at which `base` meets `S` **transversally**.
 
 The temporal regularity (the integral-curve law `hasDeriv_flow`) is intrinsic and supplies the
-transversal-speed partial. The spatial regularity of the flow — its differentiable dependence
+transversal-speed partialDeriv. The spatial regularity of the flow — its differentiable dependence
 on the initial state, recorded by `spaceDeriv` together with `hasFDeriv_space` and
 `cont_spaceDeriv` — is the variational structure `Mathlib` does not furnish for a general
 field, so it is carried as DATA, exactly as `FullRadialField` carries the averaged-field
@@ -140,7 +140,7 @@ omit [CompleteSpace E] in
   simp [sectionCoord, S.isCrossing]
 
 omit [CompleteSpace E] in
-/-- **The temporal partial is the transversal speed.** Differentiating
+/-- **The temporal partialDeriv is the transversal speed.** Differentiating
 `sectionCoord x · = ⟪Φ x · − point, normal⟫` in time, the integral-curve law gives
 `∂_t sectionCoord x t = ⟪field (Φ x t), normal⟫`: the rate at which the flow line pierces `S`.
 At the base crossing this is the nonzero transversal speed `⟪field point, normal⟫`. -/
@@ -153,7 +153,7 @@ theorem hasDeriv_time (x : E) (t : ℝ) :
   exact h
 
 omit [CompleteSpace E] in
-/-- The temporal partial, packaged as a continuous linear map `ℝ →L[ℝ] ℝ` for the implicit
+/-- The temporal partialDeriv, packaged as a continuous linear map `ℝ →L[ℝ] ℝ` for the implicit
 function theorem: scaling by the transversal speed `⟪field (Φ x t), normal⟫`. -/
 theorem hasFDeriv_time :
     ∀ᶠ v in 𝓝 (S.base, S.time),
@@ -161,13 +161,13 @@ theorem hasFDeriv_time :
         (ContinuousLinearMap.toSpanSingleton ℝ ⟪S.field (S.flow v.1 v.2), S.normal⟫) v.2 := by
   filter_upwards with v using (S.hasDeriv_time v.1 v.2).hasFDerivAt
 
-/-- The spatial partial of `sectionCoord`, packaged for the implicit function theorem: the
+/-- The spatial partialDeriv of `sectionCoord`, packaged for the implicit function theorem: the
 section normal composed with the flow's variational operator, `r ↦ ⟪D_x Φ x t · r, normal⟫`. -/
 noncomputable def spaceCoordDeriv (x : E) (t : ℝ) : E →L[ℝ] ℝ :=
   (innerSL ℝ S.normal).comp (S.spaceDeriv x t)
 
 omit [CompleteSpace E] in
-/-- **The spatial partial of `sectionCoord`.** Near the base crossing,
+/-- **The spatial partialDeriv of `sectionCoord`.** Near the base crossing,
 `sectionCoord · t = ⟪Φ · t − point, normal⟫` has Fréchet derivative
 `spaceCoordDeriv x t = ⟪D_x Φ x t · , normal⟫` — the section normal read against the flow's
 variational operator, the data the section carries. -/
@@ -181,10 +181,10 @@ theorem hasFDeriv_space_coord :
   simp [spaceCoordDeriv, fderivInnerCLM_apply, real_inner_comm]
 
 omit [CompleteSpace E] in
-/-- **Continuity of the transversal speed.** The temporal partial — scaling by
+/-- **Continuity of the transversal speed.** The temporal partialDeriv — scaling by
 `⟪field (Φ x t), normal⟫` — is continuous at the base crossing, since `field`, the flow, and the
 inner product are continuous there. This is the continuity the implicit function theorem needs
-for the temporal partial. -/
+for the temporal partialDeriv. -/
 theorem continuousAt_timeDeriv :
     ContinuousAt
       (↿fun x t => ContinuousLinearMap.toSpanSingleton ℝ ⟪S.field (S.flow x t), S.normal⟫)
@@ -197,7 +197,7 @@ theorem continuousAt_timeDeriv :
     hspeed).continuousAt
 
 omit [CompleteSpace E] in
-/-- Continuity of the spatial partial `spaceCoordDeriv` at the base crossing: composing the
+/-- Continuity of the spatial partialDeriv `spaceCoordDeriv` at the base crossing: composing the
 section normal `innerSL ℝ normal` with the continuous variational operator `spaceDeriv`. -/
 theorem continuousAt_spaceCoordDeriv :
     ContinuousAt (↿S.spaceCoordDeriv) (S.base, S.time) := by
@@ -210,7 +210,7 @@ theorem continuousAt_spaceCoordDeriv :
 /-- **The transversal first-crossing time.** The implicit function `τ : E → ℝ` solving the
 section equation `sectionCoord x t = 0` for the crossing time `t` as a function of the initial
 state `x`, near the base crossing `(base, time)`, furnished by the curried bivariate implicit
-function theorem with the temporal partial (the nonzero transversal speed) inverted. By
+function theorem with the temporal partialDeriv (the nonzero transversal speed) inverted. By
 construction `τ base = time` (limit) and `Φ x (τ x) ∈ S` for `x` near `base`. -/
 noncomputable def crossingTime : E → ℝ :=
   implicitFunctionOfBivariate

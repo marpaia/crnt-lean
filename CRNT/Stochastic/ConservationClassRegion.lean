@@ -203,7 +203,11 @@ theorem uRegionMatrix_stronglyConnected_of_conservationClass (N : Network S) (κ
     ∀ i j : ↥T, supportReaches (N.uRegionMatrix κ hTfin) i j := by
   intro i j
   have hsc : N.regionStronglyConnected κ T := N.regionStronglyConnected_of_jumpReaches κ hjsc
-  refine Relation.ReflTransGen.mono ?_ (hsc i j)
+  have hsc' := hsc i j
+  unfold supportReaches at hsc' ⊢
+  refine (Relation.ReflTransGen.mono
+    (r := fun a c => N.regionMatrix κ T a c ≠ 0)
+    (p := fun a c => N.uRegionMatrix κ hTfin a c ≠ 0) ?_) i j hsc'
   intro a c hac
   have hpos : 0 < N.regionMatrix κ T a c :=
     lt_of_le_of_ne (N.regionMatrix_nonneg κ T a c) (Ne.symm hac)
@@ -265,14 +269,16 @@ source complex `A = (1, 0)` contributes the falling factorial `(n_A)^{(1)} = n_A
 and the unit falling factorial `(n_B)^{(0)} = 1` at species `B`. -/
 theorem smar_fwd (κ : RateConstants N) (n : Species → ℕ) :
     N.stochasticMassActionRate κ n Rxn.fwd = κ.k Rxn.fwd * (n Species.A : ℝ) := by
-  rw [stochasticMassActionRate, Fintype.prod_eq_mul Species.A Species.B (by decide)
+  simp only [stochasticMassActionRate]
+  rw [Fintype.prod_eq_mul Species.A Species.B (by decide)
     (fun x hx => by rcases x with _ | _ <;> simp_all)]
   simp [N, rxn, cA, Nat.descFactorial]
 
 /-- The stochastic mass-action propensity of `bwd : B → A` at a count `n` is `κ.k bwd · n_B`. -/
 theorem smar_bwd (κ : RateConstants N) (n : Species → ℕ) :
     N.stochasticMassActionRate κ n Rxn.bwd = κ.k Rxn.bwd * (n Species.B : ℝ) := by
-  rw [stochasticMassActionRate, Fintype.prod_eq_mul Species.A Species.B (by decide)
+  simp only [stochasticMassActionRate]
+  rw [Fintype.prod_eq_mul Species.A Species.B (by decide)
     (fun x hx => by rcases x with _ | _ <;> simp_all)]
   simp [N, rxn, cB, Nat.descFactorial]
 
@@ -307,15 +313,15 @@ theorem conservationClass_forward (κ : RateConstants N) (K : ℕ) :
   cases r
   · have hA : 1 ≤ n Species.A := by simpa [N, rxn, cA] using henabled Species.A
     have e1 : N.jumpNextCount n Rxn.fwd Species.A = n Species.A - 1 := by
-      rw [jumpNextCount]; simp [N, rxn, cA, cB]
+      simp [jumpNextCount, N, rxn, cA, cB]
     have e2 : N.jumpNextCount n Rxn.fwd Species.B = n Species.B + 1 := by
-      rw [jumpNextCount]; simp [N, rxn, cA, cB]
+      simp [jumpNextCount, N, rxn, cA, cB]
     rw [e1, e2]; omega
   · have hB : 1 ≤ n Species.B := by simpa [N, rxn, cB] using henabled Species.B
     have e1 : N.jumpNextCount n Rxn.bwd Species.A = n Species.A + 1 := by
-      rw [jumpNextCount]; simp [N, rxn, cA, cB]
+      simp [jumpNextCount, N, rxn, cA, cB]
     have e2 : N.jumpNextCount n Rxn.bwd Species.B = n Species.B - 1 := by
-      rw [jumpNextCount]; simp [N, rxn, cA, cB]
+      simp [jumpNextCount, N, rxn, cA, cB]
     rw [e1, e2]; omega
 
 /-- **No member of a nonempty conservation class is absorbing.** With `1 ≤ K` and `n_A + n_B = K`, at
@@ -411,7 +417,7 @@ theorem reaches_allA (κ : RateConstants N) (K : ℕ) (hK : 1 ≤ K) :
       set m := N.jumpNextCount n Rxn.bwd with hm
       have hmmem : m ∈ conservationClass K := hstep.2.1
       have hmB : m Species.B = b - 1 := by
-        rw [hm, jumpNextCount]; simp [N, rxn, cA, cB]; omega
+        rw [hm]; simp [jumpNextCount, N, rxn, cA, cB]; omega
       have hrec : N.JumpReaches κ (conservationClass K) m (allA K) :=
         ih (b - 1) (by omega) m hmmem hmB
       exact Relation.ReflTransGen.head hstep hrec
@@ -448,7 +454,7 @@ theorem allA_reaches (κ : RateConstants N) (K : ℕ) (hK : 1 ≤ K) :
         ih (b - 1) (by omega) p hpmem hpB
       have hstep := step_fwd κ K hK hpmem hpA
       have hjn : N.jumpNextCount p Rxn.fwd = n := by
-        funext s; rw [jumpNextCount]
+        funext s; simp only [jumpNextCount]
         cases s
         · show n Species.A + 1 - (N.reaction Rxn.fwd).source Species.A
             + (N.reaction Rxn.fwd).target Species.A = n Species.A
@@ -501,4 +507,3 @@ theorem conservationClass_pow_mulVec_tendsto (κ : RateConstants N) (K : ℕ) (h
     (conservationClassRegion κ K hK) (conservationClass_jumpStronglyConnected κ K hK) x hx
 
 end CRNT.Examples.ConservationClassRegion
-

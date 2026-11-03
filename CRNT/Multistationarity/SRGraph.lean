@@ -102,7 +102,9 @@ private def exampleNetwork : Network (Fin 2) where
       target := fun s => if s = 1 then 1 else 0 }
 
 /-- Species `0` occurs in the reaction (it is the source). -/
-example : exampleNetwork.OccursIn 0 () := by decide
+example : exampleNetwork.OccursIn 0 () := by
+  left
+  simp [exampleNetwork]
 
 /-- The corresponding species–reaction edge is present. -/
 example : exampleNetwork.srGraph.Adj (Sum.inl 0) (Sum.inr ()) := by decide

@@ -1,53 +1,14 @@
 import CRNT.Dynamics.FenichelPersistenceContracting
 
 /-!
-# Fenichel persistence over a genuinely drifting slow base
+# Explicit base/fibre graph-transform examples
 
-The constant- and contracting-fibre persistence instances of
-`CRNT.Dynamics.FenichelPersistenceConcrete` and `CRNT.Dynamics.FenichelPersistenceContracting` hold
-the slow base coordinate *fixed* (`ẏ = 0`): the singular parameter `ε` lives only in the recorded
-drift defect, and the substrate never moves under the flow. This module removes that idealization: it
-builds a coupled slow–fast flow whose **base coordinate genuinely drifts** under an explicit slow
-field, while the fast fibre contracts onto its target, and re-derives forward invariance of the slow
-manifold over the moving base.
-
-The field is the coupled slow-drift / contracting-fibre system
-`ẏ = ε·b`, `ż = -rate·(z - c)` on the product `Y × E`: the slow base translates at the slow velocity
-`ε·b` and the fast fibre is pulled toward the constant target `c` at exponential rate `rate`. Its
-forward semiflow is the closed-form product
-`(y, z) ↦ (y + (ε·t)·b, c + e^{-rate·t}·(z - c))` (`coupledDriftFlow`): the base genuinely moves —
-the substrate drifts at speed `ε·‖b‖` — while the fibre relaxes onto `c`. Because the base motion is
-the invertible translation `y ↦ y + (ε·t)·b`, the time-`t` map re-expresses the image of `graphSet σ`
-as a graph over the base via the back-translated, contracted section
-`coupledDriftRegraph ε b rate c t σ` (`coupled_allTimeRegraph`), discharging `flow_mapsTo` as a
-theorem about the explicit drifting-base flow rather than a hypothesis.
-
-The graph-transform contraction is realized on the complete space `Y →ᵇ E` of bounded sections by the
-same affine fibre contraction `op σ = const c + e^{-rate·τ}·(σ - const c)` of
-`CRNT.Dynamics.FenichelPersistenceContracting` (`contractGapData`), whose unique Banach fixed point is
-the constant section `c`. Over that constant section the base drift is *along* the manifold: the fibre
-stays pinned at `c` while the base translates, so the graph `{(y, c)}` is carried onto itself for
-every forward time. The plain-section flow operator and the bounded-section data operator agree on the
-constant section — the back-translation acts trivially on it — so the fixed-point hypothesis of
-`CRNT.Dynamics.FenichelPersistence`'s `fenichel_persistence` is discharged, yielding the two halves of
-Fenichel persistence for the genuinely drifting-base field (`fenichel_persistence_coupledDrift`):
-forward invariance of the graph of the attracting fibre under the iterate coupled semiflow whose base
-honestly drifts, and the supremum-metric closeness ceiling of `M_ε` to the base section.
-
-`coupled_allTimeRegraph` strengthens this to **all-time** invariance: the constant-section graph is
-invariant under the *full continuous* drifting-base semiflow `Φ t` for every `t ≥ 0`
-(`coupledDrift_graphSet_isInvariant_allTime`), not only at multiples of the horizon — the substrate
-drifts continuously and the slow manifold tracks it.
-
-Defined by Fenichel, "Geometric singular perturbation theory for ordinary differential equations": a
-normally attracting invariant manifold of the unperturbed layer system persists, for small `ε`, as a
-nearby invariant manifold realized as the graph of the fixed-point section of the flow-then-regraph
-graph transform. Here the slow base honestly evolves under the coupled flow — `ẏ = ε·b ≠ 0` — so the
-persisted manifold is invariant over a *moving* base, the genuinely coupled companion to the
-frozen-base instances.
-
-Depends on:
-`CRNT.Dynamics.FenichelPersistenceContracting`.
+The displayed base and fibre flows supply graph-transform data and yield their
+stated graph-invariance and fixed-point distance estimates. Michaelis–Menten
+sections use a contracting comparison flow with frozen substrate where defined.
+The hypotheses and actual flow in each theorem determine its scope. These
+examples do not establish general normally hyperbolic manifold persistence or
+transfer invariance to an unrelated coupled mass-action field.
 -/
 
 open Function Set
@@ -188,12 +149,8 @@ variable {Y : Type*} [NormedAddCommGroup Y] [NormedSpace ℝ Y] [CompleteSpace Y
 variable {E : Type*} [NormedAddCommGroup E] [NormedSpace ℝ E] [CompleteSpace E]
 
 omit [CompleteSpace Y] [CompleteSpace E] in
-/-- **All-time forward-invariance of the slow manifold over the drifting base.** The graph of the
-constant attracting fibre `{(y, c)}` is invariant under the *full continuous* drifting-base semiflow
-`Φ t` for every `t ≥ 0`. The base coordinate honestly drifts — the substrate moves at speed `ε·‖b‖` —
-yet the fibre stays pinned at `c`, so a trajectory started on the slow manifold tracks the moving base
-along it for all forward time. This is the genuinely coupled continuous-time invariance half of
-Fenichel persistence, with the frozen-base idealization removed. -/
+/-- Graph invariance and/or a distance estimate for the displayed explicit flow
+and supplied contraction data. This does not assert general perturbed NHIM persistence. -/
 theorem coupledDrift_graphSet_isInvariant_allTime (ε : ℝ) (b : Y) (rate : ℝ) (c : E) :
     IsInvariant (coupledDriftFlow (Y := Y) ε b rate c).toFun (graphSet (fun _ : Y => c)) := by
   intro t p hp
@@ -208,23 +165,16 @@ variable {Y : Type*} [NormedAddCommGroup Y] [NormedSpace ℝ Y] [CompleteSpace Y
 variable {E : Type*} [NormedAddCommGroup E] [NormedSpace ℝ E] [CompleteSpace E]
 
 omit [CompleteSpace Y] in
-/-- **End-to-end Fenichel persistence over a genuinely drifting slow base.** Combining the
-operator-from-flow bridge `coupledDriftCoupled` (whose `flow_mapsTo` is proved from the closed-form
-flow whose base honestly drifts at velocity `ε·b`) with the genuine fibre contraction `contractGapData`
-of `CRNT.Dynamics.FenichelPersistenceContracting` (whose Banach fixed point `M_ε = c` is the
-attracting fibre). The conclusion is the two halves of Fenichel persistence with **every hypothesis
-discharged**: the graph of the attracting fibre is forward-invariant under the iterate coupled
-semiflow whose base genuinely drifts, and `M_ε` sits within `defect / (1 - factor)` of the base
-section in the supremum metric. The substrate drifts under the flow — the frozen-base idealization is
-removed. -/
-theorem fenichel_persistence_coupledDrift (ε : ℝ) (b : Y) (rate : ℝ) (c : E) (τ : ℝ≥0)
+/-- Graph invariance and/or a distance estimate for the displayed explicit flow
+and supplied contraction data. This does not assert general perturbed NHIM persistence. -/
+theorem graphTransform_discrete_invariant_and_dist_le_coupledDrift (ε : ℝ) (b : Y) (rate : ℝ) (c : E) (τ : ℝ≥0)
     (hrate : 0 < rate) (hτ : 0 < (τ : ℝ)) :
     let G := contractGapData (Y := Y) (E := E) rate c τ hrate hτ
     let F := coupledDriftCoupled (Y := Y) (E := E) ε b rate c τ
     IsInvariant (fun n : ℕ => F.flow.toFun (n • F.τ)) (graphSet (G.manifold : Y → E)) ∧
       dist G.base G.manifold ≤ G.defect / (1 - G.factor) := by
   intro G F
-  refine fenichel_persistence G F ?_
+  refine graphTransform_discrete_invariant_and_dist_le G F ?_
   show F.op (G.manifold : Y → E) = (G.manifold : Y → E)
   have hman : (G.manifold : Y →ᵇ E) = BoundedContinuousFunction.const Y c :=
     contractGapData_manifold rate c τ hrate hτ

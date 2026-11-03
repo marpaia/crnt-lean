@@ -1,6 +1,7 @@
 import CRNT.Analysis.SpernerLatticeGeometric
 import CRNT.Analysis.SpernerLatticeSperner
 import CRNT.Analysis.SpernerSimplexLimit
+import Mathlib.Order.Filter.AtTopBot.Archimedean
 
 /-!
 # The two-dimensional Brouwer fixed-point theorem

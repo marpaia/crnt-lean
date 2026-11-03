@@ -1,8 +1,8 @@
 # Chemical Reaction Network Theory in Lean 4
 
 [![CI](https://github.com/marpaia/crnt-lean/actions/workflows/ci.yml/badge.svg)](https://github.com/marpaia/crnt-lean/actions/workflows/ci.yml)
-![Lean](https://img.shields.io/badge/Lean-4.31.0-blue)
-![Mathlib](https://img.shields.io/badge/Mathlib-v4.31.0-blue)
+![Lean](https://img.shields.io/badge/Lean-4.34.0-blue)
+![Mathlib](https://img.shields.io/badge/Mathlib-v4.34.0-blue)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![axioms: Mathlib only](https://img.shields.io/badge/axioms-Mathlib%20only-brightgreen)
 
@@ -22,20 +22,18 @@ can be bistable or oscillate, whether it returns to equilibrium from any startin
 some species holds steady while others vary. You can rule a behavior out, or guarantee it, before you
 build the circuit.
 
-This library makes that theory machine-checked. Every result is verified by Lean's kernel, and the
-structural criteria carry decidable procedures and exact certificates, so a design tool can hand it a
-candidate network and get back a checkable answer instead of a heuristic.
+This library makes that theory machine-checked. The proved statements are checked by Lean's kernel. Some structural criteria have decidable procedures and exact certificates; other results require supplied analytic or algebraic hypotheses. The field map records these distinctions.
 
-The library is built in two layers. The CRN layer formalizes the classical structural and dynamical
-theory over a small composable core: species, complexes, reactions, stoichiometry, mass-action
-kinetics, linkage classes, deficiency. The mathematics layer beneath it supplies general results
-Mathlib lacks as of v4.31 (Sperner's lemma and Brouwer's theorem in every dimension, Gale–Nikaido
-univalence, forward semiflows with LaSalle).
+The library is built in two layers. The CRN layer formalizes structural and dynamical theory over a
+composable core: species, complexes, reactions, stoichiometry, mass-action kinetics, linkage classes,
+and deficiency. The mathematics layer supplies results used throughout the CRN development, including
+Sperner's lemma and Brouwer's theorem in every dimension, Gale–Nikaido univalence, and forward
+semiflows with LaSalle's principle.
 
 - **Package:** `crnt-lean`
 - **Namespace:** `CRNT`
-- **Lean:** 4.31.0
-- **Mathlib:** v4.31.0
+- **Lean:** 4.34.0
+- **Mathlib:** v4.34.0
 - The default import (`import CRNT`) is **`sorry`-free** and introduces **no axioms beyond Mathlib's**
   (`[propext, Classical.choice, Quot.sound]`). CI enforces this with `test/AxiomAudit.lean`, which
   pins `#print axioms` on the headline results.
@@ -59,12 +57,15 @@ echo '{"numSpecies":2,"reactions":[{"source":[1,0],"target":[0,1]},
 For the reversible pair `A ⇌ B` the output includes, among about two dozen fields:
 
 ```json
-{"deficiency": 0, "weaklyReversible": true, "persistenceCertified": true, "hasCriticalSiphon": false}
+{"deficiency": 0, "weaklyReversible": true, "persistenceCertified": true,
+ "noPositivePeriodicOrbitCertified": true, "hasCriticalSiphon": false}
 ```
 
 `A ⇌ B` is weakly reversible of deficiency zero, so `persistenceCertified` reports that for any rate
 constants every positive trajectory converges to the network's complex-balanced equilibrium in its
-compatibility class (Feinberg–Horn–Jackson). Each field is a computable companion of a proven theorem,
+compatibility class (Feinberg–Horn–Jackson), while `noPositivePeriodicOrbitCertified` (weakly reversible deficiency zero, or
+stoichiometric rank at most one) gives the
+all-parameter theorem that no nonconstant positive periodic orbit exists. Each field is a computable companion of a proven theorem,
 tied to it by a bridge lemma; the full record is in [`docs/analyze-contract.md`](docs/analyze-contract.md).
 
 **Or state and check a network in Lean:**
@@ -107,180 +108,34 @@ example : N.WeaklyReversible := by
 - **Lean and formal methods:** [`docs/architecture.md`](docs/architecture.md) lays out the two layers,
   the core abstractions, and how the theorems depend on one another.
 - **Chemical reaction network theory:** the per-area documents below, starting from the result you want.
+- **Upgrading from Lean 4.31:** [`docs/pr1-migration.md`](docs/pr1-migration.md) describes the
+  toolchain, analyzer contract, compatibility entry points, and validation commands.
 
-## Highlights
+## Mathematical coverage
 
-- Feinberg's deficiency-zero and deficiency-one theorems: network structure alone pins down the
-  equilibria, for any rate constants.
-- Unconditional global convergence for no-critical-siphon networks: a decidable sufficient condition
-  for the global attractor property.
-- The global attractor conjecture reduced to a single explicit hypothesis: for weakly-reversible
-  complex-balanced networks, global convergence follows from one geometric predicate (a bounded region
-  that confines the orbit a fixed distance away from every species facet), with every step from that
-  predicate to convergence machine-checked.
-- The Anderson–Craciun–Kurtz product form: the exact stationary distribution of a complex-balanced
-  stochastic network.
-- Concordance forces at most one steady state per class, for every weakly-monotonic kinetics,
-  independent of the rate constants.
-- Gale–Nikaido univalence without topological degree: a P-matrix Jacobian on a box is injective,
-  resting on n-dimensional Sperner and Brouwer theorems formalized here.
-- A decidable, certificate-emitting core: check deficiency, reachability, and siphons, with
-  kernel-checked certificates and a stable JSON contract for external tools.
+The [field map](docs/field-map.md) lists all 99 areas with theorem names, hypotheses, and remaining obligations. A module that builds can still contain only a conditional or restricted result. The [semantic audit](docs/semantic-audit.md) records the reviewed snapshot; [the fixes](docs/semantic-audit-fixes.md) explain the corrected APIs and coverage claims.
 
-## What's Proven
+- **Foundations and equilibria:** finite indexed networks, reaction graphs, stoichiometry, deficiency, exact structural certificates, Birch's theorem, deficiency-zero and deficiency-one results, complex/detailed balance, and the directed matrix-tree formula. The Perron–Frobenius development for column-stochastic matrices is separate from the incomplete general primitive-matrix theory.
+- **Global attraction:** the complex-balanced trajectory theorem proves convergence of every supplied positive forward solution to its compatible positive equilibrium. A cutoff-flow construction also gives existence of such a global forward solution from every positive compatible start. Persistence is a conclusion in this chain. An ambient mass-action flow from all real, including negative, starts is a stronger interface and need not exist. See [the correspondence check](test/SemanticCorrespondence.lean).
+- **Dynamics:** entropy dissipation, LaSalle, local stability, bounded Lipschitz flow construction, monotone comparison, delay-equation constructions, finite-time slow–fast error estimates, and conditional all-time tracking under transverse contraction. `LaSalleConvergence` uses a strongly monotone increasing operator to obtain equilibrium uniqueness; it does not prove Hirsch's generic convergence theorem for strongly order-preserving flows.
+- **Hopf calculations:** actual mass-action derivatives and the calibrated first Lyapunov coefficient feed a periodic branch of the **cubic truncated normal form**. `MassActionHopfTaylorData` requires a positive equilibrium branch. A periodic orbit of the original mass-action field is not a conclusion of this API; nonlinear transfer and joint parameter regularity remain to be supplied.
+- **Oscillation:** genuine positive periodic-trajectory predicates, explicit Lotka periodic orbits, deficiency-zero and planar cooperative non-oscillation results, child selections, and instability certificates. Minimal planar omega-limit subset classification is conditional on a supplied `PoincareBendixsonKernelBundle` and trapping hypotheses; the locally defined nonregularity predicate is not a general chaos definition.
+- **Deterministic persistence:** genuine bounded-trajectory coordinate floors, complex-balanced persistence/global attraction, and tempered-rate strongly endotactic permanence. General weakly reversible global boundedness/persistence remains a distinct frontier.
+- **Stochastic systems:** the count generator, minimal transition semigroup, complex-balanced product-form invariance, finite closed-region invariant laws, explicit Lyapunov/Foster recurrence criteria, one-species and additional count-tier classes, generator scaling, and nonlinear **fixed-time** Gaussian limits under their stated hypotheses. Strong endotacticity alone does not imply stochastic recurrence or non-explosion in several species; published counterexamples rule out that unrestricted claim. A filtered path process and general path-space LLN/CLT remain incomplete. Deadlock (all reactions disabled) and state absorption (no enabled firing changes the state) have separate APIs.
+- **Injectivity and multistationarity:** Gale–Nikaido univalence, concordance characterization including nonnegative pairs with one positive member, sign/circuit criteria, and degree consequences. The degree implementation is a finite signed zero count at regular values. Rate homotopies require regularity of every intermediate zero; the general total-degree theorem under dissipativity is still missing.
+- **Parity:** odd total class degree implies an odd count of finite nondegenerate positive steady states when boundary zeros are excluded. Full openness supplies boundary exclusion, but does not supply the total degree: a checked fully open network has exactly two positive steady states.
+- **Flux feasibility:** `HasMultistationarityCapacity ↔ DOAFeasible` and the corresponding `ADAFeasible` equivalence concern real flux/log-ratio certificates. They do not implement finite Deficiency One/Advanced Deficiency decision procedures; shelf placement, general multi-shelf converse, and finite algorithm correctness remain incomplete.
+- **Restricted elimination and computation:** `SingletonSource` means every reaction consumes one molecule of one species, with unrestricted products; it is a homogeneous linear class, distinct from published partitioned MESSI systems. Toric exponential log-kernel parametrizations do not yet give general rational parametrizations. `PiecewiseNatAffine` uses finitely many natural-coefficient affine expressions and has closure/construction results; it is narrower than classical semilinearity. The network `2X → Y` computes `floor(n/2)`, which is outside this predicate. The full chemical-computation characterization remains incomplete.
+- **Algebra and geometry:** siphon support reformulations, determinant expressions for zonotope generators, algebraic volume polynomials, and univariate/separated-variable root bounds. Actual reaction-ideal minimal primes, the general Lebesgue-volume bridge, and the general sparse BKK multiplicity theorem remain incomplete.
+- **Design and composition:** ACR, antithetic stationary setpoint identities, supplied plant Lyapunov/Foster certificate transfers, and network interconnections. General-plant ergodicity still requires the displayed drift/integrability hypotheses. Interconnection monostationarity assumes injectivity of the **combined** field; translation faithfulness assumes the displayed forward steady-state bridge.
+- **Analysis:** Sperner/Brouwer on the n-simplex, equal-dimension Sard, P-matrix calculus, exact rational rank, and finite semidiscrete reaction–diffusion ODEs. The latter do not establish nonlinear continuum PDE well-posedness.
 
-Grouped by area; the precise statements and module names are in each linked doc.
-
-**[Foundations & decidability](docs/foundations.md)**
-- The network, reaction-graph, and stoichiometry core
-- Decidable reachability, weak reversibility, and linkage, plus the `crnt_check` tactic
-- Exact rational-rank and deficiency certificates, and a versioned `analyze` JSON contract
-
-**[Equilibria & deficiency](docs/deficiency.md)**
-- Complex balancing and the toric structure of steady states
-- Birch's theorem, and Perron–Frobenius for column-stochastic matrices
-- The deficiency-zero theorem, and deficiency-one uniqueness (single- and multi-class)
-
-**[Dynamics & stability](docs/dynamics.md)**
-- The complex-space factorization `ẋ = Y(A_k(Ψ x))` and the forward semiflow
-- The relative-entropy Lyapunov function, LaSalle's invariance principle, and local asymptotic stability
-- A Michaelis–Menten quasi-steady-state reduction, error-quantified in time: the full trajectory tracks
-  the slow-manifold reduction within an O(ε) Grönwall bound on compact time, and within a
-  horizon-uniform O(ε) ceiling for all time under a coupled contraction hypothesis (ε the timescale
-  separation)
-- Routh–Hurwitz stability to degree 4 (Liénard–Chipart) with the degree-3 and degree-4 Hopf crossing
-  gates, and a dimension-free Gershgorin test certifying mass-action Jacobian stability (so oscillation
-  is excluded)
-- The planar Poincaré normal form with its first Lyapunov coefficient, and the closed-form limit cycle
-  of the truncated normal form; the sustained-oscillation verdict for the full field is reduced to
-  explicit center-manifold, averaging, and smooth-flow-dependence hypotheses (see Scope & Open Problems)
-
-**[Persistence & global attraction](docs/persistence-gac.md)**
-- The reduction GAC ⟺ persistence, and unconditional convergence for the no-critical-siphon class
-- The sharp "one positive ω-limit point ⇒ convergence" reduction
-- The global attractor conjecture for weakly-reversible complex-balanced networks reduced to a single
-  predicate, `SeparatingConfinement` (a bounded, forward-invariant region holding the orbit off every
-  facet), proven sufficient for global convergence end to end; the affine separating surface is built
-  in every dimension
-- That predicate shown equivalent to persistence and constructed outright on two classes (near
-  equilibrium, and the entire decidable no-critical-siphon class), so it is realized rather than only
-  assumed; the construction supplies the no-critical-siphon persistence certificate as a by-product
-- A development of the toric-differential-inclusion approach
-
-**[Stochastic CRN](docs/stochastic.md)**
-- The chemical-master-equation generator on `ℕ^S`
-- The Anderson–Craciun–Kurtz product-form stationary distribution
-- A normalized invariant probability measure on any finite closed enabled region, with product-form
-  singleton ratios
-- The Kurtz density-dependent generator-convergence estimate: the volume-scaled generator of a
-  differentiable observable converges to its derivative along the deterministic mass-action field
-
-**[Multistationarity & robustness](docs/multistationarity-robustness.md)**
-- Degree-free Gale–Nikaido univalence, bound to class injectivity
-- Concordance ⇒ kinetics-independent monostationarity
-- The signed species–reaction graph and the determinant cycle-cover expansion
-- Topological-degree steady-state existence (a nonzero reduced degree forces a steady state in the
-  compatibility class) and a multistationarity-capacity test from a sign-indefinite reduced Jacobian
-- Absolute concentration robustness, antithetic integral feedback, open (CFSTR) systems, and composition
-
-Every abstraction is exercised by at least one worked example network in [`CRNT/Examples/`](./CRNT/Examples/).
-
-### General Mathematics (not in Mathlib v4.31)
-
-The CRN results rest on general-purpose mathematics built here and cited by name from the CRN layer.
-[`docs/architecture.md`](docs/architecture.md) gives the full inventory; the four areas are:
-
-- **Fixed-point theory** ([`CRNT/Analysis`](CRNT/Analysis)): Sperner's lemma and Brouwer's theorem for
-  the standard `n`-simplex in every dimension, via the Kuhn (Freudenthal) triangulation and mesh
-  refinement.
-- **Univalence & matrices** ([`CRNT/Multistationarity`](CRNT/Multistationarity)): degree-free
-  Gale–Nikaido global univalence over a P-matrix calculus (Schur complements, signature invariance),
-  and computable exact rational matrix rank with a nonsingular-minor certificate.
-- **Topological degree** ([`CRNT/Multistationarity`](CRNT/Multistationarity)): the Brouwer degree at a
-  regular value as a finite signed sum of Jacobian-determinant signs, with Sard's theorem, degree
-  additivity, homotopy invariance, and local constancy for proper maps.
-- **Dynamical systems** ([`CRNT/Dynamics`](CRNT/Dynamics)): forward semiflows, Lyapunov stability, and
-  LaSalle's principle, with the flow of a bounded Lipschitz field and single-valued Nagumo invariance.
-
-## Scope & Open Problems
-
-The library proves the classical canon and a large decidable fraction of the design-relevant criteria.
-What remains is of two kinds: established mathematics Mathlib does not yet have, where building it
-unlocks the CRN results noted, and questions where the mathematics itself is still open.
-
-**General mathematics still to build.** The apparatus in each of these areas is in place; what
-remains is a specific missing piece.
-- The nonzero-degree input for topological-degree existence. The Brouwer degree, Sard's theorem, and
-  homotopy invariance are built, and a nonzero reduced degree forces a steady state; what is missing is
-  a theorem forcing the degree to be nonzero for a network class, which would make steady-state
-  existence unconditional and settle the multistationarity converse (the switch verdict)
-- Critical-siphon facet repulsion. The Butler–McGehee lemma and non-siphon (codimension-1) facet
-  repulsion are proven, as is the Anderson–Shiu influx estimate for a singleton critical siphon (a
-  linear lower bound on the mass-action field at the facet). From that bound together with a near-facet
-  relative-entropy dissipation bound, a uniform positive facet floor follows. What remains is the
-  dissipation bound itself, carried as a hypothesis, and its assembly into a persistence conclusion;
-  discharging it would extend unconditional global attraction past the no-critical-siphon class
-- Fenichel normally-hyperbolic invariant-manifold persistence. The O(ε) quasi-steady-state reduction
-  holds on compact time and lifts to the infinite horizon: all-time invariance of the substrate-varying
-  slow manifold with an O(ε) ceiling is proven for the closed-form contracting field, and a
-  horizon-uniform O(ε) tracking ceiling for the genuine coupled Michaelis–Menten trajectory is proven by
-  a dissipative (log-norm) Grönwall estimate. The latter assumes a coupled transverse contraction bound;
-  deriving that bound from the enzyme field itself is what remains
-- The stochastic process layer. The chemical-master-equation generator, the uniformized transition
-  semigroup, and the deterministic (Kurtz) scaling skeleton (the generator-convergence estimate and a
-  conditional fluid-limit bound) are built, together with a Poisson probability space (an independent
-  scaled-Poisson clock family) and an in-probability law of large numbers for the aggregate scaled
-  fluctuation. What remains is the continuous-time sample-path process itself, a time-indexed random
-  trajectory with its filtration, and the process-level (Skorokhod) law of large numbers, which rest on
-  the compensated-Poisson martingale theory Mathlib lacks
-- The center-manifold gaps behind sustained oscillation. The Hopf crossing gates, the planar normal
-  form, and the truncated-normal-form limit cycle are proven, and the full-field "clock verdict" is
-  reduced to three explicit inputs: center-manifold existence, center-manifold averaging, and C¹
-  dependence of the flow on initial data (a return-map construction). Two of the three are discharged
-  independently: the center manifold is constructed as a Lyapunov–Perron fixed point, and the flow's C¹
-  dependence on its initial data is proven through the variational equation. The clock verdict still
-  consumes all three as inputs, and center-manifold averaging is the one piece Mathlib lacks and no
-  module yet supplies
-
-**Open research**
-- The global attractor conjecture (Horn's 1974 conjecture, open in general):
-  - Proven unconditionally for the no-critical-siphon class of complex-balanced networks, and reduced
-    to persistence in all cases (GAC ⟺ persistence)
-  - For weakly-reversible complex-balanced networks the persistence requirement is reduced to a single
-    explicit predicate, `SeparatingConfinement`: the genuine mass-action orbit is forward-invariant in
-    a bounded region that stays a fixed positive distance above every species facet. The implication
-    `SeparatingConfinement ⇒ global convergence` is machine-checked end to end, and the affine
-    (half-plane) zero-separating surface that realizes it is constructed in every dimension
-  - `SeparatingConfinement` is proven equivalent to the persistence certificate `PersistentFrom`, and
-    constructed outright on two classes: near equilibrium (relative entropy of the start below every
-    reference coordinate) and the entire decidable no-critical-siphon class (where the orbit may touch
-    a facet at finite times, but its closure stays interior). The no-critical-siphon construction also
-    discharges the `PersistentFrom` certificate that the ω-limit argument leaves implicit. The
-    genuine-orbit inputs (positivity, relative-entropy descent, and box uniqueness for the unclamped
-    field) are proven once and reused
-  - Craciun's toric-differential-inclusion architecture is formalized sorry-free, with the steps it
-    rests on isolated as explicit hypotheses: set-valued viability, the n-dimensional surface
-    construction, the weak-reversibility cycle cover, the polyhedral-fan axioms, and arbitrary-fan
-    faithful-curve existence
-  - Constructing `SeparatingConfinement` for the curved mass-action case is the open content: the
-    toric zero-separating surface, refereed in the literature only for stoichiometric dimension at most
-    three. No theorem constructs it in general
-- The correctness of the higher-deficiency (Deficiency One and Advanced Deficiency) algorithms:
-  - The apparatus is formalized (network consistency via Stiemke, cut pairs, regularity, confluence
-    vectors with their proven antisymmetry, shelves, signatures, colinearity classes), and the
-    exclusion direction is proven: an injective network has no capacity for multiple steady states
-  - The correctness equivalences themselves (a network has that capacity iff the algorithm affirms it)
-    are stated as propositions but proved in neither direction; this is the Feinberg 1995 content,
-    including the forward step from a sign-compatible log-ratio to a full shelf signature
-- Unconditional absolute concentration robustness (Shinar–Feinberg):
-  - The discrete reduction is proven, including that the monomial ratio is constant on each linkage
-    class, which narrows the whole question to forcing one scalar to zero (the robust species' log-ratio
-    between two positive steady states)
-  - That scalar is supplied as a hypothesis today; the natural algebraic route through the deficiency
-    mode is vacuous, so closing it needs the deficiency-one sign argument from the steady-state
-    equations at the non-terminal cut, which is not yet formalized and likely needs new infrastructure
+The original release's compatibility entry points are retained. Several names introduced in PR #1 were changed to describe their actual definitions; see the [migration guide](docs/pr1-migration.md) and [fix record](docs/semantic-audit-fixes.md).
 
 ## Documentation
+
+- [`docs/field-map.md`](docs/field-map.md): the field of CRNT as a tree of leaves, each with its
+  reference, Lean declarations, and status; pinned by `test/FieldMapAudit.lean`.
 
 [`docs/architecture.md`](docs/architecture.md) is the hub: the mathematical layering, core
 abstractions, and theorem dependency structure. From there:
@@ -288,7 +143,9 @@ abstractions, and theorem dependency structure. From there:
 | Doc | Covers |
 |---|---|
 | [`foundations.md`](docs/foundations.md) | networks, the reaction graph, stoichiometry |
+| [`global-persistence.md`](docs/global-persistence.md) | global persistence/permanence APIs, proved classes, theorem frontier |
 | [`dynamics.md`](docs/dynamics.md) | kinetics, complex-space factorization, the semiflow, Lyapunov/LaSalle, local stability, reduced models |
+| [`oscillation.md`](docs/oscillation.md) | periodic-orbit semantics and certificates, global exclusions, return maps, child selections/unstable cores, planar global frontiers |
 | [`deficiency.md`](docs/deficiency.md) | complex balancing, Birch, Perron–Frobenius, the deficiency-zero and deficiency-one theorems |
 | [`persistence-gac.md`](docs/persistence-gac.md) | siphons, persistence, the global attractor conjecture (proven vs. open) |
 | [`stochastic.md`](docs/stochastic.md) | the chemical master equation and Anderson–Craciun–Kurtz product form |

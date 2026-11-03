@@ -57,12 +57,20 @@ inductive Cell
   | up2
   | up3
   | dn
-  deriving DecidableEq, Fintype
+  deriving DecidableEq
+
+instance : Fintype Cell where
+  elems := {Cell.up1, Cell.up2, Cell.up3, Cell.dn}
+  complete := by intro t; cases t <;> simp
 
 /-- The boundary outer vertices: a single `{0,1}`-door on side `AB` (the edge `A–mAB`). -/
 inductive Outer
   | boundary
-  deriving DecidableEq, Fintype
+  deriving DecidableEq
+
+instance : Fintype Outer where
+  elems := {Outer.boundary}
+  complete := by intro o; cases o <;> simp
 
 /-- The vertex-color triples of the four triangles under the coloring
 `A = 0, B = 1, C = 2, mAB = 1, mAC = 0, mBC = 2`. -/

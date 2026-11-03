@@ -52,6 +52,10 @@ face, the link the door ↔ rainbow correspondence runs through. -/
 theorem restrictColoring_color_of_boundary (col : SpernerColoring (n + 1) N) (p : Pt (n + 1) N)
     (hp : p.1 (Fin.last (n + 1)) = 0) :
     ((restrictColoring col).color (boundaryEquiv n N ⟨p, hp⟩)).castSucc = col.color p := by
-  rw [restrictColoring_color, Equiv.symm_apply_apply]
+  rw [restrictColoring_color]
+  congr 1
+  apply Subtype.ext
+  exact congrArg (fun q : BoundaryFace n N => q.1.1)
+    (Equiv.symm_apply_apply (boundaryEquiv n N) ⟨p, hp⟩)
 
 end CRNT.Analysis.SpernerN

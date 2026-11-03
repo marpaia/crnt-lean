@@ -133,8 +133,8 @@ theorem siphonFace_forwardInvariant_of_complexBalanced_pos_pos (N : Network S)
     rcases eq_or_lt_of_le ht with h | h
     · rw [← h]; exact hnn0
     · exact (hpos t h).nonnegative
-  exact N.siphonFace_forwardInvariant_of_relEntropy_le κ hP hxs
-    (C := relEntropy xstar (γ 0)) hderiv hnn
+  exact N.siphonFace_forwardInvariant_of_relEntropy_le_forward κ hP hxs
+    (C := relEntropy xstar (γ 0)) (fun t _ => hderiv t) hnn
     (relEntropy_le_zero_along_solution_of_pos_pos N κ hxs hcb hpos hsol) h0
 
 end Network

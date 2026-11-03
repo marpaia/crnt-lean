@@ -87,6 +87,49 @@ theorem logRatio_mem_orthSum_iff (N : Network S) {x y : Concentration S}
     rintro _ ⟨r, rfl⟩
     rw [hkey r, h r, sub_self]
 
+/-- **Single-species reduction of the log-ratio gap.**  If two complexes agree away from `s`,
+their log-monomial ratios differ by exactly `(c s - d s) * (log (x s) - log (y s))`.
+
+This is the linearity of `Φ` in the complex vector, specialised to a Shinar--Feinberg pair. -/
+theorem logMonomialRatio_sub_of_differOnlyAt (N : Network S) {x y : Concentration S}
+    (hx : x.Positive) (hy : y.Positive) {c d : N.ComplexIdx} {s : S}
+    (hcd : ∀ t, t ≠ s → c.val t = d.val t) :
+    N.logMonomialRatio x y c - N.logMonomialRatio x y d
+      = ((c.val s : ℝ) - (d.val s : ℝ)) * (Real.log (x s) - Real.log (y s)) := by
+  rw [logMonomialRatio_eq N hx hy, logMonomialRatio_eq N hx hy, ← Finset.sum_sub_distrib]
+  rw [Finset.sum_eq_single s]
+  · ring
+  · intro t _ hts
+    rw [hcd t hts]
+    ring
+  · intro h
+    exact absurd (Finset.mem_univ s) h
+
+/-- **The Shinar--Feinberg pair criterion.**  For two complexes differing in exactly one
+species `s`, equality of their log-monomial ratios between two positive states is
+*equivalent* to those states agreeing at `s`.
+
+This is the precise sense in which the cross-class scalar coupling lemma and absolute
+concentration robustness at `s` are the same statement: neither is weaker than the other. -/
+theorem logMonomialRatio_eq_iff_of_differOnlyAt (N : Network S) {x y : Concentration S}
+    (hx : x.Positive) (hy : y.Positive) {c d : N.ComplexIdx} {s : S}
+    (hcd : ∀ t, t ≠ s → c.val t = d.val t) (hne : (c.val s : ℝ) ≠ (d.val s : ℝ)) :
+    N.logMonomialRatio x y c = N.logMonomialRatio x y d ↔ x s = y s := by
+  have hgap := N.logMonomialRatio_sub_of_differOnlyAt hx hy hcd
+  constructor
+  · intro h
+    have h0 : ((c.val s : ℝ) - (d.val s : ℝ)) * (Real.log (x s) - Real.log (y s)) = 0 := by
+      rw [← hgap, h, sub_self]
+    have hlog : Real.log (x s) = Real.log (y s) := by
+      have := (mul_eq_zero.mp h0).resolve_left (sub_ne_zero.mpr hne)
+      linarith [this]
+    exact Real.log_injOn_pos (Set.mem_Ioi.mpr (hx s)) (Set.mem_Ioi.mpr (hy s)) hlog
+  · intro h
+    have : Real.log (x s) - Real.log (y s) = 0 := by rw [h, sub_self]
+    have : N.logMonomialRatio x y c - N.logMonomialRatio x y d = 0 := by
+      rw [hgap, this, mul_zero]
+    linarith [this]
+
 end Network
 
 end CRNT

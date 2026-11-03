@@ -6,6 +6,8 @@ import CRNT.Graph.Reachability
 import CRNT.Graph.WeakReversibility
 import CRNT.Interop.Certificates
 
+set_option backward.isDefEq.respectTransparency false
+
 /-!
 # Generated-certificate example
 

@@ -406,7 +406,7 @@ theorem exists_field_lower_bound (N : Network S) (κ : N.RateConstants) (B : ℝ
             pow_le_pow_left₀ (hx s) (hxle s) _
           have h2 : (∏ s' ∈ Finset.univ.erase s, x s' ^ (N.reaction r).source s')
               ≤ ∏ s' ∈ Finset.univ.erase s, (max 1 B) ^ (N.reaction r).source s' :=
-            Finset.prod_le_prod (fun s' _ => pow_nonneg (hx s') _)
+            Finset.prod_le_prod₀ (fun s' _ => pow_nonneg (hx s') _)
               (fun s' _ => pow_le_pow_left₀ (hx s') (hxle s') _)
           have hsum_eq : (N.reaction r).source s + ∑ s' ∈ Finset.univ.erase s, (N.reaction r).source s'
               = ∑ s'', (N.reaction r).source s'' :=
@@ -572,9 +572,9 @@ theorem omegaLimit_eq_singleton_of_local
           (not_le.mpr (hloc s))
     -- orbit of `y` stays in ω, hence in K, with constant relative entropy `c`
     have hyKt : ∀ t : ℝ, 0 ≤ t → γ y t ∈ K := by
-      intro t ht; have := hωK (hωinv ⟨t, ht⟩ hy); rwa [hϕγ] at this
+      intro t ht; have := hωK (hωinv (NNReal.mk t ht) hy); rwa [hϕγ] at this
     have hconst : ∀ t : ℝ, 0 ≤ t → relEntropy xstar (γ y t) = c := by
-      intro t ht; have := hωc _ (hωinv ⟨t, ht⟩ hy); rwa [hϕγ] at this
+      intro t ht; have := hωc _ (hωinv (NNReal.mk t ht) hy); rwa [hϕγ] at this
     have hyt_eq : ∀ t₀ : ℝ, 0 < t₀ → γ y t₀ = xstar := by
       intro t₀ ht₀
       have hclt : clampBox B (γ y t₀) = γ y t₀ :=

@@ -1,0 +1,53 @@
+# Every module the CRNTFrontier target has ever covered -- append-only.
+#
+# The active frontier is `scripts/unverified_modules.txt` plus this list.  When a
+# module graduates out of the ledger (it elaborates, so it belongs in the verified
+# `CRNT` target) it is appended here rather than forgotten, so that `lake build
+# CRNTFrontier` keeps elaborating it and CI's frontier error count keeps measuring
+# it.  `scripts/gen_lakefile.py` maintains this file; edit the ledger, not this.
+
+CRNT.Dynamics.GACLowRank
+CRNT.Dynamics.GACVertexFacet
+CRNT.Dynamics.GlobalAttractorTheorem
+CRNT.Dynamics.HighCodimensionSiphonFace
+CRNT.Examples.CatalyticChainGAC
+CRNT.Multistationarity.TrueChemistrySRCriterion
+CRNT.Oscillation
+CRNT.Oscillation.CompatibilityAdapters
+CRNT.Oscillation.DHopfOpenness
+CRNT.Oscillation.DiagonalScaling
+CRNT.Oscillation.FisherFullerScaling
+CRNT.Oscillation.FloquetOrbitalStability
+CRNT.Oscillation.FloquetPersistenceGeneral
+CRNT.Oscillation.GlobalHopfIndex
+CRNT.Oscillation.GlobalHopfIndexTheorem
+CRNT.Oscillation.GlobalHopfSpectralCrossing
+CRNT.Oscillation.HalfPlanePolynomial
+CRNT.Oscillation.HurwitzBordering
+CRNT.Oscillation.OscillationKernelBundle
+CRNT.Oscillation.ParameterRichGlobalHopf
+CRNT.Oscillation.PlanarAdjacentReturnLoop
+CRNT.Oscillation.PlanarDivergenceRegularity
+CRNT.Oscillation.PlanarEndToEnd
+CRNT.Oscillation.PlanarFlowRegularity
+CRNT.Oscillation.PlanarGreenGrid
+CRNT.Oscillation.PlanarGreenJordanApproximation
+CRNT.Oscillation.PlanarGreenRectangle
+CRNT.Oscillation.PlanarJordanBoundaryCurrent
+CRNT.Oscillation.PlanarJordanCrossingOrder
+CRNT.Oscillation.PlanarJordanDyadic
+CRNT.Oscillation.PlanarJordanTopology
+CRNT.Oscillation.PlanarLocalReturnLoops
+CRNT.Oscillation.PlanarLocalReturns
+CRNT.Oscillation.PlanarPoincareBendixson
+CRNT.Oscillation.PlanarReturnMonotonicity
+CRNT.Oscillation.PlanarSectionHitIsolation
+CRNT.Oscillation.ReducedKineticContinuation
+CRNT.Oscillation.SimpleNegativeSpectrum
+CRNT.Oscillation.SmoothGlobalHopf
+CRNT.Oscillation.SpectralOpenness
+CRNT.Oscillation.StableCodimOneDHopf
+CRNT.Oscillation.VassenaPrincipal
+CRNT.Theorems.DeficiencyOne.DegreeExistence
+CRNT.Theorems.DeficiencyOne.Theorem
+CRNT.Theorems.DeficiencyOne.WeaklyReversibleExistence

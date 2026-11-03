@@ -216,6 +216,143 @@ theorem confDom_smul {S : Submodule ℝ (ι → ℝ)} {v e : ι → ℝ} {t : �
   · intro i; simp only [Pi.smul_apply, smul_eq_mul]; nlinarith [hconf i]
   · rw [support_smul ht.ne']; exact hsub
 
+/-- A support-minimal conforming dominator is in fact a circuit of the ambient subspace.
+Minimality in a fixed orthant is enough: if an arbitrary subspace vector had strictly
+smaller support, orient it and move along that line until one coordinate of the dominator
+hits zero without leaving the orthant. -/
+theorem elementary_of_min_confDom
+    {S : Submodule ℝ (ι → ℝ)} {v e : ι → ℝ}
+    (he : ConfDom S v e)
+    (hmin : ∀ w, ConfDom S v w → ¬ support w ⊂ support e) :
+    Elementary S e := by
+  classical
+  refine ⟨he.1, he.2.1, ?_⟩
+  intro w hwS hw0 hstrict
+  have hwsub : support w ⊆ support e := hstrict.subset
+  obtain ⟨j, hj⟩ : ∃ j : ι, w j ≠ 0 := by
+    by_contra h
+    push Not at h
+    exact hw0 (funext h)
+  have hej : e j ≠ 0 := mem_support.mp (hwsub (mem_support.mpr hj))
+  let u : ι → ℝ := if 0 < e j * w j then w else -w
+  have huS : u ∈ S := by
+    dsimp [u]
+    split_ifs
+    · exact hwS
+    · exact S.neg_mem hwS
+  have hu0 : u ≠ 0 := by
+    dsimp [u]
+    split_ifs
+    · exact hw0
+    · simpa using hw0
+  have husupp : support u = support w := by
+    dsimp [u]
+    split_ifs
+    · rfl
+    · rw [show -w = (-1 : ℝ) • w by ext i; simp]
+      exact support_smul (by norm_num) w
+  have husub : support u ⊆ support e := by simpa [husupp] using hwsub
+  have hjprod : 0 < e j * u j := by
+    dsimp [u]
+    split_ifs with hpos
+    · exact hpos
+    · simp only [Pi.neg_apply]
+      have hprodne : e j * w j ≠ 0 := mul_ne_zero hej hj
+      have hneg : e j * w j < 0 := lt_of_le_of_ne (le_of_not_gt hpos) hprodne
+      nlinarith
+  let P : Finset ι := Finset.univ.filter (fun i => 0 < e i * u i)
+  have hPne : P.Nonempty := by
+    refine ⟨j, ?_⟩
+    simp [P, hjprod]
+  obtain ⟨k, hkP, hkmin⟩ := P.exists_min_image (fun i => e i / u i) hPne
+  have hkprod : 0 < e k * u k := by simpa [P] using (Finset.mem_filter.mp hkP).2
+  have hek : e k ≠ 0 := by
+    intro h
+    simp [h] at hkprod
+  have huk : u k ≠ 0 := by
+    intro h
+    simp [h] at hkprod
+  let t : ℝ := e k / u k
+  have htpos : 0 < t := by
+    dsimp [t]
+    rcases lt_or_gt_of_ne hek with hekn | hekp
+    · have hukn : u k < 0 := by
+        rcases lt_or_gt_of_ne huk with h | h
+        · exact h
+        · nlinarith [hkprod]
+      exact div_pos_of_neg_of_neg hekn hukn
+    · have hukp : 0 < u k := by
+        rcases lt_or_gt_of_ne huk with h | h
+        · nlinarith [hkprod]
+        · exact h
+      exact div_pos hekp hukp
+  let q : ι → ℝ := e - t • u
+  have hqS : q ∈ S := by
+    dsimp [q]
+    exact S.sub_mem he.1 (S.smul_mem t huS)
+  have hqconf_e : Conformal e q := by
+    intro i
+    dsimp [q]
+    change 0 ≤ e i * (e i - t * u i)
+    by_cases hipos : 0 < e i * u i
+    · have hiP : i ∈ P := by simp [P, hipos]
+      have hminratio : e k / u k ≤ e i / u i := hkmin i hiP
+      have hpnn : 0 ≤ e i * u i := hipos.le
+      have hmul := mul_le_mul_of_nonneg_right hminratio hpnn
+      have hui : u i ≠ 0 := by
+        intro h
+        simp [h] at hipos
+      have hratio : (e i / u i) * (e i * u i) = e i ^ 2 := by
+        field_simp
+      have hleft : (e k / u k) * (e i * u i) = t * (e i * u i) := by rfl
+      rw [hleft, hratio] at hmul
+      nlinarith [sq_nonneg (e i)]
+    · have hpnonpos : e i * u i ≤ 0 := le_of_not_gt hipos
+      have htp : t * (e i * u i) ≤ 0 := mul_nonpos_of_nonneg_of_nonpos htpos.le hpnonpos
+      nlinarith [sq_nonneg (e i)]
+  have hqsupp : support q ⊆ support e := by
+    intro i hiq
+    rw [mem_support] at hiq ⊢
+    intro hei
+    have hui : u i = 0 := by
+      by_contra hune
+      exact (mem_support.mp (husub (mem_support.mpr hune))) hei
+    apply hiq
+    simp [q, hei, hui]
+  have hqconf_v : Conformal v q := by
+    intro i
+    have hve := he.2.2.1 i
+    have heq := hqconf_e i
+    by_cases hei : e i = 0
+    · have hqi : q i = 0 := by
+        by_contra hne
+        exact (mem_support.mp (hqsupp (mem_support.mpr hne))) hei
+      simp [hqi]
+    · rcases lt_or_gt_of_ne hei with hen | hep
+      · have hvle : v i ≤ 0 := by nlinarith [hve]
+        have hqle : q i ≤ 0 := by nlinarith [heq]
+        exact mul_nonneg_of_nonpos_of_nonpos hvle hqle
+      · have hvge : 0 ≤ v i := by nlinarith [hve]
+        have hqge : 0 ≤ q i := by nlinarith [heq]
+        exact mul_nonneg hvge hqge
+  have hqsubv : support q ⊆ support v := hqsupp.trans he.2.2.2
+  have hqk : q k = 0 := by
+    simp [q, t, huk]
+  have hk_not_q : k ∉ support q := not_mem_support hqk
+  have hk_e : k ∈ support e := mem_support.mpr hek
+  have hqstrict : support q ⊂ support e :=
+    Finset.ssubset_iff_subset_ne.mpr ⟨hqsupp, by
+      intro heq
+      exact hk_not_q (heq ▸ hk_e)⟩
+  by_cases hq0 : q = 0
+  · have heqtu : e = t • u := by
+      apply sub_eq_zero.mp
+      simpa [q] using hq0
+    have hsupp_eu : support e = support u := by rw [heqtu, support_smul htpos.ne']
+    have hsupp_we : support w = support e := by rw [← husupp, ← hsupp_eu]
+    exact hstrict.ne hsupp_we
+  · exact hmin q ⟨hqS, hq0, hqconf_v, hqsubv⟩ hqstrict
+
 /-- **Conformal decomposition (Rockafellar).** Every nonzero `v ∈ S` is a list-sum of nonzero
 conforming dominators of `v` in `S` — members of `S` that conform to `v` with support contained
 in `support v`. Iterating the conformal reduction step peels off one minimal conforming piece at
@@ -289,6 +426,86 @@ theorem exists_conformalSum {S : Submodule ℝ (ι → ℝ)} :
   intro v hv hv0
   exact key (support v).card hv hv0 (le_refl _)
 
+/-- Nonzero scaling preserves elementary vectors. -/
+theorem Elementary.smul_ne {S : Submodule ℝ (ι → ℝ)} {e : ι → ℝ}
+    (he : Elementary S e) {t : ℝ} (ht : t ≠ 0) : Elementary S (t • e) := by
+  refine ⟨S.smul_mem t he.1, smul_ne_zero ht he.2.1, ?_⟩
+  intro w hwS hw0 hstrict
+  have hsupp : support (t • e) = support e := support_smul ht e
+  rw [hsupp] at hstrict
+  exact he.2.2 w hwS hw0 hstrict
+
+/-- Strong conformal decomposition into ambient circuits. -/
+theorem exists_elementaryConformalSum {S : Submodule ℝ (ι → ℝ)} :
+    ∀ {v : ι → ℝ}, v ∈ S → v ≠ 0 →
+      ∃ L : List (ι → ℝ), L.sum = v ∧
+        ∀ w ∈ L, Elementary S w ∧ ConfDom S v w := by
+  classical
+  have key : ∀ n : ℕ, ∀ {v : ι → ℝ}, v ∈ S → v ≠ 0 → (support v).card ≤ n →
+      ∃ L : List (ι → ℝ), L.sum = v ∧
+        ∀ w ∈ L, Elementary S w ∧ ConfDom S v w := by
+    intro n
+    induction n with
+    | zero =>
+      intro v hv hv0 hcard
+      exact absurd (Nat.le_zero.mp hcard)
+        (Finset.card_ne_zero_of_mem (support_nonempty_of_ne_zero hv0).choose_spec)
+    | succ n ih =>
+      intro v hv hv0 _
+      obtain ⟨e, hecd, hemin⟩ := exists_min_confDom hv hv0
+      have helem : Elementary S e := elementary_of_min_confDom hecd hemin
+      obtain ⟨t, htpos, hmemS, hconf, hssub⟩ := exists_confDom_reduction hv hecd
+      set r : ι → ℝ := v - t • e with hr
+      have hpiececd : ConfDom S v (t • e) := confDom_smul htpos hecd
+      have hpieceElem : Elementary S (t • e) := helem.smul_ne htpos.ne'
+      have hve : v = (t • e) + r := by rw [hr]; module
+      by_cases hr0 : r = 0
+      · refine ⟨[t • e], ?_, ?_⟩
+        · rw [List.sum_singleton, hve, hr0, add_zero]
+        · intro w hw
+          rw [List.mem_singleton] at hw
+          subst w
+          exact ⟨hpieceElem, hpiececd⟩
+      · have hcardlt : (support r).card < (support v).card := Finset.card_lt_card hssub
+        obtain ⟨L, hLsum, hL⟩ := ih hmemS hr0 (by omega)
+        refine ⟨(t • e) :: L, ?_, ?_⟩
+        · rw [List.sum_cons, hLsum, hve]
+        · intro w hw
+          rw [List.mem_cons] at hw
+          rcases hw with hw | hw
+          · subst w
+            exact ⟨hpieceElem, hpiececd⟩
+          · obtain ⟨hwElem, hwS, hw0, hwconf, hwsub⟩ := hL w hw
+            refine ⟨hwElem, hwS, hw0, ?_, hwsub.trans hssub.subset⟩
+            intro i
+            have hwr := hwconf i
+            by_cases hri : r i = 0
+            · have hwi : w i = 0 := by
+                by_contra h
+                exact (mem_support.mp (hwsub (mem_support.mpr h))) hri
+              rw [hwi, mul_zero]
+            · have hrv : 0 ≤ v i * r i := hconf i
+              have hvi : v i ≠ 0 := by
+                intro h
+                rw [h, zero_mul] at hrv
+                exact hri (absurd (hssub.subset (mem_support.mpr hri)) (by simp [h]))
+              rcases lt_trichotomy (r i) 0 with hrneg | hrz | hrpos
+              · have hvneg : v i < 0 := by
+                  rcases lt_trichotomy (v i) 0 with h | h | h
+                  · exact h
+                  · exact absurd h hvi
+                  · nlinarith [hrv]
+                nlinarith [hwr]
+              · exact absurd hrz hri
+              · have hvpos : 0 < v i := by
+                  rcases lt_trichotomy (v i) 0 with h | h | h
+                  · nlinarith [hrv]
+                  · exact absurd h hvi
+                  · exact h
+                nlinarith [hwr]
+  intro v hv hv0
+  exact key (support v).card hv hv0 (le_refl _)
+
 /-- **A full-support conforming dominator is sign-identical to `v`.** A vector conformal to `v`
 whose support equals `support v` agrees with `v` in strict sign coordinatewise (`SameSign v w`).
 This bridges the conformal cone to the `SameSign` predicate driving the Müller sign condition: a
@@ -316,5 +533,268 @@ theorem sameSign_of_confDom_support_eq {S : Submodule ℝ (ι → ℝ)} {v w : �
     · constructor
       · intro hv0; nlinarith [hpos]
       · intro hw0; nlinarith [hpos]
+
+end CRNT
+
+namespace CRNT
+
+open scoped BigOperators
+
+variable {ι : Type*} [Fintype ι]
+
+/-- A support-minimal nonzero nonnegative vector in a coordinate subspace.  This is the
+order-cone analogue of `Elementary`, tailored to `S ∩ ℝ_{≥0}^ι`. -/
+def NonnegElementary (S : Submodule ℝ (ι → ℝ)) (e : ι → ℝ) : Prop :=
+  e ∈ S ∧ e ≠ 0 ∧ (∀ i, 0 ≤ e i) ∧
+    ∀ w, w ∈ S → w ≠ 0 → (∀ i, 0 ≤ w i) → support w ⊆ support e →
+      support e ⊆ support w
+
+/-- Support-minimality in the nonnegative part of a subspace already implies
+support-minimality in the whole subspace. -/
+theorem NonnegElementary.elementary
+    {S : Submodule ℝ (ι → ℝ)} {e : ι → ℝ}
+    (he : NonnegElementary S e) : Elementary S e := by
+  classical
+  refine ⟨he.1, he.2.1, ?_⟩
+  intro w hwS hw0 hstrict
+  have hwsub : support w ⊆ support e := hstrict.subset
+  obtain ⟨j, hj⟩ : ∃ j : ι, w j ≠ 0 := by
+    by_contra h
+    push_neg at h
+    exact hw0 (funext h)
+  let u : ι → ℝ := if 0 < w j then w else -w
+  have huS : u ∈ S := by
+    dsimp [u]
+    split_ifs
+    · exact hwS
+    · exact S.neg_mem hwS
+  have hu0 : u ≠ 0 := by
+    dsimp [u]
+    split_ifs
+    · exact hw0
+    · simpa using hw0
+  have husupp : support u = support w := by
+    dsimp [u]
+    split_ifs
+    · rfl
+    · rw [show -w = (-1 : ℝ) • w by ext i; simp]
+      exact support_smul (by norm_num) w
+  have husub : support u ⊆ support e := by simpa [husupp] using hwsub
+  have hujpos : 0 < u j := by
+    dsimp [u]
+    split_ifs with hpos
+    · exact hpos
+    · simp only [Pi.neg_apply]
+      have : w j < 0 := lt_of_le_of_ne (le_of_not_gt hpos) hj
+      linarith
+  let P : Finset ι := Finset.univ.filter (fun i => 0 < u i)
+  have hPne : P.Nonempty := by
+    refine ⟨j, ?_⟩
+    simp [P, hujpos]
+  obtain ⟨k, hkP, hkmin⟩ := P.exists_min_image (fun i => e i / u i) hPne
+  have hukpos : 0 < u k := by simpa [P] using (Finset.mem_filter.mp hkP).2
+  have hk_usupp : k ∈ support u := mem_support.mpr hukpos.ne'
+  have hek_ne : e k ≠ 0 := mem_support.mp (husub hk_usupp)
+  have hekpos : 0 < e k := lt_of_le_of_ne (he.2.2.1 k) (Ne.symm hek_ne)
+  let t : ℝ := e k / u k
+  have htpos : 0 < t := by dsimp [t]; exact div_pos hekpos hukpos
+  let q : ι → ℝ := e - t • u
+  have hqS : q ∈ S := by
+    dsimp [q]
+    exact S.sub_mem he.1 (S.smul_mem t huS)
+  have hqnn : ∀ i, 0 ≤ q i := by
+    intro i
+    dsimp [q]
+    change 0 ≤ e i - t * u i
+    by_cases hipos : 0 < u i
+    · have hiP : i ∈ P := by simp [P, hipos]
+      have hmin : e k / u k ≤ e i / u i := hkmin i hiP
+      have hui : 0 < u i := hipos
+      have hmul : (e k / u k) * u i ≤ e i := by
+        have := (le_div_iff₀ hui).mp hmin
+        simpa [mul_comm] using this
+      simpa [t] using sub_nonneg.mpr hmul
+    · have hui : u i ≤ 0 := le_of_not_gt hipos
+      have hetu : t * u i ≤ 0 := mul_nonpos_of_nonneg_of_nonpos htpos.le hui
+      linarith [he.2.2.1 i]
+  have hqsupp : support q ⊆ support e := by
+    intro i hiq
+    rw [mem_support] at hiq ⊢
+    intro hei
+    have hui : u i = 0 := by
+      by_contra hune
+      exact (mem_support.mp (husub (mem_support.mpr hune))) hei
+    apply hiq
+    simp [q, hei, hui]
+  have hqk : q k = 0 := by
+    simp [q, t, Pi.sub_apply, Pi.smul_apply, smul_eq_mul, hukpos.ne']
+  have hk_not_q : k ∉ support q := not_mem_support hqk
+  have hk_e : k ∈ support e := mem_support.mpr hek_ne
+  have hqstrict : support q ⊂ support e :=
+    Finset.ssubset_iff_subset_ne.mpr ⟨hqsupp, by
+      intro heq
+      exact hk_not_q (heq ▸ hk_e)⟩
+  by_cases hq0 : q = 0
+  · have heq : e = t • u := by
+      apply sub_eq_zero.mp
+      simpa [q] using hq0
+    have hsupp_eu : support e = support u := by
+      rw [heq, support_smul htpos.ne']
+    have : support w = support e := by rw [← husupp, ← hsupp_eu]
+    exact hstrict.ne this
+  · have hrev := he.2.2.2 q hqS hq0 hqnn hqsupp
+    exact hqstrict.ne (Finset.Subset.antisymm hqsupp hrev)
+
+/-- A conforming dominator of a nonnegative vector is itself nonnegative. -/
+theorem nonneg_of_confDom {S : Submodule ℝ (ι → ℝ)} {v e : ι → ℝ}
+    (hvnn : ∀ i, 0 ≤ v i) (he : ConfDom S v e) : ∀ i, 0 ≤ e i := by
+  intro i
+  obtain ⟨_, _, hconf, hsub⟩ := he
+  by_cases hvi : v i = 0
+  · have hei : e i = 0 := by
+      by_contra hne
+      have hi : i ∈ support e := mem_support.mpr hne
+      exact (mem_support.mp (hsub hi)) hvi
+    simp [hei]
+  · have hvpos : 0 < v i := lt_of_le_of_ne (hvnn i) (Ne.symm hvi)
+    nlinarith [hconf i]
+
+/-- Minimality inside the conformal cone of a nonnegative vector is exactly support
+minimality in the nonnegative part of the ambient subspace. -/
+theorem nonnegElementary_of_min_confDom {S : Submodule ℝ (ι → ℝ)} {v e : ι → ℝ}
+    (hvnn : ∀ i, 0 ≤ v i)
+    (he : ConfDom S v e)
+    (hmin : ∀ w, ConfDom S v w → ¬ support w ⊂ support e) :
+    NonnegElementary S e := by
+  have henn := nonneg_of_confDom hvnn he
+  refine ⟨he.1, he.2.1, henn, ?_⟩
+  intro w hwS hw0 hwnn hsub
+  have hwcd : ConfDom S v w := by
+    refine ⟨hwS, hw0, ?_, hsub.trans he.2.2.2⟩
+    intro i
+    exact mul_nonneg (hvnn i) (hwnn i)
+  have hnss := hmin w hwcd
+  have hcard : (support e).card ≤ (support w).card := by
+    by_contra hnot
+    have hlt : (support w).card < (support e).card := Nat.lt_of_not_ge hnot
+    exact hnss (Finset.ssubset_iff_subset_ne.mpr ⟨hsub, by
+      intro heq
+      rw [heq] at hlt
+      exact Nat.lt_irrefl _ hlt⟩)
+  have heq := Finset.eq_of_subset_of_card_le hsub hcard
+  exact heq.symm.subset
+
+/-- **Nonnegative conformal decomposition.** Every nonzero nonnegative vector in a
+coordinate subspace is a finite sum of support-minimal nonzero nonnegative vectors of
+that subspace. Every summand is supported inside the original vector. -/
+theorem exists_nonnegElementarySum {S : Submodule ℝ (ι → ℝ)} :
+    ∀ {v : ι → ℝ}, v ∈ S → v ≠ 0 → (∀ i, 0 ≤ v i) →
+      ∃ L : List (ι → ℝ), L.sum = v ∧
+        ∀ w ∈ L, NonnegElementary S w ∧ support w ⊆ support v := by
+  classical
+  have key : ∀ n : ℕ, ∀ {v : ι → ℝ}, v ∈ S → v ≠ 0 → (∀ i, 0 ≤ v i) →
+      (support v).card ≤ n →
+      ∃ L : List (ι → ℝ), L.sum = v ∧
+        ∀ w ∈ L, NonnegElementary S w ∧ support w ⊆ support v := by
+    intro n
+    induction n with
+    | zero =>
+      intro v hv hv0 hvnn hcard
+      exact absurd (Nat.le_zero.mp hcard)
+        (Finset.card_ne_zero_of_mem (support_nonempty_of_ne_zero hv0).choose_spec)
+    | succ n ih =>
+      intro v hv hv0 hvnn _
+      obtain ⟨e, hecd, hemin⟩ := exists_min_confDom hv hv0
+      have helem : NonnegElementary S e := nonnegElementary_of_min_confDom hvnn hecd hemin
+      obtain ⟨t, htpos, hrS, hrconf, hrsub⟩ := exists_confDom_reduction hv hecd
+      set r : ι → ℝ := v - t • e with hr
+      have hpiece : NonnegElementary S (t • e) := by
+        have htsupp : support (t • e) = support e := support_smul htpos.ne' e
+        refine ⟨S.smul_mem t helem.1, ?_, ?_, ?_⟩
+        · exact smul_ne_zero htpos.ne' helem.2.1
+        · intro i
+          simp only [Pi.smul_apply, smul_eq_mul]
+          exact mul_nonneg htpos.le (helem.2.2.1 i)
+        · intro w hwS hw0 hwnn hsub
+          rw [htsupp] at hsub ⊢
+          exact helem.2.2.2 w hwS hw0 hwnn hsub
+      have hpieceSub : support (t • e) ⊆ support v := by
+        rw [support_smul htpos.ne']
+        exact hecd.2.2.2
+      have hrnn : ∀ i, 0 ≤ r i := by
+        intro i
+        have hc := hrconf i
+        by_cases hvi : v i = 0
+        · have hri : r i = 0 := by
+            by_contra hne
+            exact (mem_support.mp (hrsub.subset (mem_support.mpr hne))) hvi
+          simp [hri]
+        · have hvpos : 0 < v i := lt_of_le_of_ne (hvnn i) (Ne.symm hvi)
+          nlinarith
+      have hve : v = (t • e) + r := by rw [hr]; module
+      by_cases hr0 : r = 0
+      · refine ⟨[t • e], ?_, ?_⟩
+        · rw [List.sum_singleton, hve, hr0, add_zero]
+        · intro w hw
+          rw [List.mem_singleton] at hw
+          subst w
+          exact ⟨hpiece, hpieceSub⟩
+      · have hcardlt : (support r).card < (support v).card := Finset.card_lt_card hrsub
+        obtain ⟨L, hLsum, hL⟩ := ih hrS hr0 hrnn (by omega)
+        refine ⟨(t • e) :: L, ?_, ?_⟩
+        · rw [List.sum_cons, hLsum, hve]
+        · intro w hw
+          rw [List.mem_cons] at hw
+          rcases hw with rfl | hw
+          · exact ⟨hpiece, hpieceSub⟩
+          · obtain ⟨hwElem, hwSub⟩ := hL w hw
+            exact ⟨hwElem, hwSub.trans hrsub.subset⟩
+  intro v hv hv0 hvnn
+  exact key (support v).card hv hv0 hvnn (le_refl _)
+
+/-- A support-minimal nonnegative subspace vector spans the entire nonnegative cone on
+its support: every nonzero nonnegative subspace vector supported inside it is a strictly
+positive scalar multiple. -/
+theorem NonnegElementary.eq_pos_smul_of_support_subset
+    {S : Submodule ℝ (ι → ℝ)} {e w : ι → ℝ}
+    (he : NonnegElementary S e)
+    (hwS : w ∈ S) (hw0 : w ≠ 0) (hwnn : ∀ i, 0 ≤ w i)
+    (hsub : support w ⊆ support e) :
+    ∃ t : ℝ, 0 < t ∧ e = t • w := by
+  have hwcd : ConfDom S e w := by
+    refine ⟨hwS, hw0, ?_, hsub⟩
+    intro i
+    exact mul_nonneg (he.2.2.1 i) (hwnn i)
+  obtain ⟨t, ht, hrS, hrconf, hrsub⟩ := exists_confDom_reduction he.1 hwcd
+  let r : ι → ℝ := e - t • w
+  have hrnn : ∀ i, 0 ≤ r i := by
+    intro i
+    have hc := hrconf i
+    by_cases hei : e i = 0
+    · have hri : r i = 0 := by
+        by_contra hne
+        have himem : i ∈ support r := by
+          simpa [r] using (mem_support.mpr hne)
+        exact (mem_support.mp (hrsub.subset himem)) hei
+      simp [hri]
+    · have hepos : 0 < e i := lt_of_le_of_ne (he.2.2.1 i) (Ne.symm hei)
+      change 0 ≤ (e - t • w) i
+      have hc' : e i * (e - t • w) i ≥ 0 := hc
+      nlinarith
+  have hr0 : r = 0 := by
+    by_contra hrne
+    have hrev := he.2.2.2 r (by simpa [r] using hrS) hrne hrnn hrsub.subset
+    have hne := (Finset.ssubset_iff_subset_ne.mp hrsub).2
+    exact hne (Finset.Subset.antisymm hrsub.subset hrev)
+  refine ⟨t, ht, ?_⟩
+  have hzero : e - t • w = 0 := by simpa [r] using hr0
+  exact sub_eq_zero.mp hzero
+
+/-- Sum over the finite index type of list positions reproduces the list sum. -/
+theorem sum_get_eq_list_sum (L : List (ι → ℝ)) :
+    (∑ i : Fin L.length, L.get i) = L.sum := by
+  induction L with
+  | nil => simp
+  | cons a L ih => simpa [Fin.sum_univ_succ, ih]
 
 end CRNT

@@ -81,14 +81,18 @@ reaction part, the constant inflow `κ(0 → s)`, and the linear outflow `−κ(
       N.fullyOpen.reactionVector (Sum.inl r) s) =
       ∑ r : N.R, N.fullyOpen.massActionRate κ (Sum.inl r) x * N.reactionVector r s := by
     refine Finset.sum_congr rfl fun r _ => ?_
-    rw [reactionVector_apply, reactionVector_apply, fullyOpen_reaction_inl]
+    change N.fullyOpen.massActionRate κ (Sum.inl r) x *
+        (((N.reaction r).target s : ℝ) - ((N.reaction r).source s : ℝ)) = _
+    rfl
   -- The inflow block collapses to its diagonal `s` term.
   have hin : (∑ t : S, N.fullyOpen.massActionRate κ (Sum.inr (Sum.inl t)) x *
       N.fullyOpen.reactionVector (Sum.inr (Sum.inl t)) s) =
       κ.k (Sum.inr (Sum.inl s)) := by
     rw [Finset.sum_eq_single s]
-    · rw [reactionVector_inflow, Pi.single_eq_same, mul_one, massActionRate,
-        fullyOpen_reaction_inflow, inflowReaction, Complex.massActionMonomial_zero, mul_one]
+    · rw [reactionVector_inflow, Pi.single_eq_same, mul_one]
+      change κ.k (Sum.inr (Sum.inl s)) *
+          (inflowReaction s).source.massActionMonomial x = _
+      simp [inflowReaction, Complex.massActionMonomial_zero]
     · intro t _ hts
       rw [reactionVector_inflow, Pi.single_eq_of_ne (Ne.symm hts), mul_zero]
     · intro h; exact absurd (Finset.mem_univ s) h
@@ -105,8 +109,8 @@ reaction part, the constant inflow `κ(0 → s)`, and the linear outflow `−κ(
           show x t ^ (singletonComplex s t) = 1
           rw [singletonComplex, Pi.single_eq_of_ne hts, pow_zero]
         · intro h; exact absurd (Finset.mem_univ s) h
-      rw [reactionVector_outflow, Pi.neg_apply, Pi.single_eq_same, massActionRate,
-        fullyOpen_reaction_outflow, hmono, mul_neg, mul_one]
+      rw [reactionVector_outflow, Pi.neg_apply, Pi.single_eq_same, mul_neg, mul_one]
+      simp only [massActionRate, fullyOpen_reaction_outflow, hmono]
     · intro t _ hts
       rw [reactionVector_outflow, Pi.neg_apply, Pi.single_eq_of_ne (Ne.symm hts),
         neg_zero, mul_zero]
@@ -136,7 +140,8 @@ theorem originalRate_mul_reactionVector_nonneg_of_zero (N : Network S)
       rw [fullyOpen_reaction_inl, Complex.massActionMonomial,
         Finset.prod_eq_zero (Finset.mem_univ s)]
       rw [hs, zero_pow hsource]
-    rw [massActionRate, hmono, mul_zero, zero_mul]
+    simp only [massActionRate, hmono, zero_mul, mul_zero]
+    exact le_rfl
 
 /-- **A nonnegative steady state of the fully open extension is strictly interior.** At an
 absent species the field reduces to a sum of nonnegative original contributions, a zero

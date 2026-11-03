@@ -1,0 +1,4 @@
+# Identifiers matched by the reference patterns in check_undefined_names.py that
+# come from Mathlib (or Lean core) rather than from this repository.  Entries are
+# only needed for names that also match scripts/repo_vocabulary.txt; everything
+# else is reported as "presumed external" and not flagged.

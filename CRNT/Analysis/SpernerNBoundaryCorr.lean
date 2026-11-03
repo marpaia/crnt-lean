@@ -147,7 +147,7 @@ theorem voff_succ_split (c : Cell (n + 1) N) (hp0 : c.perm 0 = Fin.last n) (k i 
       ext l
       simp only [Finset.mem_filter, Finset.mem_univ, true_and, Finset.mem_singleton,
         Fin.val_one, Fin.ext_iff, Fin.val_zero]
-      omega
+      simp [Nat.lt_one_iff]
     rw [hfilter, Finset.sum_singleton]
   rw [h1]
   have hset : (Finset.univ.filter (fun l' : Fin (n + 1) => (l' : ℕ) < (k : ℕ) + 1)).erase 0
@@ -232,7 +232,8 @@ theorem bcell_vertex_color (c : Cell (n + 1) N) (hb : c.base (Fin.last (n + 1)) 
     omega
   have hpt : (bcell c hb hp0).vertex k = boundaryEquiv n N ⟨c.vertex k.succ, hface⟩ := by
     ext i
-    rw [bcell_vertex, boundaryEquiv_apply]
+    rw [bcell_vertex]
+    rfl
   rw [hpt]
   exact restrictColoring_color_of_boundary col (c.vertex k.succ) hface
 

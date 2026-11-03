@@ -1,6 +1,7 @@
 import Mathlib.Analysis.SpecialFunctions.Log.Basic
 import CRNT.LinearAlgebra.OrthogonalComplement
 import CRNT.LinearAlgebra.SignVector
+import CRNT.LinearAlgebra.OrientedMatroid
 import CRNT.Theorems.DeficiencyZero.Birch
 import CRNT.Theorems.DeficiencyZero.BirchExistence
 
@@ -103,6 +104,87 @@ theorem logRatio_sameSign {ι : Type*} {x y : ι → ℝ}
   simp only [Pi.sub_apply, sub_pos, sub_neg]
   exact ⟨(Real.log_lt_log_iff (hy i) (hx i)).symm,
     (Real.log_lt_log_iff (hx i) (hy i)).symm⟩
+
+/-- A real vector has the all-zero sign vector exactly when it is the zero vector. -/
+theorem signVector_eq_zero_iff {ι : Type*} (u : ι → ℝ) :
+    signVector u = (fun _ => 0) ↔ u = 0 := by
+  constructor
+  · intro h
+    funext i
+    have hi := congrFun h i
+    simpa [signVector_apply] using (show u i = 0 from (sign_eq_zero_iff.mp hi))
+  · intro h
+    subst u
+    funext i
+    simp [signVector_apply]
+
+/-- **Sign compatibility is symmetric.** Although `SignCompatible S T` is phrased by
+requiring the vector from `S` to vanish, equality of sign vectors forces the vector from
+`T` to vanish at exactly the same coordinates. Thus the Müller–Regensburger sign condition
+is intrinsically a relation between the two subspaces, not an oriented condition. -/
+theorem signCompatible_symm {ι : Type*} [Fintype ι] (S T : Submodule ℝ (ι → ℝ)) :
+    SignCompatible S T ↔ SignCompatible T S := by
+  constructor
+  · intro h v hv u hu hsame
+    have hu0 := h u hu v hv (sameSign_symm hsame)
+    have hs := sameSign_iff_signVector_eq.mp hsame
+    apply (signVector_eq_zero_iff v).mp
+    rw [hs]
+    exact (signVector_eq_zero_iff u).2 hu0
+  · intro h u hu v hv hsame
+    have hv0 := h v hv u hu (sameSign_symm hsame)
+    have hs := sameSign_iff_signVector_eq.mp hsame
+    apply (signVector_eq_zero_iff u).mp
+    rw [hs]
+    exact (signVector_eq_zero_iff v).2 hv0
+
+/-- **Covector formulation of the sign condition.** `SignCompatible S T` holds exactly
+when every sign vector realizable by both subspaces is the zero sign vector. This is the
+realizable-oriented-matroid form of the condition used in generalized mass-action CRNT. -/
+theorem signCompatible_iff_common_realizable_zero {ι : Type*} [Fintype ι]
+    (S T : Submodule ℝ (ι → ℝ)) :
+    SignCompatible S T ↔
+      ∀ σ, σ ∈ RealizableSignVector S → σ ∈ RealizableSignVector T →
+        σ = (fun _ => 0) := by
+  constructor
+  · intro h σ hS hT
+    obtain ⟨u, hu, hsu⟩ := mem_realizableSignVector.mp hS
+    obtain ⟨v, hv, hsv⟩ := mem_realizableSignVector.mp hT
+    have hsame : SameSign u v := sameSign_iff_signVector_eq.mpr (hsu.trans hsv.symm)
+    have hu0 := h u hu v hv hsame
+    rw [← hsu]
+    exact (signVector_eq_zero_iff u).2 hu0
+  · intro h u hu v hv hsame
+    have hsign : signVector u = signVector v := sameSign_iff_signVector_eq.mp hsame
+    have hcommon : signVector u = (fun _ => 0) := h (signVector u)
+      (mem_realizableSignVector.mpr ⟨u, hu, rfl⟩)
+      (mem_realizableSignVector.mpr ⟨v, hv, hsign.symm⟩)
+    exact (signVector_eq_zero_iff u).1 hcommon
+
+/-- **Set-theoretic Müller–Regensburger sign condition.** The sign condition is precisely
+`sign(S) ∩ sign(T) = {0}`. This is the formulation used by the sign-vector/oriented-matroid
+literature and provides a direct bridge from the analytic `SameSign` API to finite
+combinatorial sign certificates. -/
+theorem signCompatible_iff_realizable_inter {ι : Type*} [Fintype ι]
+    (S T : Submodule ℝ (ι → ℝ)) :
+    SignCompatible S T ↔
+      RealizableSignVector S ∩ RealizableSignVector T = {(fun _ => 0)} := by
+  rw [signCompatible_iff_common_realizable_zero]
+  constructor
+  · intro h
+    ext σ
+    constructor
+    · intro hσ
+      have hz := h σ hσ.1 hσ.2
+      simpa [hz]
+    · intro hσ
+      have hz : σ = (fun _ => 0) := by simpa using hσ
+      subst σ
+      exact ⟨realizable_zero S, realizable_zero T⟩
+  · intro h σ hS hT
+    have hi : σ ∈ RealizableSignVector S ∩ RealizableSignVector T := ⟨hS, hT⟩
+    rw [h] at hi
+    simpa using hi
 
 /-- **Generalized Birch uniqueness.** Under the Müller–Regensburger sign condition
 `SignCompatible S (orthSum T)`, two positive vectors in the same `S`-coset whose

@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [master]
     paths:
@@ -8,6 +9,9 @@ on:
       - 'lakefile.toml'
       - 'lake-manifest.json'
       - 'lean-toolchain'
+      - 'scripts/**'
+      - 'test/**'
+      - 'docs/field-map.md'
       - '.github/workflows/ci.yml'
   pull_request:
     paths:
@@ -15,30 +19,85 @@ on:
       - 'lakefile.toml'
       - 'lake-manifest.json'
       - 'lean-toolchain'
+      - 'scripts/**'
+      - 'test/**'
+      - 'docs/field-map.md'
       - '.github/workflows/ci.yml'
 
 jobs:
-  build:
+  # ---------------------------------------------------------------------------
+  # Static gates.  These run in seconds and need neither Lean nor Mathlib, so
+  # they fail fast and catch the three classes of hole a text grep for `sorry`
+  # does not: hollow definitions, undeclared references, silent build exclusions.
+  # ---------------------------------------------------------------------------
+  static:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-      # Fast whole-tree backstop for the sorry-free / no-native_decide claim. The axiom-cleanliness
-      # guarantee (import CRNT depends on no axioms beyond propext, Classical.choice, Quot.sound) is
-      # enforced by test/AxiomAudit.lean, whose pinned `#print axioms` checks run under `lake test`
-      # below; this grep catches a stray `sorry`/`native_decide` anywhere, not only in audited cones.
-      - name: No sorry or native_decide in sources
+      - name: No native_decide in sources
         run: |
-          if grep -rnP '(?<!`)\bsorry\b(?!`)' --include='*.lean' CRNT Analyze.lean CRNT.lean test; then
-            echo "::error::bare 'sorry' found in sources"; exit 1
-          fi
-          if grep -rnP '(?<!`)\bnative_decide\b(?!`)' --include='*.lean' CRNT Analyze.lean CRNT.lean test; then
+          if grep -rnP '(?<!`)\bnative_decide\b(?!`)' --include='*.lean' \
+              CRNT Scaffold CRNTFrontier.lean Analyze.lean CRNT.lean test; then
             echo "::error::'native_decide' found in sources"; exit 1
           fi
 
+      # Imports of modules that do not exist.  No false positives, and the failure is
+      # otherwise silent: such a module is simply excluded from the build.
+      - name: Internal-import audit
+        run: python3 scripts/check_imports.py
+
+      # `:= True`, `dummy : True`, `<trivial>` constructors, `isTrue` deciders,
+      # `sorry`, `admit`.  Baselined and shrink-only; also fails if a module
+      # containing one becomes reachable from `import CRNT`.
+      - name: Hollow-definition audit
+        run: python3 scripts/check_stubs.py
+
+      # Project identifiers referenced but never declared.  Gating for the
+      # verified core; baselined and shrink-only for the frontier.
+      - name: Undefined-name audit
+        run: python3 scripts/check_undefined_names.py
+
+      # Generated build files must match the ledger before checking their coverage.
+      - name: Generated files in sync with the ledger
+        run: python3 scripts/gen_lakefile.py --check
+
+      # Check 5 here is the one that carries weight: `import CRNT` must not reach any
+      # module with a sorry/axiom/admit, asserted on the import closure itself.  The
+      # ledger-intersection form of that check (check 4) is vacuous while the ledger is
+      # empty, which it has been since c56739b.  See the script's docstring.
+      - name: Exclusion-ledger and umbrella-purity audit
+        run: python3 scripts/check_exclusions.py
+
+  # ---------------------------------------------------------------------------
+  # The verified core.  Green here means the non-ledger modules really do
+  # elaborate with no `sorry` and no axioms beyond Mathlib's -- the latter
+  # enforced by the pinned `#print axioms` checks in test/AxiomAudit.lean, which
+  # `lake test` runs alongside test/Smoke.lean and test/NonVacuity.lean.
+  # ---------------------------------------------------------------------------
+  core:
+    runs-on: ubuntu-latest
+    needs: static
+    steps:
+      - uses: actions/checkout@v4
       - uses: leanprover/lean-action@v1
         with:
-          # Builds CRNT and runs the test library, including test/AxiomAudit.lean (the pinned
-          # `#print axioms` regression guard) and test/Smoke.lean.
+          build-args: 'CRNT CRNTFrontier Scaffold analyze'
           test: true
           use-mathlib-cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Compiled analyzer smoke tests
+        run: python3 -m unittest discover -s test -p '*_cli.py' -v
+
+      - name: Advertised declaration types and axiom coverage
+        run: |
+          python3 scripts/audit_advertised_statements.py \
+            --output "$RUNNER_TEMP/crnt-advertised-types.txt" \
+            --metadata "$RUNNER_TEMP/crnt-advertised-validation.json"

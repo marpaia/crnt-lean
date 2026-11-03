@@ -1,0 +1,7 @@
+'SemanticAudit.complexBalanced_exists_convergent_solution' depends on axioms: [propext, Classical.choice, Quot.sound]
+'SemanticAudit.allTimeRegraph_forces_identity' depends on axioms: [propext, Classical.choice, Quot.sound]
+'SemanticAudit.half_not_repo_semilinear' depends on axioms: [propext, Classical.choice, Quot.sound]
+'SemanticAudit.Division.computes_half' depends on axioms: [propext, Classical.choice, Quot.sound]
+'SemanticAudit.Parity.positive_steady_state_count_eq_two' depends on axioms: [propext, Classical.choice, Quot.sound]
+'SemanticAudit.Autocatalysis.not_conservative' depends on axioms: [propext, Classical.choice, Quot.sound]
+'SemanticAudit.degradation_fails_repo_strong_monotonicity' depends on axioms: [propext, Classical.choice, Quot.sound]

@@ -161,7 +161,7 @@ theorem rank_le_stoichRank (N : Network S) :
         ((N.reaction (c j)).target (r i) : ℚ) - ((N.reaction (c j)).source (r i) : ℚ))
       = N.stoichMatrixQ.submatrix r c := by
     ext i j
-    simp [stoichMatrixQ, Matrix.submatrix_apply]
+    rfl
   rw [hsub]
   exact hdet
 

@@ -237,21 +237,25 @@ private def exampleNetwork : Network (Fin 2) where
 negative. -/
 example : exampleNetwork.signedEdge 0 () = -1 := by
   have h : exampleNetwork.reactionVector () 0 = -1 := by
-    rw [reactionVector_apply]
+    change ((exampleNetwork.reaction ()).target 0 : ℝ) -
+      ((exampleNetwork.reaction ()).source 0 : ℝ) = -1
     have ht : (exampleNetwork.reaction ()).target 0 = 0 := rfl
     have hs : (exampleNetwork.reaction ()).source 0 = 1 := rfl
     rw [ht, hs]; norm_num
-  rw [signedEdge, h]
+  change SignType.sign (exampleNetwork.reactionVector () 0) = -1
+  rw [h]
   exact sign_neg (by norm_num)
 
 /-- The reaction produces species `1`, so the incidence sign is positive. -/
 example : exampleNetwork.signedEdge 1 () = 1 := by
   have h : exampleNetwork.reactionVector () 1 = 1 := by
-    rw [reactionVector_apply]
+    change ((exampleNetwork.reaction ()).target 1 : ℝ) -
+      ((exampleNetwork.reaction ()).source 1 : ℝ) = 1
     have ht : (exampleNetwork.reaction ()).target 1 = 1 := rfl
     have hs : (exampleNetwork.reaction ()).source 1 = 0 := rfl
     rw [ht, hs]; norm_num
-  rw [signedEdge, h]
+  change SignType.sign (exampleNetwork.reactionVector () 1) = 1
+  rw [h]
   exact sign_pos (by norm_num)
 
 end Example

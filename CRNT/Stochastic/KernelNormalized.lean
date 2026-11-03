@@ -55,7 +55,7 @@ any constant `a`, because `Measure.bind` is linear in the measure. -/
 theorem invariant_smul {κ : Kernel α α} {μ : Measure α} (h : Kernel.Invariant κ μ) (a : ℝ≥0∞) :
     Kernel.Invariant κ (a • μ) := by
   unfold Kernel.Invariant at h ⊢
-  rw [Measure.bind_smul, h]
+  rw [Measure.bind_smul a μ (Kernel.aemeasurable κ), h]
 
 /-- **Normalization to a probability measure.** A finite, nonzero invariant measure, divided by its
 total mass, is an invariant probability measure. -/

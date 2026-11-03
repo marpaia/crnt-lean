@@ -1,0 +1,401 @@
+{
+ "campaign": "crnt-lean 12-hour formalization campaign, 2026-10-21",
+ "start_commit": "3065e963124a04e0e4830ac2f320df8c16909ba8",
+ "end_commit": "eb211cd93aafad5d45e2e4a0fc72202706708b9d",
+ "workers": 65,
+ "integration_batches": 30,
+ "slurm": {
+  "partition": "any_cpu",
+  "cpu_hours": 6.2,
+  "peak_cpus": 4,
+  "gpus_used": 0,
+  "high_memory_partition_used": false
+ },
+ "tasks": {
+  "W01": {
+   "id": "W01",
+   "commit": "e49b40c2851b",
+   "subject": "chore(campaign): the orchestrator's task registry, Slurm harness and worker protocol",
+   "files": [],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W02": {
+   "id": "W02",
+   "commit": "e146520c023b",
+   "subject": "feat: Gronwall infrastructure, a two-species ACK instance, Poisson jump-count domination, the second moment of the fluctuation, and the DOA-to-multi-shelf bridge",
+   "files": [
+    "CRNT/Deficiency/DOASignDecomposition.lean",
+    "CRNT/Dynamics/Gronwall.lean",
+    "CRNT/Stochastic/EndotacticTwoSpecies.lean",
+    "CRNT/Stochastic/FluctuationSecondMoment.lean",
+    "CRNT/Stochastic/JumpCountPoisson.lean"
+   ],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W03": {
+   "id": "W03",
+   "commit": "85037e832b87",
+   "subject": "feat: the Halanay comparison principle and the semistability of the linear delay equation",
+   "files": [
+    "CRNT/Dynamics/DelayHalanay.lean"
+   ],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W04": {
+   "id": "W04",
+   "commit": "057c16836487",
+   "subject": "feat: the degree-s homogeneity of the reduced determinant and the bounded persistence case",
+   "files": [
+    "CRNT/Multistationarity/ReducedDetHomogeneity.lean",
+    "CRNT/Persistence/BoundedPersistence.lean"
+   ],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W05": {
+   "id": "W05",
+   "commit": "8818472875a1",
+   "subject": "feat: the eigenvalue theory of the nilpotent-Jacobian criterion, the antithetic certificate, the decidable deficiency-one hypotheses, the Hopf Floquet multiplier and the ",
+   "files": [
+    "CRNT/Decision/DeficiencyOneHypothesesDecide.lean",
+    "CRNT/Design/AntitheticInstance.lean",
+    "CRNT/Dynamics/HopfFloquet.lean",
+    "CRNT/Equilibria/JacobianSpectrumEigen.lean",
+    "CRNT/Multistationarity/ParityGeneral.lean",
+    "CRNT/Multistationarity/TwoReactionCompleteness.lean"
+   ],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W06": {
+   "id": "W06",
+   "commit": "55e3a793bf17",
+   "subject": "feat: uniform contraction, the volume polynomial, the countable-state Foster criterion, the general affine total degree, the delay comparison principle, the three-shelf m",
+   "files": [
+    "CRNT/Algebra/TropicalDynamics.lean",
+    "CRNT/Algebra/VolumePolynomial.lean",
+    "CRNT/Computation/SemilinearMax.lean",
+    "CRNT/Dynamics/DelayComparison.lean",
+    "CRNT/Dynamics/UniformContraction.lean",
+    "CRNT/Extensions/ReactionDiffusionSpectrum.lean",
+    "CRNT/Multistationarity/MultiShelfMoments.lean",
+    "CRNT/Multistationarity/ParityGeneral.lean",
+    "CRNT/Multistationarity/TotalDegreeGeneral.lean",
+    "CRNT/Oscillation/ReturnMapRotation.lean",
+    "CRNT/Stochastic/CompensatedSecondMoment.lean",
+    "CRNT/Stochastic/CountableStateFoster.lean"
+   ],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W07": {
+   "id": "W07",
+   "commit": "0c2eb1f70bd0",
+   "subject": "feat: the tropical reduction of the dynamics, the lattice delay comparison, the deficiency-one capacity kernel, the ADA coplanar content, the two-reaction completeness, t",
+   "files": [
+    "CRNT/Algebra/TropicalDynamics.lean",
+    "CRNT/Computation/StableComposition.lean",
+    "CRNT/Deficiency/ADACoplanar.lean",
+    "CRNT/Deficiency/DOACapacityKernel.lean",
+    "CRNT/Dynamics/AveragingRegularity.lean",
+    "CRNT/Dynamics/DelayComparisonLattice.lean",
+    "CRNT/Dynamics/StrongOrderStrict.lean",
+    "CRNT/Multistationarity/TwoReactionCompleteness2.lean",
+    "CRNT/Stochastic/CountTierCardinality.lean"
+   ],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W08": {
+   "id": "W08",
+   "commit": "925215004a46",
+   "subject": "feat: the count-lattice tier estimate, global existence for the semidiscrete reaction-diffusion system, and the Foster certificate for the antithetic closed loop",
+   "files": [
+    "CRNT/Design/AntitheticFoster.lean",
+    "CRNT/Extensions/ReactionDiffusionGlobal.lean",
+    "CRNT/Stochastic/CountTierCardinality.lean"
+   ],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W09": {
+   "id": "W09",
+   "commit": "32a521ef2f72",
+   "subject": "feat: the Perron-Frobenius step for primitive matrices and the flow for the semidiscrete reaction-diffusion system",
+   "files": [
+    "CRNT/Equilibria/PerronFrobenius.lean",
+    "CRNT/Extensions/ReactionDiffusionFlow.lean"
+   ],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W10": {
+   "id": "W10",
+   "commit": "bc34cb8dc7f4",
+   "subject": "docs: fold the campaign's results into the field map",
+   "files": [],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W11": {
+   "id": "W11",
+   "commit": "b37c5a1696a0",
+   "subject": "feat: the obstruction to an exponential drift for the antithetic loop, the joint non-isothermal Lyapunov function, and the fundamental matrix of the mass-action variation",
+   "files": [
+    "CRNT/Design/AntitheticExponential.lean",
+    "CRNT/Dynamics/FlowSmoothDependenceProof.lean",
+    "CRNT/Extensions/NonIsothermalLyapunov.lean",
+    "CRNT/Multistationarity/CFMWHigherRank.lean"
+   ],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W12": {
+   "id": "W12",
+   "commit": "1728cea73982",
+   "subject": "feat: the fundamental matrix of the mass-action variational equation and the fluctuation-scale uniform-in-time estimate",
+   "files": [
+    "CRNT/Algebra/MixedVolumeBKK.lean",
+    "CRNT/Dynamics/FlowSmoothDependenceProof.lean",
+    "CRNT/Stochastic/FluctuationUniform.lean"
+   ],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W13": {
+   "id": "W13",
+   "commit": "d7b17ee0c084",
+   "subject": "feat: the BKK bound for a circuit system in the mixed-volume form",
+   "files": [
+    "CRNT/Algebra/MixedVolumeBKK.lean"
+   ],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W14": {
+   "id": "W14",
+   "commit": "dbd5dcf9d9a5",
+   "subject": "docs: seven new leaves for classical results the library already proves",
+   "files": [],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W15": {
+   "id": "W15",
+   "commit": "c79c565e407b",
+   "subject": "feat: the completeness of the two-reaction criterion table, the minimum entropy production principle, and a structural criterion for simplicial-cone monotonicity",
+   "files": [
+    "CRNT/Dynamics/SimplicialConeNetwork.lean",
+    "CRNT/Multistationarity/TwoReactionTable.lean",
+    "CRNT/Thermo/MinimumEntropyProduction.lean"
+   ],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W16": {
+   "id": "W16",
+   "commit": "c399997f88a0",
+   "subject": "feat: the Prigogine principle, the open-system conservation laws, the Markus-Yamabe criterion, the isolation criterion and the entropy decay rate",
+   "files": [
+    "CRNT/Algebra/ConvexVolume.lean",
+    "CRNT/Dynamics/MarkusYamabe.lean",
+    "CRNT/Equilibria/DegenerateDichotomy.lean",
+    "CRNT/Open/ConservationLaws.lean",
+    "CRNT/Theorems/DeficiencyZero/DecayRate.lean",
+    "CRNT/Theorems/DeficiencyZero/Prigogine.lean"
+   ],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W17": {
+   "id": "W17",
+   "commit": "d8097e51514e",
+   "subject": "docs: second round of field-map updates (1217 pinned declarations)",
+   "files": [],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W18": {
+   "id": "W18",
+   "commit": "ace55ee5a389",
+   "subject": "chore(campaign): record the campaign's integration batches in the task registry",
+   "files": [],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W19": {
+   "id": "W19",
+   "commit": "807eaf77ce5c",
+   "subject": "fix: untrack the in-progress convex-volume module so that master stays green",
+   "files": [
+    "CRNT/Algebra/ConvexVolume.lean"
+   ],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W20": {
+   "id": "W20",
+   "commit": "e72c81fc9f84",
+   "subject": "docs(campaign): the orchestrator's campaign report",
+   "files": [],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W21": {
+   "id": "W21",
+   "commit": "2c958f80d142",
+   "subject": "docs: re-assess the remaining gaps of the partial leaves after the campaign",
+   "files": [],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W22": {
+   "id": "W22",
+   "commit": "90ede227331d",
+   "subject": "feat: volume monotonicity for convex bodies and the geometric bridge for the BKK theory",
+   "files": [
+    "CRNT/Algebra/ConvexVolume.lean"
+   ],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W23": {
+   "id": "W23",
+   "commit": "e3eb9b00877f",
+   "subject": "docs: record the convex-volume bridge in leaf A3",
+   "files": [],
+   "leaf": "A3",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W24": {
+   "id": "W24",
+   "commit": "c6f109d94f2c",
+   "subject": "docs: record the campaign status in the map's plan section",
+   "files": [],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W25": {
+   "id": "W25",
+   "commit": "034ff7a1a517",
+   "subject": "feat: the rate-sensitive convergence of a mass-action system with exponentially converging rates",
+   "files": [
+    "CRNT/Dynamics/RateSensitive.lean"
+   ],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W26": {
+   "id": "W26",
+   "commit": "fda6a32e9998",
+   "subject": "feat: the implicit function theorem for the equilibrium and the absolute pseudo-Helmholtz function",
+   "files": [
+    "CRNT/Multistationarity/EquilibriumSmoothness.lean",
+    "CRNT/Theorems/DeficiencyZero/AbsolutePseudoHelmholtz.lean"
+   ],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W27": {
+   "id": "W27",
+   "commit": "68c4723d4bd0",
+   "subject": "feat: the toric reduction, the geometric ergodicity of the product-form law, and the capacity inheritance",
+   "files": [
+    "CRNT/Multistationarity/InheritanceCapacity.lean",
+    "CRNT/Reduction/ToricReduction.lean",
+    "CRNT/Stochastic/ProductFormGeometric.lean"
+   ],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W28": {
+   "id": "W28",
+   "commit": "c367cb7ae085",
+   "subject": "docs: third round of field-map updates; two new leaves (S24, D23)",
+   "files": [],
+   "leaf": "D23,S24",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W29": {
+   "id": "W29",
+   "commit": "640b58ab0bbe",
+   "subject": "feat: the entropy dissipation in flux form",
+   "files": [
+    "CRNT/Theorems/DeficiencyZero/EntropyDissipation.lean"
+   ],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  },
+  "W30": {
+   "id": "W30",
+   "commit": "eb211cd93aaf",
+   "subject": "docs(campaign): final numbers",
+   "files": [],
+   "leaf": "",
+   "status": "INTEGRATED",
+   "last_progress": "2026-10-21",
+   "verification": "independent cluster build (lake build +CRNT, test.AxiomAudit, field-map pins): PASS"
+  }
+ }
+}

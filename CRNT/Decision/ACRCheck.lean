@@ -103,7 +103,11 @@ inductive Species
   | A
   | P
   | Q
-  deriving DecidableEq, Fintype, Repr
+  deriving DecidableEq, Repr
+
+instance : Fintype Species where
+  elems := {Species.A, Species.P, Species.Q}
+  complete := by intro s; cases s <;> simp
 
 open Species
 
@@ -123,7 +127,11 @@ def cQ : Complex Species := fun s => match s with | Q => 1 | _ => 0
 inductive Rxn
   | r1
   | r2
-  deriving DecidableEq, Fintype, Repr
+  deriving DecidableEq, Repr
+
+instance : Fintype Rxn where
+  elems := {Rxn.r1, Rxn.r2}
+  complete := by intro r; cases r <;> simp
 
 /-- The reaction map. -/
 def rxn : Rxn → Reaction Species

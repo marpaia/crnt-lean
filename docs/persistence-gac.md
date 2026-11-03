@@ -8,9 +8,13 @@ builds on the relative-entropy Lyapunov function and the forward semiflow descri
 [`deficiency.md`](deficiency.md).
 
 The global attractor conjecture is open in general. This document records what is **proven here**,
-what is **gated on explicit hypotheses**, and where the formalization stops. Every result discussed
-is `sorry`-free; the conjecture is not closed, and where a step is missing it enters as a named
-hypothesis (a `Prop`, a structure, or a supplied argument), never as a `sorry`.
+what is **gated on explicit hypotheses**, and where the formalization stops. Where a step is
+missing it enters as a named hypothesis (a `Prop`, a structure, or a supplied argument) whenever
+that is possible, so the great majority of what follows is `sorry`-free. Exactly two `sorry`s
+remain in the whole tree: `Dynamics/HighCodimensionSiphonFace.lean`, the residual
+higher-codimension critical-siphon obligation of the Global Attractor chain, and
+`Multistationarity/TrueChemistrySRCriterion.lean`, the ear-decomposition step of the
+Shinar–Feinberg true-SR criterion. A successful build does not close either of them.
 
 ## The reduction: GAC ⟺ persistence
 
@@ -196,6 +200,20 @@ Built and proven:
     fact behind the difficulty in dimension four. Refining the fan keeps each patch below that
     threshold and transfers admissibility to the coarser fan (`Geometry/FanRefinement.lean`), so the
     dimension-four over-determination is a feature of the naive construction, not an obstruction.
+    Supporting hyperplanes and exposed faces also preserve finite half-space representations.
+    The same module now proves that images of a covering fan under a surjective linear map cover
+    the target, and that finitely generated cone images are exact. For any split surjection whose
+    kernel is spanned by one supplied direction, Fourier--Motzkin elimination proves that the closed
+    image of each cone with a finite half-space representation again has a finite half-space
+    representation and admits a complete polyhedral fan refinement; final-coordinate deletion in
+    Euclidean coordinates is a proved instance. The module also constructs a complete central
+    hyperplane arrangement fan for any supplied finite
+    normal set. The arrangement of the finite dual normals refines any covering cone family with
+    finite dual representations, and every arrangement cell has a finite dual representation.
+    Therefore it supplies a complete polyhedral fan refinement of these projected image families.
+    This does not show that the raw projected image family itself is a fan, nor does it cover
+    projections with higher-dimensional kernels. The higher-dimensional surface construction and its
+    analytic interfaces remain open.
 - **Viability** (`Dynamics/{Viability,FirstExit,SublevelInvariant,SublevelNagumo,ClosedSetNagumo,
   ThmBGenuine}.lean`): for the genuine (Lipschitz) dynamics, solution existence is free
   (Picard–Lindelöf), so only invariance must be shown. The single-valued Nagumo step is proven: given
@@ -216,13 +234,101 @@ an explicit hypothesis, never a `sorry`:
    and the simplicial gluing is the predicate `InductionStepHypothesis`
    (`Geometry/ZeroSeparatingSurface.lean`); `inductionStep_of_ruledBuild`
    (`Geometry/ZeroSeparatingInduction.lean`) returns its assumed witness unchanged. The descent band
-   and ball-separation feeding `genuine_away_from_origin` are likewise supplied.
-3. **The weak-reversibility cycle cover.** `NetworkCycleDecomposition` packages the concrete
-   cycle-cover data (path lists with their ordering fields) and is assumed; the reachability-level
-   cover is proven (`WeaklyReversible.onDirectedCycle`), but no lemma turns it into the concrete
-   decomposition the embedding consumes.
-4. **The polyhedral-fan axioms.** `IsPolyhedralFan` (closure under exposed faces, pairwise
-   intersection a common face, covering) is a hypothesis; `Fan` is bare cone data.
+   and ball-separation feeding `genuine_away_from_origin` are likewise supplied. A zero-bit geometric
+   subcase is now kernel-checked: `exists_compact_separated_zeroBitGraphTube` turns a compact face
+   with a zero-bit projection into a continuous graph section and a compact tube that contains the
+   face, projects exactly onto the base, and retains a positive origin-avoidance margin when the
+   tube radius is smaller than the face margin. `exists_compact_separated_zeroBitGraphTube_over_tile`
+   restricts this construction to each compact projected tile while preserving exact projection,
+   face containment, and separation; `projectionFiberTube_eq_iUnion_of_base_cover` proves that a
+   finite cover of the base lifts to an exact cover by those tile tubes. This is still set-level
+   tube geometry. `compactZeroBitFiberPatchCover_of_compactBaseCover` packages that lift for a
+   finite compact cover of the projected face whose tile interiors are pairwise disjoint, with a
+   shared continuous center, compact tile tubes, exact tile projections, the inherited separation
+   margin, exact overlaps along common projected bases, and disjoint ambient interiors. These are
+   set-level seams only. On the one-bit side,
+   compactProjectionFiberTiling_of_compactBase now supplies
+   finitely many compact strips with exact coverage, full base projection, width bounds, and
+   continuous center graphs. Distinct strips have disjoint ordinary ambient interiors in the full
+   product space, proved by showing that any ambient interior point lies strictly between its
+   fiber endpoints. Adjacent closed strips intersect exactly in the graph of their shared
+   endpoint, which is continuous and compact over a compact base. This records set-level seam
+   topology; the piecewise-smooth separating surface, descent estimates, and differential seam
+   conditions remain open. `compactOneBitFiberBlueprintRefinement_of_compactBand` takes a compact
+   face patch already contained in the band and derives an exact finite cover by compact
+   face-tile intersections. The continuous boundary graphs and face-in-band containment remain
+   explicit inputs. `compactOneBitFiberPatchCover_of_compactBand` lifts a finite compact cover of
+   the projected base whose tile interiors are pairwise disjoint, allowing different subdivision
+   counts on each base tile, and packages compact face pieces with pairwise-disjoint ambient
+   interiors. The cross-base case follows from openness of coordinate projection and exact tile
+   projections; the same-base case uses the equal-strip interior-separation theorem. The
+   zero-bit pre-blueprint rule from Craciun v3, §7.3, is now encoded set-theoretically by
+   `zeroBitPreBlueprintNeighborhood`: a face is thickened by the coordinate box whose radii come
+   from its binary-word prefixes, then intersected with the pullback of the lower-dimensional
+   neighborhood. `forgetLastCoordinate_image_zeroBitPreBlueprintNeighborhood` proves the exact
+   projection recursion; compactness and face containment follow when compactness and projected
+   containment are supplied. A prefix ending in `1` has a zero-width coordinate via
+   `binaryWordFiberBox_lastCoordinate_eq_zero`. The depth-indexed function
+   `craciunBinaryWordEpsilon` assigns the padded lower-endpoint scale to a zero-ending prefix and
+   zero to a one-ending prefix, with `craciunBinaryWordEpsilon_pos_iff` characterizing positive
+   widths exactly as valid zero-ending prefixes. `coherentBinaryWordTileScale_eq_craciunBinaryWordEpsilon_of_zero`
+   identifies that width with the first scale on its last-zero refinement chain. The construction
+   keeps its ambient depth fixed while projecting to lower coordinate dimensions. The code proves
+   every prefix width is at most `q`, and `zeroBitPreBlueprintNeighborhood_craciunSeparated`
+   specializes the earlier avoidance estimate: a face with margin greater than `q` retains the
+   reduced margin `margin - q`. If every box width is at most `r`,
+   `zeroBitPreBlueprintNeighborhood_separated` shows that a face outside the margin-`m` ball yields
+   a neighborhood outside the ball of radius `m - r`, with that reduced margin positive when
+   `r < m`. These are pre-blueprint set facts, not the smooth hypersurface or normal-condition
+   construction. See [Craciun v3, §7.3](https://arxiv.org/html/1501.02860v3).
+   The smooth gluing layer now also
+   proves, via exists_fderiv_smoothMaxList_le and
+   exists_fderiv_smoothMaxF_nonpos_of_value_gap, that finite smooth maxima preserve a shared
+   directional-derivative upper bound and that a strictly descending chart remains nonincreasing
+   after gluing a competitor whose outward derivative is bounded and whose barrier value is
+   sufficiently lower. The new `zeroSeparatingSurfaceExists_smoothWallList_of_dominantHead_band`
+   wires this estimate into the ZSH interface when one fixed head chart is inward throughout the
+   barrier band and the aggregated tail stays below it by the required gap. This remains a
+   chart-local conditional result: selecting such dominant charts across all blueprint tiles and
+   proving the full piecewise-smooth surface and seam conditions remain open. Separately, the
+   log-projective chart compatibility result currently
+   proves pointwise overlap when neighboring face weights
+   balance on each tied-coordinate fiber. A separate first-moment condition aligns directional
+   derivatives of the scalar level equations; the two-species example in
+   `Geometry/LogProjectiveFaceCompatibility.lean` shows that fiber balance alone need not align
+   transverse section derivatives, so it rules out inferring C¹ gluing from pointwise overlap. The
+   [Craciun v3 ZSH definition](https://arxiv.org/html/1501.02860v3) requires a piecewise-smooth
+   surface and tests non-crossing at smooth points (Definition 4.6), so this derivative mismatch is
+   not itself an obstruction to the stated construction. The blueprint's pointwise seam
+   compatibility, seam topology, and normal condition on smooth pieces remain to be proved.
+3. **The weak-reversibility cycle cover and its ordering data.** The reachability-level cover is
+   proven (`WeaklyReversible.onDirectedCycle`), but `NetworkCycleDecomposition` still assumes the
+   concrete cycle lists and ordering data needed to assemble the network velocity. Its original
+   `mono`/`cmin` interface is problematic in graph order: `Examples/CycleRateNonMonotone.lean`
+   exhibits the strongly connected triangle `A → B → A + B → A` at `x = (1/2, 4)`, where the rates
+   are `1/2, 4, 2` and no rotation is monotone. Reordering steps by rate fixes `mono`, but changes
+   the vertices to partial sums of reaction vectors.
+
+   The cycle-level partial-sum argument is now formalized. `ToricCycleSortedBase.lean` proves that
+   the prefixes obtained by sorting coefficients have nonnegative partial sums in one direction;
+   `ToricCycleOrderLimits.lean` lifts this to a cone condition `OrderRefines C y a` and proves
+   `cycle_velocity_mem_polarCone_of_orderRefines`. It also defines the coefficient-dependent
+   `OrderChamber y a`, giving an unconditional cycle-level polar-cone result relative to that
+   chamber. This repairs the sorted-walk `C`-minimality step under the stated order condition, but
+   does not construct the network-level cycle decomposition or show that the required chambers and
+   fan slack assemble for general rate constants. With a common positive rate constant, `log x`
+   belongs to each cycle's order chamber. With non-uniform constants, the ordering is shifted by
+   `log κ`; `massAction_cycle_inner_le_kappaCorrection` and `massAction_cycle_inner_le_kappaSpread`
+   quantify the resulting term when adjacent log-rate differences are bounded. The separate
+   `CycleSignCompatible` Abel condition does not bypass the ordering issue: under strict
+   `C`-minimality it forces coefficient monotonicity at the separating indices.
+4. **The polyhedral-fan axioms and common refinements.** `IsPolyhedralFan` (closure under exposed
+   faces, pairwise intersection a common face, covering) remains a requirement on input fans.
+   `Geometry/FanRefinement.lean` now constructs finite iterated intersections of supplied
+   polyhedral fans with dual-finitely-generated cells and proves the fan and refinement properties
+   persist. `Dynamics/ComplexBalanceStoichFanInclusion.lean` also proves the toric field inclusion
+   survives successive intersections with covering fans. The subdivision fans and tiles required by
+   the zero-separating construction are still not constructed.
 5. **Arbitrary-fan faithful-curve existence.** The global slope-interval chaining is the
    `ChainingData` interface (`Geometry/FaithfulCurveGeneral.lean`); the two-dimensional results assume
    a sector bound and strict subtangency (`IsStrictSupportField`), discharged only for worked
@@ -238,6 +344,31 @@ the toric-inclusion approach. Its persistence-style results are the one-dimensio
 (unconditional) and genuine-flow distance bounds conditional on a supplied surface. The architecture
 is formalized and the dimension-four over-determination is understood, but the conjecture is not
 closed here.
+
+## Additional candidate reductions from the supplied handoff
+
+Pantea's paper proves that all bounded trajectories of weakly reversible mass-action systems with
+two-dimensional stoichiometric subspace are persistent, and proves the Global Attractor Conjecture
+for complex-balanced systems with three-dimensional stoichiometric subspace ([Pantea,
+*On the persistence and global stability of mass-action systems* (2012)](https://arxiv.org/abs/1103.0603)).
+Neither result is formalized here. They are candidate dimension-specific proof branches, subject to
+an important interface check: the current `GenuinePermanentForRates` target asks for a class-uniform
+eventual compact set, so a formalization must prove that the paper's persistence or convergence result
+supplies this stronger API before counting either branch as closed.
+
+Anderson and Shiu give another candidate rank-2 branch: Theorem 4.6 proves GAC when every
+semilocking face is a facet, vertex, or empty, and Corollary 4.7 applies this to two-dimensional
+compatibility classes ([paper, Theorem 4.6 and Corollary 4.7](https://people.math.wisc.edu/~dfanderson/papers/AndShiuFacetsSIAM.pdf)).
+The local critical-siphon facet inequality is now formalized conditionally, but the finite-cover and
+vertex arguments are not assembled into Lean, and the result still needs to feed the
+class-uniform `GenuinePermanentForRates` interface.
+
+The handoff's rate-realization observation is also present in
+`Dynamics/ToricCycleOrderLimits.lean`: `not_exists_realizing_of_relation` shows that a translation
+realizing `log κ` must satisfy every linear relation among the cycle complexes, while
+`massAction_cycle_inner_le_kappaSpread` bounds the residual when no such translation exists. This
+limits the translated-cycle route for arbitrary rate constants; it does not refute the Global
+Attractor Conjecture or close the critical-siphon case.
 
 ## The permanence route (Gopalkrishnan–Miller–Shiu)
 
@@ -261,16 +392,67 @@ form. The sign content of strong endotacticity along the relative-entropy dissip
   Butler–McGehee escape geometry, isolated and minimal invariant sets; the reachability-level cycle
   cover of a weakly-reversible network; the differential-inclusion, polar-cone, embedding, one- and
   two-dimensional zero-separating, and single-valued-Nagumo machinery above; the permanence ⇒
-  convergence bridge.
+  convergence bridge. In `Dynamics/GlobalAttractorTheorem.lean`, `PositiveOmegaPointForRates` now
+  requires the initial curve to solve the mass-action ODE, and the zero-dimensional and rank-one
+  cases are proved. Also complete, in `Dynamics/GlobalAttractorTheorem.lean`:
+  `exists_relEntropy_const_on_omegaLimit`, which *derives* the LaSalle constant
+  `∀ z ∈ ω, relEntropy x* z = c` for an arbitrary supplied semiflow rather than assuming it (every
+  theorem in `Dynamics/GACOmegaPositive.lean` takes that constant as a hypothesis, while
+  `PositiveOmegaPointForRates` does not supply it);
+  `positiveOmega_or_criticalSiphonFaceEquilibrium`, the resulting dichotomy — either a positive
+  ω-point, or a boundary equilibrium whose zero set is a critical siphon *meeting the compatibility
+  class*, with strictly smaller face rank;
+  `positiveOmega_or_nonstationary_criticalSiphonFaceEquilibrium`, which also removes the case where
+  the orbit reaches an equilibrium; and
+  `positiveOmegaPointForRates_of_criticalSiphonFaces_miss_classes`, a sufficient condition for the
+  omega-interior certificate strictly weaker than `HasNoCriticalSiphon` (critical siphons are
+  allowed, provided none of their coordinate faces meets a positive compatibility class), together
+  with `positiveOmegaPointForRates_of_no_boundary_equilibrium_in_classes`. Finally
+  `omegaLimit_fixed_of_complexBalanced` and `omegaLimit_singleton_of_mem_omegaLimit`: every ω-point
+  of a bounded positive genuine orbit is a *fixed point* of the semiflow and is its own forward
+  limit, which shows the Butler–McGehee stack of `Dynamics/EscapeSiphonFace.lean` is vacuous on
+  such ω-limit sets and cannot supply a siphon-dimension descent. In
+  `Dynamics/SiphonFaceWeakReversibility.lean`, the avoiding-reaction subnetwork and its filled face
+  equilibrium are formalized. `Dynamics/ToricCycleSortedBase.lean` and
+  `Dynamics/ToricCycleOrderLimits.lean` prove sorted partial-sum and polar-cone results, and
+  `Examples/CycleRateNonMonotone.lean` verifies that no cyclic rotation of a particular weakly
+  reversible triangle has monotone mass-action rates.
 - **Open:** persistence in general — the remaining gap is that interior orbits must be repelled from
   *critical*-siphon faces. The codimension-1 non-siphon facet case is proven
   (`Dynamics/FacetRepulsion.lean`, via `massActionVectorField_pos_of_not_isSiphon` and Butler–McGehee:
-  a non-siphon facet is strictly repelling and traps no ω-point). The critical-siphon facet is taken
-  as a hypothesis: there the field is tangent, so first-order repulsion gives nothing, and the
-  near-facet quantitative estimate of Anderson & Shiu (*The dynamics of weakly reversible population
-  processes near facets*, 2010) — together with Anderson's single-linkage tier argument — is not
-  formalized; it needs a near-facet differential inequality absent from this layer. Also open: in the
-  toric-inclusion approach, the six explicit hypotheses
+  a non-siphon facet is strictly repelling and traps no ω-point). For critical-siphon facets,
+  `Dynamics/FacetRepulsionAndersonShiu.lean` formalizes the one-sign facet direction and a
+  conditional version of Anderson–Shiu Theorem 3.2: `facet_repelling_of_data` derives the repulsion
+  inequality when the facet direction, a nonnegative reaction contribution, and quantitative
+  monomial-domination bounds are supplied. `exists_positiveReaction_below_of_negativeReaction`
+  now derives, for each negative reaction, a positive reaction in its weakly reversible component
+  whose source is strictly smaller on every facet species. The witness may vary by reaction, so
+  the proof does not assume a global ordering across disconnected linkage classes.
+  `facet_repelling_of_reactionwise_data` now assembles this shape of estimate when each negative
+  term is controlled by the full nonnegative contribution. `facet_repelling_of_local_monomial_bounds`
+  combines the cycle witnesses, exponent comparison, complementary-factor bounds, coefficient
+  ratios, and sum estimate into local repulsion. `exists_uniform_complement_monomial_bounds`,
+  `exists_uniform_reaction_coefficient_bound`, and `exists_small_facet_parameters` now derive the
+  required constants uniformly on a neighborhood. `facet_repelling_near_facet_point` packages
+  these choices, while `facet_repelling_near_facet_point_of_facet` also derives the signed facet
+  direction from the codimension-one projection-rank condition and a compatible positive point.
+  In `Dynamics/GlobalAttractorTheorem.lean` the maximal boundary zero face is chosen by
+  `exists_maximal_zeroSet_omegaPoint`; when its codimension is one the orbit is contradicted by
+  `no_omegaLimit_meets_locally_repelling_face` applied through
+  `facet_repelling_near_facet_point_of_facet`. When the maximal boundary face is not a facet,
+  `highCodimension_of_not_facet` rules out the degenerate zero-projection case and also returns
+  `2 ≤ Pmax.card`, and the branch is discharged by
+  `exists_positive_omegaPoint_of_highCodimension_siphonFace` in `Dynamics/HighCodimensionSiphonFace.lean`.
+  That theorem is where the one remaining GAC `sorry` lives, so `complexBalanced_genuinePermanent`
+  inherits it from exactly one place instead of from an open branch of the main argument. The
+  supporting face-codimension and barrier machinery added alongside it — `Dynamics/FaceCodimension.lean`,
+  `Dynamics/FaceDirectionCone.lean`, `Dynamics/OrbitRegularity.lean`,
+  `Dynamics/ToricBarrierTrapping.lean`, `Dynamics/ToricBarrierExplicit.lean`,
+  `Geometry/PolyhedralBarrier.lean`, `Geometry/ConvexBarrierObstruction.lean` and
+  `Geometry/FanFaceLattice.lean` — is `sorry`-free, and `test/ToricBarrierAudit.lean` pins the
+  axiom set of each entry point so none of them can silently acquire `sorryAx`.
+  Anderson's single-linkage tier argument is also not
+  formalized. Also open: in the toric-inclusion approach, the six explicit hypotheses
   enumerated above, none assembled into a persistence or GAC conclusion; and, in the permanence route,
   `StronglyEndotactic ⇒ permanent`.
 
@@ -281,17 +463,21 @@ form. The sign content of strong endotacticity along the relative-entropy dissip
 `ForwardInvariance`, `StrictInflow`, `NegativeInvariance`, `BoundaryOmegaSiphon`, `CriticalSiphonOmega`,
 `NoCriticalSiphonPersistence`, `GACNoCriticalSiphon`, `GACOmegaPositive`, `SingleLinkageGAC`,
 `GACConfinement`, `GACSeparatingRegion`, `GACSeparatingRegionNagumo`, `GACSeparatingCapstone`,
-`GenuineConfinement`, `GACSeparatingWitness`,
+`GenuineConfinement`, `GACSeparatingWitness`, `SiphonFaceWeakReversibility`,
 `IsolatedInvariant`, `MinimalInvariant`, `ButlerMcGehee`, `EscapeSiphonFace`, `FacetRepulsion`,
 `EndotacticPermanence`, `DifferentialInclusion`, `ToricInclusion`, `ToricEmbedding`,
-`ToricEmbeddingOrder`, `ToricEmbeddingWR`, `ZeroSeparating`, `Viability`, `FirstExit`,
+`ToricEmbeddingOrder`, `ToricEmbeddingWR`, `ToricCycleSortedBase`, `ToricCycleOrderLimits`,
+`ZeroSeparating`, `Viability`, `FirstExit`, `FaceCodimension`, `FaceDirectionCone`,
+`HighCodimensionSiphonFace`, `OrbitRegularity`, `ToricBarrierTrapping`, `ToricBarrierExplicit`,
 `SublevelInvariant`, `SublevelNagumo`, `ClosedSetNagumo`, `SupportDiniBridge`, `PolyRegionInvariant`,
-`PolyRegionStrictInvariant`, `ThmBGenuine`, `DissipationBound`.
+`PolyRegionStrictInvariant`, `ThmBGenuine`, `DissipationBound`, `FacetRepulsionAndersonShiu`.
 `Geometry/`: `PolyhedralFan`, `Endotactic`, `ToricFan`, `ConeFace`, `ZeroSeparatingSurface`,
 `ZeroSeparatingCurve2D`, `ZeroSeparatingInduction`, `FanRefinement`, `ToricFieldPolar`,
 `ToricFieldPolarMulti`, `FaithfulCurve`, `FaithfulCurveExistence`, `FaithfulCurveGeneral`,
-`FaithfulCurve2D`, `FaithfulCurve2DFan`.
+`FaithfulCurve2D`, `FaithfulCurve2DFan`, `PolyhedralBarrier`, `ConvexBarrierObstruction`,
+`FanFaceLattice`.
 `Graph/`: `Reachability`, `WeakReversibility`, `CycleCover`.
+`Examples/`: `CycleRateNonMonotone`.
 
 Related: [`architecture.md`](architecture.md), [`dynamics.md`](dynamics.md),
 [`deficiency.md`](deficiency.md).

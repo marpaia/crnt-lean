@@ -165,10 +165,9 @@ noncomputable def GraphTransformData.ofSpectralGap
     (ε C : ℝ) (defect_le : dist (op base) base ≤ ε * C) :
     GraphTransformData Y E where
   op := op
-  factor := ⟨Lf / rate, div_nonneg hLf hrate.le⟩
+  factor := NNReal.mk (Lf / rate) (div_nonneg hLf hrate.le)
   factor_lt_one := by
-    rw [← NNReal.coe_lt_coe, NNReal.coe_one]
-    show Lf / rate < 1
+    change (Lf / rate : ℝ) < 1
     rw [div_lt_one hrate]
     exact hgap
   op_dist_le := fun σ τ => op_dist_le σ τ

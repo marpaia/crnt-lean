@@ -1,0 +1,3 @@
+# High-water mark for scripts/unverified_modules.txt.
+# The ledger may shrink below this number, never grow above it.
+0

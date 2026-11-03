@@ -1,0 +1,54 @@
+{
+  "commit": "c22e38adba610779ffcd8091bc96aceef81f3d55",
+  "field_map_rows": 99,
+  "distinct_declarations": 1397,
+  "axiom_reports": 1397,
+  "missing": [],
+  "extra": [],
+  "unexpected_axioms": {},
+  "lean_exit_code": 0,
+  "additional_validation": {
+    "build": {
+      "command": "lake build CRNT CRNTFrontier Scaffold analyze test",
+      "exit_code": 0,
+      "jobs": 8669
+    },
+    "lean_tests": {
+      "command": "lake test",
+      "exit_code": 0,
+      "modules": 30
+    },
+    "audit_reproduction": {
+      "command": "lake env lean docs/semantic-audit/CorrespondenceChecks.lean",
+      "exit_code": 0
+    },
+    "analyzer_cli": {
+      "command": "python3 -m unittest discover -s test -p '*_cli.py' -v",
+      "exit_code": 0,
+      "tests": 5
+    },
+    "static_checks": {
+      "commands": [
+        "python3 scripts/check_imports.py",
+        "python3 scripts/check_stubs.py",
+        "python3 scripts/check_undefined_names.py",
+        "python3 scripts/gen_lakefile.py --check",
+        "python3 scripts/check_exclusions.py"
+      ],
+      "exit_codes": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "field_map_pins": {
+      "command": "lake env python3 scripts/field_map_pins.py",
+      "exit_code": 0,
+      "declarations": 1397,
+      "rows": 99
+    },
+    "remote_ci": "not run; local validation only"
+  }
+}

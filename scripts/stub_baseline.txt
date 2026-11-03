@@ -1,0 +1,3 @@
+# Hollow/unproved definitions, one per line: kind<TAB>file<TAB>text
+# Regenerate with: python3 scripts/check_stubs.py --write
+# This list must only ever shrink.  See LEDGER.md.

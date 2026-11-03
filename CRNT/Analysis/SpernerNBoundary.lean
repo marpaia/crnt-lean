@@ -47,10 +47,12 @@ def boundaryEquiv (n N : ℕ) : BoundaryFace n N ≃ Pt n N where
 
 @[simp] theorem boundaryEquiv_symm_apply_castSucc (q : Pt n N) (i : Fin (n + 1)) :
     ((boundaryEquiv n N).symm q).1.1 i.castSucc = q.1 i := by
-  simp [boundaryEquiv]
+  change Fin.lastCases 0 q.1 i.castSucc = q.1 i
+  simp
 
 @[simp] theorem boundaryEquiv_symm_apply_last (q : Pt n N) :
     ((boundaryEquiv n N).symm q).1.1 (Fin.last (n + 1)) = 0 := by
-  simp [boundaryEquiv]
+  change Fin.lastCases 0 q.1 (Fin.last (n + 1)) = 0
+  simp
 
 end CRNT.Analysis.SpernerN

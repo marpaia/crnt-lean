@@ -1,55 +1,11 @@
 import CRNT.Dynamics.FenichelPersistence
 
 /-!
-# A concrete Fenichel persistence instance from an explicit coupled field
+# Fixed graphs of a supplied continuous-time flow step
 
-This module discharges the structural `flow_mapsTo` hypothesis of
-`CRNT.Dynamics.FenichelPersistence`'s `CoupledFlowGraphTransform` against a *concrete* coupled
-slow–fast field, building the forward semiflow on the product `Y × E` from the field itself via
-`CRNT.Dynamics.FlowConstruction`'s `exists_flow` and proving — rather than assuming — that the
-time-`τ` flow regraphs sections. Feeding the result through `fenichel_persistence` yields an
-end-to-end persistence theorem for the explicit field with **no remaining op-from-flow hypothesis**.
-
-The explicit field is the bounded constant fast-drift coupled field
-`ẏ = 0`, `ż = v` on `Y × E`: the slow base is frozen and the fast fibre translates at the constant
-velocity `v`. It is globally bounded (`‖f‖ = ‖v‖`) and globally Lipschitz (constant `0`), so
-`exists_flow` supplies a genuine `Flow ℝ≥0 (Y × E)` for it — flow existence is free for bounded
-Lipschitz fields. Its time-`t` map is the closed-form translation `(y, z) ↦ (y, z + t • v)`
-(`constDrift_flow_eq`, pinned by uniqueness of integral curves), so the image of the graph of a
-section `σ` over the slow base is the graph of the *regraphed* section `regraph v t σ = σ + t • v`
-(`constDrift_allTimeRegraph`). The assembled `CoupledFlowGraphTransform` (`constDriftCoupled`) takes
-its operator to be this flow-then-regraph map at the chosen horizon `τ`, so `flow_mapsTo` is a
-theorem about the explicit flow rather than a hypothesis.
-
-`fenichel_persistence` also consumes a `GraphTransformData` furnishing the Banach fixed-point section
-`M_ε` whose graph is the persisted manifold. We supply it from the genuine spectral-gap contraction
-`GraphTransformData.ofSpectralGap`: the operator `σ ↦ (Lf / rate) • σ` on bounded sections, an exact
-contraction with factor `Lf / rate < 1` when the fibre rate dominates the Lipschitz term
-(`scaleGapData`). Its unique fixed point is the zero section — the unperturbed manifold `M_0 = 0`
-over which the constant-drift flow's regraph is stationary precisely when the drift `v` vanishes. The
-end-to-end specialization `fenichel_persistence_constDrift` packages both halves — forward invariance
-of the persisted graph under the explicit flow and `O(ε)` `C⁰`-closeness of `M_ε` to `M_0` — with
-every hypothesis discharged.
-
-Defined by Fenichel, "Geometric singular perturbation theory for ordinary differential equations":
-a normally attracting invariant manifold of the unperturbed layer system persists, for small `ε`, as
-a nearby invariant manifold realized as the graph of the fixed-point section of the flow-then-regraph
-graph transform. Here the flow-then-regraph operator is constructed from the explicit field rather
-than assumed, closing the operator-from-flow gap for this concrete instance.
-
-**Out of scope (the residual).** The constant fast-drift field gives an exact, globally closed-form
-regraph because its flow is an affine translation; the fixed point of its time-`τ` regraph is genuine
-only when the drift vanishes (`v = 0`), where the persisted graph is honestly invariant. A genuinely
-*contracting* fast fibre `ż = -rate · (z - σ y)` — the field whose time-`τ` regraph is a Banach
-contraction with factor `(Lipschitz/drift)/λ < 1` and a moving fixed point — is not globally bounded,
-so `exists_flow` does not apply to it unmodified; its flow-regraph requires either a cutoff to a
-forward-invariant bounded region or a phase space on which the field is bounded. Building the
-contracting-fibre flow-regraph in full generality (the nonlinear, normally hyperbolic case) is the
-remaining analytic step. What this module establishes is the concrete operator-from-flow bridge with
-`flow_mapsTo` *proved* from an honest `exists_flow` flow, and a `fenichel_persistence` instance with
-zero remaining hypotheses.
-
-Depends on: `CRNT.Dynamics.FenichelPersistence`.
+This module turns an abstract flow step and contraction hypotheses into a fixed
+graph with discrete invariance and a fixed-point distance bound. It does not
+derive the hypotheses from general normally hyperbolic slow-fast dynamics.
 -/
 
 open Function Set
@@ -211,22 +167,16 @@ theorem scaleGapData_manifold (rate Lf : ℝ) (hrate : 0 < rate) (hLf : 0 ≤ Lf
     (σ := 0) ?_).symm
   rw [scaleGapData_op, smul_zero]
 
-/-- **End-to-end Fenichel persistence for the explicit constant fast-drift field.** Combining the
-concrete operator-from-flow bridge `constDriftCoupled` (whose `flow_mapsTo` is proved from a genuine
-`exists_flow` flow of the bounded Lipschitz field) with the genuine spectral-gap contraction
-`scaleGapData` (whose Banach fixed point `M_ε = 0` is the persisted manifold), with the drift
-vanishing (`v = 0`) at horizon `τ`. The conclusion is the two halves of Fenichel persistence with
-**every hypothesis discharged**: the graph of the persisted manifold section is forward-invariant
-under the iterate coupled semiflow of the explicit field, and `M_ε` sits within
-`defect / (1 - factor)` of the unperturbed section `M_0 = 0` in the supremum metric. -/
-theorem fenichel_persistence_constDrift (rate Lf : ℝ) (hrate : 0 < rate) (hLf : 0 ≤ Lf)
+/-- Graph invariance and/or a distance estimate for the displayed explicit flow
+and supplied contraction data. This does not assert general perturbed NHIM persistence. -/
+theorem graphTransform_discrete_invariant_and_dist_le_constDrift (rate Lf : ℝ) (hrate : 0 < rate) (hLf : 0 ≤ Lf)
     (hgap : Lf < rate) (τ : ℝ≥0) :
     let G := scaleGapData (Y := Y) (E := E) rate Lf hrate hLf hgap
     let F := constDriftCoupled (Y := Y) (E := E) 0 τ
     IsInvariant (fun n : ℕ => F.flow.toFun (n • F.τ)) (graphSet (G.manifold : Y → E)) ∧
       dist G.base G.manifold ≤ G.defect / (1 - G.factor) := by
   intro G F
-  refine fenichel_persistence G F ?_
+  refine graphTransform_discrete_invariant_and_dist_le G F ?_
   -- At the vanishing drift `v = 0`, the flow-regraph operator is the identity, so the zero-section
   -- fixed point of the contraction is also fixed by the flow operator.
   show F.op (G.manifold : Y → E) = (G.manifold : Y → E)

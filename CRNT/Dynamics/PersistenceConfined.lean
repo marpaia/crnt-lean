@@ -136,7 +136,7 @@ theorem faceSum_field_le (N : Network S) (κ : N.RateConstants) {P : Finset S}
           pow_le_pow_left₀ (hx s') (hxle s') _
         have h2 : (∏ s'' ∈ Finset.univ.erase s', x s'' ^ (N.reaction r).source s'')
             ≤ ∏ s'' ∈ Finset.univ.erase s', (max 1 B) ^ (N.reaction r).source s'' :=
-          Finset.prod_le_prod (fun s'' _ => pow_nonneg (hx s'') _)
+          Finset.prod_le_prod₀ (fun s'' _ => pow_nonneg (hx s'') _)
             (fun s'' _ => pow_le_pow_left₀ (hx s'') (hxle s'') _)
         calc Q ≤ (max 1 B) ^ ((N.reaction r).source s' - 1)
                   * ∏ s'' ∈ Finset.univ.erase s', (max 1 B) ^ (N.reaction r).source s'' :=
@@ -189,20 +189,20 @@ This drops the dissipativity hypothesis of `siphonFace_forwardInvariant`: the on
 `V'(γ t) ≤ C·V(γ t)` is supplied internally by the monomial-factoring estimate
 `faceSum_field_le`, since the derivative of `V = faceSum P` along the curve is the face-sum of
 the field. -/
-theorem siphonFace_forwardInvariant_confined (N : Network S) (κ : N.RateConstants)
+theorem siphonFace_forwardInvariant_confined_forward (N : Network S) (κ : N.RateConstants)
     {P : Finset S} (hP : N.IsSiphon P) {γ : ℝ → Concentration S} {B : ℝ}
-    (hderiv : ∀ t, HasDerivAt γ (N.massActionVectorField κ (γ t)) t)
+    (hderiv : ∀ t, 0 ≤ t → HasDerivAt γ (N.massActionVectorField κ (γ t)) t)
     (hnn : ∀ t, 0 ≤ t → (γ t).Nonnegative)
     (hbox : ∀ t, 0 ≤ t → ∀ s, γ t s ≤ B)
     (h0 : γ 0 ∈ N.SiphonFace P) :
     ∀ t, 0 ≤ t → γ t ∈ N.SiphonFace P := by
   obtain ⟨C, _hCnn, hC⟩ := N.faceSum_field_le κ hP B
-  refine N.siphonFace_forwardInvariant κ (L := C) hderiv hnn ?_ h0
+  refine N.siphonFace_forwardInvariant_forward κ (L := C) hderiv hnn ?_ h0
   intro t ht
   left
   -- `deriv (fun u => faceSum P (γ u)) t = ∑ s ∈ P, f(γ t) s`, then apply `faceSum_field_le`
   have hcoord : ∀ s, HasDerivAt (fun u => γ u s) (N.massActionVectorField κ (γ t) s) t :=
-    fun s => (hasDerivAt_pi.mp (hderiv t)) s
+    fun s => (hasDerivAt_pi.mp (hderiv t ht)) s
   have hgderiv : HasDerivAt (fun u => faceSum P (γ u))
       (∑ s ∈ P, N.massActionVectorField κ (γ t) s) t := by
     have hsum := HasDerivAt.sum (u := P) (A := fun s => fun u => γ u s)
@@ -213,6 +213,16 @@ theorem siphonFace_forwardInvariant_confined (N : Network S) (κ : N.RateConstan
     exact hsum
   rw [hgderiv.deriv]
   exact hC (γ t) (hnn t ht) (hbox t ht)
+
+/-- Confined siphon-face invariance for a solution defined at every real time. -/
+theorem siphonFace_forwardInvariant_confined (N : Network S) (κ : N.RateConstants)
+    {P : Finset S} (hP : N.IsSiphon P) {γ : ℝ → Concentration S} {B : ℝ}
+    (hderiv : ∀ t, HasDerivAt γ (N.massActionVectorField κ (γ t)) t)
+    (hnn : ∀ t, 0 ≤ t → (γ t).Nonnegative)
+    (hbox : ∀ t, 0 ≤ t → ∀ s, γ t s ≤ B)
+    (h0 : γ 0 ∈ N.SiphonFace P) :
+    ∀ t, 0 ≤ t → γ t ∈ N.SiphonFace P :=
+  N.siphonFace_forwardInvariant_confined_forward κ hP (fun t _ => hderiv t) hnn hbox h0
 
 end Network
 

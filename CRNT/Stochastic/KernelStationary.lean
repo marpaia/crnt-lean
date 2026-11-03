@@ -141,7 +141,7 @@ theorem generatorInflow_nonneg (N : Network S) (κ : RateConstants N)
     (c : Concentration S) (hc : c.Nonnegative) (n : S → ℕ) (r : N.R) :
     0 ≤ N.generatorInflow κ c n r :=
   mul_nonneg (N.massActionRate_nonneg κ r hc)
-    (productPoissonPMF_nonneg hc _)
+    (shiftedPMF_nonneg c hc n (N.reaction r).target)
 
 /-- The real-arithmetic per-reaction cancellation: on the positive-exit part of the lattice,
 for a count dominating the source complex, the stationary weight times the jump probability is
@@ -166,7 +166,9 @@ theorem generatorOutflow_predecessorCount_eq_generatorInflow (N : Network S)
     (κ : RateConstants N) (c : Concentration S) (r : N.R) (m : S → ℕ)
     (hm : ∀ s, (N.reaction r).target s ≤ m s) :
     N.generatorOutflow κ c (N.predecessorCount r m) r = N.generatorInflow κ c m r := by
-  unfold generatorOutflow generatorInflow shiftedPMF
+  unfold generatorOutflow generatorInflow
+  rw [shiftedPMF, shiftedPMF]
+  simp only [N.source_le_predecessorCount r m hm, hm, ↓reduceIte]
   rw [N.predecessorCount_sub_source r m hm]
 
 /-- Per-reaction collapse of the predecessor tsum. Under no-boundary (`hexit`) and

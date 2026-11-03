@@ -56,7 +56,9 @@ deterministic time-change point along the limit trajectory. -/
 theorem mean_scaledClock {V : ℝ} (hV : 0 < V) (A : R → ℝ≥0) (weight : R → ℝ) (r : R) :
     (clockMeasure hV A)[scaledClock weight V r] = weight r * (A r : ℝ) := by
   have hcoe : ((clockIntensity hV A r : ℝ≥0) : ℝ) = V * A r := by
-    unfold clockIntensity; rw [NNReal.coe_mul]; rfl
+    unfold clockIntensity
+    change V * (A r : ℝ) = V * (A r : ℝ)
+    rfl
   rw [scaledClock_eq_comp]
   simp only [Function.comp_apply]
   rw [← integral_map (φ := fun ω : R → ℕ => ω r) (f := fun n : ℕ => weight r * ((n : ℝ) / V))

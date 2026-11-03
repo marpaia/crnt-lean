@@ -1,0 +1,39 @@
+# Modules that carry `sorryAx`, declared.
+#
+# `scripts/unverified_modules.txt` is NOT this file and must never be made to be this file.
+# That ledger becomes `excludeGlobs` of the `CRNT` library: listing a module there removes it
+# from every build target.  A module with a `sorry` *elaborates* -- with `sorryAx` -- so it is
+# exactly the wrong thing to put there.  (research/README.md §7.)
+#
+# This manifest is inert.  Nothing reads it except `research/Audit/ledger_coverage.py`, and it
+# feeds no build target.  Its purpose is to make the sorryAx set an explicit, reviewable
+# declaration rather than something a gate has to rediscover.
+#
+# C4 of `ledger_coverage.py` fails when a module carries `sorryAx` and is absent here.  So this
+# file must be updated in the same commit that closes a hole, and removing an entry is
+# refused as loudly as adding one silently.
+#
+# Two kinds of entry appear here.  The first is the hole itself; the second is a module that
+# carries `sorryAx` only because it *uses* a holed declaration of the first.  The second kind
+# is the one a purely syntactic per-file scan cannot see, and it is what `close_hole.sh` step
+# 2b exists to catch.
+#
+# State as of `origin/holes` @ 90bddfc, certified by
+# `python3 research/Audit/ledger_coverage.py --selftest`.
+
+# --- the hole -------------------------------------------------------------------------
+# (The true-SR hole in CRNT.Multistationarity.TrueChemistrySRCriterion was closed by the
+# Banaji--Craciun route, CRNT/Multistationarity/BCFullyOpen.lean.)
+# Each verified independently by comment-stripped scan of the enclosing declaration.
+
+# (The GAC residual in CRNT.Dynamics.HighCodimensionSiphonFace was closed by the persistence
+# route, CRNT/Persistence/ComplexBalancedFloor.lean.  No module carries sorryAx.)
+
+# --- transitively tainted, hole-free in isolation -------------------------------------
+# These files contain no `sorry` of their own.  They appear here because they import a hole
+# and use a declaration of it, so every theorem they derive from that declaration is
+# axiom-contaminated.  `#print axioms` on a theorem that does *not* touch the holed name
+# comes back clean, which is exactly why a per-theorem check is not enough.
+
+# (none: CRNT.Dynamics.GlobalAttractorTheorem was the only entry and is clean since the GAC
+# residual closed.)

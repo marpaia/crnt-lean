@@ -219,7 +219,7 @@ theorem massActionKinetics_weaklyMonotonic (N : Network S) (κ : RateConstants N
     push Not at hcon
     -- No source species strictly increases, so the monomial does not increase.
     have hmono : ∏ s : S, css s ^ y s ≤ ∏ s : S, cs s ^ y s := by
-      refine Finset.prod_le_prod (fun s _ => le_of_lt (hfcss s (Finset.mem_univ s)))
+      refine Finset.prod_le_prod₀ (fun s _ => le_of_lt (hfcss s (Finset.mem_univ s)))
         (fun s _ => ?_)
       by_cases hs : y s = 0
       · rw [hs, pow_zero, pow_zero]
@@ -243,7 +243,7 @@ theorem massActionKinetics_weaklyMonotonic (N : Network S) (κ : RateConstants N
         by_contra hcon
         push Not at hcon
         have hle : ∏ s : S, css s ^ y s ≤ ∏ s : S, cs s ^ y s := by
-          refine Finset.prod_le_prod (fun s _ => le_of_lt (hfcss s (Finset.mem_univ s)))
+          refine Finset.prod_le_prod₀ (fun s _ => le_of_lt (hfcss s (Finset.mem_univ s)))
             (fun s _ => ?_)
           by_cases hs : y s = 0
           · rw [hs, pow_zero, pow_zero]
@@ -253,8 +253,9 @@ theorem massActionKinetics_weaklyMonotonic (N : Network S) (κ : RateConstants N
         have hs₀lt : css s₀ < cs s₀ := lt_of_le_of_ne (hcon s₀ hs₀supp) (by
           intro h; exact hs₀ne h.symm)
         have hstrict : ∏ s : S, css s ^ y s < ∏ s : S, cs s ^ y s := by
-          refine Finset.prod_lt_prod (fun s _ => hfcss s (Finset.mem_univ s))
-            (fun s _ => ?_) ⟨s₀, Finset.mem_univ s₀, ?_⟩
+          refine Finset.prod_lt_prod₀ (fun s _ => hfcss s (Finset.mem_univ s))
+            (fun s _ => ?_)
+            ⟨s₀, Finset.mem_univ s₀, ?_⟩
           · by_cases hs : y s = 0
             · rw [hs, pow_zero, pow_zero]
             · exact pow_le_pow_left₀ (le_of_lt (hcsspos s hs)) (hcon s hs) _
@@ -267,8 +268,9 @@ theorem massActionKinetics_weaklyMonotonic (N : Network S) (κ : RateConstants N
         push Not at hcon
         have hs₀gt : cs s₀ < css s₀ := lt_of_le_of_ne (hcon s₀ hs₀supp) hs₀ne
         have hstrict : ∏ s : S, cs s ^ y s < ∏ s : S, css s ^ y s := by
-          refine Finset.prod_lt_prod (fun s _ => hfcs s (Finset.mem_univ s))
-            (fun s _ => ?_) ⟨s₀, Finset.mem_univ s₀, ?_⟩
+          refine Finset.prod_lt_prod₀ (fun s _ => hfcs s (Finset.mem_univ s))
+            (fun s _ => ?_)
+            ⟨s₀, Finset.mem_univ s₀, ?_⟩
           · by_cases hs : y s = 0
             · rw [hs, pow_zero, pow_zero]
             · exact pow_le_pow_left₀ (le_of_lt (hcspos s hs)) (hcon s hs) _

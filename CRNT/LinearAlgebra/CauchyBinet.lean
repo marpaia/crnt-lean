@@ -49,7 +49,7 @@ noncomputable def permOfInjective (p : Fin m → Fin n) (hp : Injective p) : Per
   have hS : S.card = m := by
     rw [Finset.card_image_of_injective _ hp, Finset.card_univ, Fintype.card_fin]
   let eqP : Fin m ≃ {x // x ∈ S} := (Equiv.ofInjective p hp).trans
-    (Equiv.setCongr (by ext x; simp [S, Set.range]))
+    (Set.equivOfEq (by ext x; simp [S, Set.range]))
   let eqE : Fin m ≃ {x // x ∈ S} := (S.orderIsoOfFin hS).toEquiv
   eqP.trans eqE.symm
 

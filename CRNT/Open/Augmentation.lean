@@ -65,18 +65,20 @@ def fullyOpen (N : Network S) : Network S where
 theorem reactionVector_inflow (N : Network S) (s : S) :
     N.fullyOpen.reactionVector (Sum.inr (Sum.inl s)) = Pi.single s (1 : ℝ) := by
   funext s'
-  rw [reactionVector_apply, fullyOpen_reaction_inflow]
+  change ((inflowReaction s).target s' : ℝ) - ((inflowReaction s).source s' : ℝ) =
+    ((Pi.single s (1 : ℝ) : S → ℝ) s')
   simp only [inflowReaction, singletonComplex_apply, Complex.zero_apply, Pi.single_apply]
-  split <;> simp
+  split <;> simp_all
 
 /-- The outflow reaction's vector is `-e_s`. -/
 theorem reactionVector_outflow (N : Network S) (s : S) :
     N.fullyOpen.reactionVector (Sum.inr (Sum.inr s)) = -Pi.single s (1 : ℝ) := by
   funext s'
-  rw [reactionVector_apply, fullyOpen_reaction_outflow]
+  change ((outflowReaction s).target s' : ℝ) - ((outflowReaction s).source s' : ℝ) =
+    ((-Pi.single s (1 : ℝ) : S → ℝ) s')
   simp only [outflowReaction, singletonComplex_apply, Complex.zero_apply, Pi.neg_apply,
     Pi.single_apply]
-  split <;> simp
+  split <;> simp_all
 
 /-- **The stoichiometric subspace of the fully open extension is everything.** The inflow
 reaction vectors are the standard basis, which spans the species space. -/

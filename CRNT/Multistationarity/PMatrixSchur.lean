@@ -54,7 +54,8 @@ theorem det_schurAt (M : Matrix ι ι R) (ω : ι) (hd : M ω ω ≠ 0) :
   have hblock : M.submatrix e e = fromBlocks A B C D := by
     ext i j
     rcases i with i | i <;> rcases j with j | j <;>
-      simp [he, hA, hB, hC, hD, Equiv.sumCompl_apply_inl, Equiv.sumCompl_apply_inr]
+      simp [Matrix.submatrix_apply, he, Equiv.sumCompl_apply_inl,
+        Equiv.sumCompl_apply_inr, Matrix.fromBlocks, hA, hB, hC, hD]
   -- `A` is the `1×1` block `[M ω ω]`: every entry equals `M ω ω`.
   have hAconst : ∀ x y : {a : ι // a = ω}, A x y = M ω ω := by
     intro x y; rw [hA]; simp only; rw [x.2, y.2]
@@ -63,12 +64,16 @@ theorem det_schurAt (M : Matrix ι ι R) (ω : ι) (hd : M ω ω ≠ 0) :
     { invOf := fun _ _ => (M ω ω)⁻¹
       invOf_mul_self := by
         ext u u'
-        rw [Matrix.mul_apply, Fintype.sum_unique]
+        change (∑ v : {a : ι // a = ω}, (M ω ω)⁻¹ * A v u') =
+          if u = u' then 1 else 0
+        rw [Fintype.sum_unique]
         simp only [hAconst, Matrix.one_apply, Subsingleton.elim u u', if_pos]
         exact inv_mul_cancel₀ hd
       mul_invOf_self := by
         ext u u'
-        rw [Matrix.mul_apply, Fintype.sum_unique]
+        change (∑ v : {a : ι // a = ω}, A u v * (M ω ω)⁻¹) =
+          if u = u' then 1 else 0
+        rw [Fintype.sum_unique]
         simp only [hAconst, Matrix.one_apply, Subsingleton.elim u u', if_pos]
         exact mul_inv_cancel₀ hd }
   have hinv : (⅟A : Matrix {a : ι // a = ω} {a : ι // a = ω} R) = fun _ _ => (M ω ω)⁻¹ := rfl
@@ -76,8 +81,11 @@ theorem det_schurAt (M : Matrix ι ι R) (ω : ι) (hd : M ω ω ≠ 0) :
   -- The Schur complement is the bottom-right block minus the rank-one correction.
   have hschur : D - C * ⅟A * B = schurAt M ω := by
     ext v v'
-    rw [schurAt]
-    simp only [Matrix.sub_apply, Matrix.mul_apply, Fintype.sum_unique, hinv, hC, hB, hD, hcoeD]
+    change D v v' - (C * ⅟A * B) v v' =
+      M (v : ι) (v' : ι) - M (v : ι) ω * (M ω ω)⁻¹ * M ω (v' : ι)
+    rw [Matrix.mul_apply]
+    simp_rw [Matrix.mul_apply]
+    simp [Fintype.sum_unique, hinv, hC, hB, hD, hcoeD]
   -- Assemble via the block determinant expansion.
   rw [← det_submatrix_equiv_self e M, hblock, det_fromBlocks₁₁, hschur, hdetA]
 

@@ -178,7 +178,9 @@ theorem omegaLimit_eq_singleton_of_persistent
     have hyaff : y - x₀ ∈ N.stoichSubspace := hωaff hy
     -- orbit points of `y` stay in ω (invariance), hence in `K₀`, hence strictly positive
     have hyωt : ∀ t : ℝ, 0 ≤ t → γ y t ∈ omegaLimit atTop ϕ {x₀} := by
-      intro t ht; have := hωinv ⟨t, ht⟩ hy; rwa [hϕγ] at this
+      intro t ht
+      have hflow := hωinv ⟨t, ht⟩ hy
+      exact (hϕγ y ⟨t, ht⟩) ▸ hflow
     have hposyt : ∀ t : ℝ, 0 ≤ t → Concentration.Positive (γ y t) := fun t ht =>
       hK₀pos _ (hωK₀ (hyωt t ht))
     -- the cutoff is the identity along the orbit of `y`: each orbit point stays in ω,

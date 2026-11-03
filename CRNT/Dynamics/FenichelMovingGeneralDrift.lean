@@ -1,62 +1,14 @@
 import CRNT.Dynamics.FenichelGeneralDrift
 
 /-!
-# Fenichel persistence of a moving slow manifold over a general nonlinear base
+# Explicit base/fibre graph-transform examples
 
-`CRNT.Dynamics.FenichelGeneralDrift` persists the *constant* fibre `z = c` over a general nonlinear
-base flow `slowFlow : Flow ℝ≥0 Y`, and `CRNT.Dynamics.FenichelCoupledBase` persists a *moving* fibre
-`h(y)` but only over the affine translation base `ẏ = ε·b`. This module removes both idealizations at
-once: a genuinely **non-constant** slow manifold `z = h(y)` persisting over a genuinely **nonlinear**
-drifting base.
-
-The base flows by `slowFlow` and the fast fibre contracts onto the constant target `c` at rate `rate`,
-so the product semiflow is `CRNT.Dynamics.FenichelGeneralDrift`'s `productContractFlow slowFlow rate c`,
-`(y, z) ↦ (slowFlow t y, c + e^{-rate·t}·(z - c))`. The base motion is a genuine — possibly nonlinear —
-flow, not a translation.
-
-## The base back-map
-
-A non-constant fibre needs the base motion undone. The time-`τ` map carries `(y, h y)` to
-`(slowFlow τ y, c + e^{-rate·τ}·(h y - c))`: the image sits over the moved base point `slowFlow τ y`,
-so re-expressing the image as a graph over `Y` must read the section at the *pre-image* of the base
-point. `InjectiveBaseFlow` bundles `slowFlow`, the horizon `τ`, and a left-inverse `slowInv` of the
-time-`τ` base map `slowFlow τ` as data, recording `slowInv (slowFlow τ y) = y`. The left-inverse is
-honest for any injective base flow: `ofInjective` builds it as `Function.invFun (slowFlow τ)` from an
-injectivity proof, and `toFun_injective` derives that injectivity from integral-curve uniqueness for
-any `CRNT.Dynamics.FlowConstruction`-style flow (two integral curves agreeing at one time agree at
-time `0`).
-
-## The moving regraph
-
-`movingRegraph` is `op h y := c + e^{-rate·τ}·(h (slowInv y) - c)`: the base back-map `slowInv` undoes
-the base motion so the fibre value lands correctly. `flow_mapsTo` (`movingFlow_mapsTo`) proves the
-time-`τ` product semiflow sends `graphSet h` into `graphSet (movingRegraph h)` for *any* section `h`,
-discharging the structural hypothesis of `CRNT.Dynamics.FenichelPersistence`'s
-`CoupledFlowGraphTransform` from the explicit flow over the injective general base — no
-base smoothness beyond injectivity of the time-`τ` map.
-
-## End-to-end persistence
-
-Routing through the `CoupledFlowGraphTransform` / `fenichel_persistence` machinery
-(`movingCoupled`, `fenichel_persistence_movingGeneralDrift`) yields moving-fibre persistence over the
-nonlinear base: the graph of the attracting fibre `M_ε = c` is forward-invariant under the iterate
-product semiflow whose base flows by the genuine nonlinear field, and `M_ε` sits within
-`defect / (1 - factor)` of the base section in the supremum metric — every hypothesis discharged. Over
-the Banach fixed point `M_ε = c` the back-map acts trivially (`movingRegraph_const`), so the moving
-regraph collapses to the constant-fibre invariance; the moving machinery is exercised in full on every
-non-constant candidate section through `movingFlow_mapsTo`.
-
-`affineBaseFlow` instantiates `slowFlow` with the genuine constant-velocity translation semiflow
-`ẏ = v` on a normed space, whose time-`τ` map `y ↦ y + τ·v` has the explicit left-inverse
-`y ↦ y - τ·v` (`affineBaseInjective`); `fenichel_persistence_affineBase` is the resulting
-instance over a genuinely moving base.
-
-Defined by Fenichel, "Geometric singular perturbation theory for ordinary differential equations": a
-normally attracting invariant manifold of the unperturbed layer system persists, for small `ε`, as a
-nearby invariant manifold. Here the slow manifold is genuinely non-constant and the base flows by a
-general nonlinear field.
-
-Depends on: `CRNT.Dynamics.FenichelGeneralDrift`.
+The displayed base and fibre flows supply graph-transform data and yield their
+stated graph-invariance and fixed-point distance estimates. Michaelis–Menten
+sections use a contracting comparison flow with frozen substrate where defined.
+The hypotheses and actual flow in each theorem determine its scope. These
+examples do not establish general normally hyperbolic manifold persistence or
+transfer invariance to an unrelated coupled mass-action field.
 -/
 
 open Function Set
@@ -191,24 +143,16 @@ variable {Y : Type*} [NormedAddCommGroup Y] [NormedSpace ℝ Y] [CompleteSpace Y
 variable {E : Type*} [NormedAddCommGroup E] [NormedSpace ℝ E] [CompleteSpace E]
 
 omit [NormedSpace ℝ Y] [CompleteSpace Y] in
-/-- **End-to-end Fenichel persistence of a moving slow manifold over a general nonlinear base.**
-Routing the moving-target operator-from-flow bridge `movingCoupled` (whose `flow_mapsTo` is proved
-from the explicit product flow over the injective general base `B`) through
-`CRNT.Dynamics.FenichelPersistence`'s `fenichel_persistence` with the genuine fibre contraction
-`contractGapData` (whose Banach fixed point `M_ε = c` is the attracting fibre). The conclusion is the
-two halves of Fenichel persistence with **every hypothesis discharged**: the graph of the attracting
-fibre is forward-invariant under the iterate product semiflow whose base flows by the genuine
-nonlinear field, and `M_ε` sits within `defect / (1 - factor)` of the base section in the supremum
-metric. The base flow is honest data and the regraph is the genuine moving-target back-map; the
-moving machinery is exercised on every non-constant candidate section through `movingFlow_mapsTo`. -/
-theorem fenichel_persistence_movingGeneralDrift (B : InjectiveBaseFlow Y) (rate : ℝ) (c : E)
+/-- Graph invariance and/or a distance estimate for the displayed explicit flow
+and supplied contraction data. This does not assert general perturbed NHIM persistence. -/
+theorem graphTransform_discrete_invariant_and_dist_le_movingGeneralDrift (B : InjectiveBaseFlow Y) (rate : ℝ) (c : E)
     (hrate : 0 < rate) (hτ : 0 < (B.τ : ℝ)) :
     let G := contractGapData (Y := Y) (E := E) rate c B.τ hrate hτ
     let F := movingCoupled B rate c
     IsInvariant (fun n : ℕ => F.flow.toFun (n • F.τ)) (graphSet (G.manifold : Y → E)) ∧
       dist G.base G.manifold ≤ G.defect / (1 - G.factor) := by
   intro G F
-  refine fenichel_persistence G F ?_
+  refine graphTransform_discrete_invariant_and_dist_le G F ?_
   show F.op (G.manifold : Y → E) = (G.manifold : Y → E)
   have hman : (G.manifold : Y →ᵇ E) = BoundedContinuousFunction.const Y c :=
     contractGapData_manifold rate c B.τ hrate hτ
@@ -259,20 +203,16 @@ omit [CompleteSpace Y] in
 variable {E : Type*} [NormedAddCommGroup E] [NormedSpace ℝ E] [CompleteSpace E]
 
 omit [CompleteSpace Y] in
-/-- **Fenichel persistence of a moving slow manifold over the affine translation base.** Specializing
-`fenichel_persistence_movingGeneralDrift` to the explicit constant-velocity base flow `affineBaseFlow`,
-whose time-`τ` translation has the explicit left-inverse `y ↦ y - τ·v`. The persisted manifold is the
-attracting fibre `M_ε = c`, forward-invariant under the iterate product semiflow over the moving base
-and within the `O(ε)` closeness ceiling — an instance of the moving-target machinery over
-a genuinely moving base. -/
-theorem fenichel_persistence_affineBase (v : Y) (rate : ℝ) (c : E) (τ : ℝ≥0)
+/-- Graph invariance and/or a distance estimate for the displayed explicit flow
+and supplied contraction data. This does not assert general perturbed NHIM persistence. -/
+theorem graphTransform_discrete_invariant_and_dist_le_affineBase (v : Y) (rate : ℝ) (c : E) (τ : ℝ≥0)
     (hrate : 0 < rate) (hτ : 0 < (τ : ℝ)) :
     let G := contractGapData (Y := Y) (E := E) rate c τ hrate hτ
     IsInvariant (fun n : ℕ => (productContractFlow (affineBaseFlow v) rate c).toFun (n • τ))
         (graphSet (G.manifold : Y → E)) ∧
       dist G.base G.manifold ≤ G.defect / (1 - G.factor) := by
   intro G
-  exact fenichel_persistence_movingGeneralDrift (affineInjectiveBase v τ) rate c hrate hτ
+  exact graphTransform_discrete_invariant_and_dist_le_movingGeneralDrift (affineInjectiveBase v τ) rate c hrate hτ
 
 end AffineInstance
 

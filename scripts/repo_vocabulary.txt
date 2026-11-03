@@ -1,0 +1,47 @@
+# Substrings that mark an identifier as this project's own vocabulary rather than
+# Mathlib's.  Used by scripts/check_undefined_names.py to decide what to flag.
+# Add to this list when a new subject area appears.
+Network
+Complex
+Reaction
+Stoich
+Siphon
+Deficiency
+ComplexBalanced
+massAction
+Kinetic
+Concentration
+Oscill
+Periodic
+Orbit
+Floquet
+Hopf
+DHopf
+Dulac
+Jordan
+Green
+Planar
+Vassena
+Fiedler
+Banaji
+Monodromy
+Transverse
+Section
+Return
+Reactivity
+ChildSelection
+RecipeZero
+Sperner
+Brouwer
+Endotactic
+Permanence
+Persisten
+Tier
+Toric
+Fenichel
+MichaelisMenten
+Linkage
+Farkas
+PMatrix
+SRGraph
+Certificate

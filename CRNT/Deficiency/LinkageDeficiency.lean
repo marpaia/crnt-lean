@@ -18,7 +18,8 @@ the reactions within it. Feinberg's structural inequality
 classes (`sum_numComplexesIn`), the class count is `ℓ` (`card_quotient_eq`), and the
 stoichiometric subspace is the join of the per-class subspaces, so its rank is at most the sum
 of the per-class ranks (`stoichRank_le_sum`). Equality is exactly the deficiency-one theorem's
-condition `∑_θ δ_θ = δ`.
+condition `∑_θ δ_θ = δ`. The structural equality criterion is proved below:
+equality holds iff the linkage stoichiometric subspaces form an independent family.
 
 Depends on: `CRNT.Deficiency.DeficiencyOne`, `CRNT.Decision.Linkage`,
 `CRNT.LinearAlgebra.FinrankSup`.
@@ -163,6 +164,43 @@ theorem sum_linkageDeficiency_eq_deficiency_iff (N : Network S) :
     (∑ q, N.linkageDeficiency q = N.deficiencyInt) ↔
       N.deficiencyInt ≤ ∑ q, N.linkageDeficiency q :=
   ⟨fun h => h ▸ le_refl _, fun h => le_antisymm N.sum_linkageDeficiency_le_deficiency h⟩
+
+/-- Equality of linkage deficiencies is equivalent to additivity of the linkage ranks. -/
+theorem sum_linkageDeficiency_eq_deficiency_iff_rank_additive (N : Network S) :
+    (∑ q, N.linkageDeficiency q = N.deficiencyInt) ↔
+      N.stoichRank = ∑ q, N.linkageStoichRank q := by
+  have hn : (∑ q, (N.numComplexesIn q : ℤ)) = (N.numComplexes : ℤ) := by
+    rw [← Nat.cast_sum, N.sum_numComplexesIn]
+  have hsum : ∑ q, N.linkageDeficiency q =
+      (∑ q, (N.numComplexesIn q : ℤ)) - (Fintype.card (Quotient N.linkedSetoid) : ℤ)
+        - ∑ q, (N.linkageStoichRank q : ℤ) := by
+    simp only [linkageDeficiency, Finset.sum_sub_distrib, Finset.sum_const,
+      Finset.card_univ, nsmul_eq_mul, mul_one]
+  rw [hsum, deficiencyInt, hn, card_quotient_eq, ← Nat.cast_sum]
+  constructor
+  · intro h
+    have heq : (N.stoichRank : ℤ) = (∑ q, N.linkageStoichRank q : ℕ) := by omega
+    exact_mod_cast heq
+  · intro h
+    exact_mod_cast congrArg (fun n : ℕ =>
+      (N.numComplexes : ℤ) - N.numLinkageClasses - n) h.symm
+
+/-- The linkage-deficiency inequality is tight exactly when the linkage
+stoichiometric subspaces form an independent family (an internal direct sum). -/
+theorem sum_linkageDeficiency_eq_deficiency_iff_independent (N : Network S) :
+    (∑ q, N.linkageDeficiency q = N.deficiencyInt) ↔
+      iSupIndep N.linkageStoichSubspace := by
+  rw [N.sum_linkageDeficiency_eq_deficiency_iff_rank_additive]
+  constructor
+  · intro h
+    rw [iSupIndep_iff_supIndep_univ]
+    apply supIndep_of_finrank_sup_eq_sum
+    rw [← N.stoichSubspace_eq_sup]
+    simpa only [stoichRank, linkageStoichRank] using h
+  · intro h
+    have heq := finrank_finset_sup_eq_sum_of_iSupIndep Finset.univ N.linkageStoichSubspace h
+    rw [← N.stoichSubspace_eq_sup] at heq
+    simpa only [stoichRank, linkageStoichRank] using heq
 
 /-- **Feinberg's per-linkage-class deficiency conditions:** every linkage class has deficiency
 at most one, and the class deficiencies sum to the network deficiency. These are conditions (i)

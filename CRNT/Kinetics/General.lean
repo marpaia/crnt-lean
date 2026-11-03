@@ -136,7 +136,7 @@ def massActionKinetics (N : Network S) (κ : RateConstants N) : Kinetics N where
     show κ.k r * (N.reaction r).source.massActionMonomial x
         ≤ κ.k r * (N.reaction r).source.massActionMonomial y
     refine mul_le_mul_of_nonneg_left ?_ (κ.positive r).le
-    refine Finset.prod_le_prod (fun s _ => pow_nonneg (hx s) _) (fun s _ => ?_)
+    refine Finset.prod_le_prod₀ (fun s _ => pow_nonneg (hx s) _) (fun s _ => ?_)
     exact pow_le_pow_left₀ (hx s) (hxy s) _
 
 @[simp] theorem massActionKinetics_rate (N : Network S) (κ : RateConstants N) :

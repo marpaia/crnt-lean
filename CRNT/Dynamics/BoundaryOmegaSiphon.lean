@@ -69,7 +69,8 @@ theorem isSiphon_zeroSet_of_mem_omegaLimit (N : Network S) (κ : N.RateConstants
   have hge : ∀ t : ℝ, 0 ≤ t → 0 ≤ γ w' t s := by
     intro t ht
     have hmem : γ w' t ∈ omegaLimit atTop ϕ {x₀} := by
-      have h := hfwd ⟨t, ht⟩; rwa [hϕγ] at h
+      have h := hfwd ⟨t, ht⟩
+      exact (hϕγ w' ⟨t, ht⟩) ▸ h
     exact hωnn _ hmem s
   -- it vanishes at `t = 1`, so `1` is a local minimum
   have hf1 : γ w' (1 : ℝ) s = 0 := by rw [hγw'1]; exact (hP s).mp hsP

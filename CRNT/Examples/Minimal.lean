@@ -6,6 +6,8 @@ import CRNT.Stoich.Vector
 import CRNT.Graph.Reachability
 import CRNT.Graph.WeakReversibility
 
+set_option backward.isDefEq.respectTransparency false
+
 /-!
 # Minimal example: a single irreversible reaction `A → B`
 

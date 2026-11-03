@@ -65,9 +65,7 @@ theorem voff_one (σ : Equiv.Perm (Fin (n + 1))) (i : Fin (n + 2)) :
   have hfilter : (univ.filter (fun l : Fin (n + 1) => (l : ℕ) < ((1 : Fin (n + 2)) : ℕ)))
       = {(0 : Fin (n + 1))} := by
     ext l
-    simp only [mem_filter, mem_univ, true_and, mem_singleton, Fin.val_one, Fin.ext_iff,
-      Fin.val_zero]
-    omega
+    simp [Nat.lt_one_iff]
   simp only [voff, hfilter, Finset.sum_singleton]
 
 /-- `· + 1` on `Fin (n+1)` is injective (it is `finRotate (n+1)`). -/

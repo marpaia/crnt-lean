@@ -92,6 +92,53 @@ theorem orthSum_orthSum (S : Submodule ℝ (ι → ℝ)) : orthSum (orthSum S) =
   rw [h1, Submodule.orthogonal_orthogonal,
     Submodule.comap_map_eq_of_injective toEuclid.injective]
 
+/-- **Orthogonal decomposition of a subspace relative to a smaller one.**  For `U ≤ V`,
+`V` splits as `U` together with the part of `V` orthogonal to `U`.  This is the dot-product
+form of Mathlib's `Submodule.sup_orthogonal_inf_of_hasOrthogonalProjection`, transported
+across `toEuclid`; in finite dimensions the projection hypothesis is automatic. -/
+theorem sup_inf_orthSum_of_le {U V : Submodule ℝ (ι → ℝ)} (h : U ≤ V) :
+    U ⊔ (V ⊓ orthSum U) = V := by
+  classical
+  have hinj : Function.Injective (toEuclid.toLinearMap : (ι → ℝ) →ₗ[ℝ] _) :=
+    toEuclid.injective
+  have hmapU : (orthSum U).map toEuclid.toLinearMap
+      = (U.map toEuclid.toLinearMap).orthogonal := by
+    rw [orthSum_eq U, Submodule.map_comap_eq_of_surjective toEuclid.surjective]
+  -- `comap` does not distribute over `⊔`, so compare the images instead and use that
+  -- `Submodule.map` along an injective map is injective.
+  refine Submodule.map_injective_of_injective hinj ?_
+  rw [Submodule.map_sup, Submodule.map_inf _ hinj, hmapU, inf_comm]
+  exact Submodule.sup_orthogonal_inf_of_hasOrthogonalProjection (Submodule.map_mono h)
+
+/-- A subspace meets its own dot-product complement only at zero: if `w` is in both then
+`∑ i, wᵢ² = 0`, and a sum of squares vanishes only when every term does. -/
+theorem inf_orthSum_eq_bot (U : Submodule ℝ (ι → ℝ)) : U ⊓ orthSum U = ⊥ := by
+  classical
+  refine le_antisymm ?_ bot_le
+  intro w hw
+  obtain ⟨hU, hO⟩ := hw
+  have h0 : ∑ i, w i * w i = 0 := hO w hU
+  have hnn : ∀ i ∈ (Finset.univ : Finset ι), 0 ≤ w i * w i :=
+    fun i _ => mul_self_nonneg _
+  have hz := (Finset.sum_eq_zero_iff_of_nonneg hnn).mp h0
+  have : w = 0 := by
+    funext i
+    exact mul_self_eq_zero.mp (hz i (Finset.mem_univ i))
+  simpa [this] using Submodule.zero_mem (⊥ : Submodule ℝ (ι → ℝ))
+
+/-- **Dimension form of the orthogonal decomposition.**  For `U ≤ V`, the dimension of `V`
+splits as `dim U` plus the dimension of the part of `V` orthogonal to `U`. -/
+theorem finrank_add_finrank_inf_orthSum_of_le {U V : Submodule ℝ (ι → ℝ)} (h : U ≤ V) :
+    Module.finrank ℝ U + Module.finrank ℝ (V ⊓ orthSum U : Submodule ℝ (ι → ℝ))
+      = Module.finrank ℝ V := by
+  classical
+  have hsup : U ⊔ (V ⊓ orthSum U) = V := sup_inf_orthSum_of_le h
+  have hinf : U ⊓ (V ⊓ orthSum U) = ⊥ := by
+    rw [← inf_assoc, inf_eq_left.mpr h, inf_orthSum_eq_bot]
+  have key := Submodule.finrank_sup_add_finrank_inf_eq U (V ⊓ orthSum U)
+  rw [hsup, hinf] at key
+  simpa using key.symm
+
 /-- **Rank–nullity for the dot-product complement.** The complement `Sᗮ` has dimension
 `card ι − dim S`: the conservation-law space (`orthSum` of the stoichiometric subspace) is
 the cokernel of the stoichiometric map, whose dimension is the number of species minus the

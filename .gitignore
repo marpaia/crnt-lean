@@ -3,3 +3,47 @@
 PLAN.md
 CLAUDE.md
 /.claude
+
+# Local proof experiments and compiler probes
+/Scratch/
+/Scratch*.lean
+/Check*.lean
+*.lean.tmp
+/Scaffold/
+/ProofProgress/
+
+# Local-only checkpoints, handoffs, and progress reports
+/CHECKPOINT_*.md
+/CRNT_LEAN_HANDOFF_CHECKLIST.md
+/CRNT_LEAN_PROGRESS_README.md
+/CURRENT_PROOF_HOLES.md
+/HANDOFF*.md
+# ...except this one: `CRNT/Geometry/FanFaceLattice.lean` and
+# `test/FrontierAuditCurrent.lean` both cite it, so it has to be tracked.
+!/HANDOFF_gac_hole.md
+/LEDGER.md
+/MERGE_REPORT*.md
+/OSCILLATION_FILE_MANIFEST.md
+/OSCILLATION_FINAL_HANDOFF.md
+/OSCILLATION_SOURCE_MANIFEST.md
+/PACKAGE*.md
+/README_PROGRESS.md
+/SESSION_HANDOFF*.md
+/SNAPSHOT_MANIFEST.md
+/STATUS.md
+/STRONG_DESCENT_*.md
+/VERIFICATION.md
+/oscillation.md
+/docs/theorem-index.md
+
+# Local backups and generated artifacts
+*.bak
+*.orig
+*.cmp-backup
+*.pre_matrix_tree_backup
+*.olean
+*.pyc
+/scripts/__pycache__/
+
+# Downloaded toolchain archives used for offline setup
+/lean434-offline-linux-x86_64/

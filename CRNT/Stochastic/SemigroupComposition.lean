@@ -133,7 +133,7 @@ two-index family equals the product tsum over `ℕ × ℕ`. Every `ℝ≥0∞` f
 `Σ`-antidiagonal/product equivalence collapses the iterated sum directly. -/
 theorem tsum_sum_antidiagonal_eq_tsum_prod (F : ℕ × ℕ → ℝ≥0∞) :
     (∑' m : ℕ, ∑ p ∈ Finset.antidiagonal m, F p) = ∑' q : ℕ × ℕ, F q := by
-  rw [← Finset.sigmaAntidiagonalEquivProd.tsum_eq F, ENNReal.tsum_sigma']
+  rw [← Finset.HasAntidiagonal.sigmaAntidiagonalEquivProd.tsum_eq F, ENNReal.tsum_sigma']
   refine tsum_congr fun m => ?_
   rw [← Finset.tsum_subtype (Finset.antidiagonal m) (fun p => F p)]
   rfl

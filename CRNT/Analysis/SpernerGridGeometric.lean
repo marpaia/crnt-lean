@@ -64,17 +64,29 @@ open SimpleGraph CRNT.Analysis CRNT.Analysis.Sperner2D CRNT.Analysis.SpernerTria
 /-- Vertices of the `N = 2` subdivision: three corners and three edge midpoints. -/
 inductive Vertex
   | A | B | C | mAB | mAC | mBC
-  deriving DecidableEq, Fintype
+  deriving DecidableEq
+
+instance : Fintype Vertex where
+  elems := {Vertex.A, Vertex.B, Vertex.C, Vertex.mAB, Vertex.mAC, Vertex.mBC}
+  complete := by intro v; cases v <;> simp
 
 /-- The four triangles. -/
 inductive Cell
   | up1 | up2 | up3 | dn
-  deriving DecidableEq, Fintype
+  deriving DecidableEq
+
+instance : Fintype Cell where
+  elems := {Cell.up1, Cell.up2, Cell.up3, Cell.dn}
+  complete := by intro t; cases t <;> simp
 
 /-- The boundary outer vertices: one for the boundary door edge `A–mAB` on side `AB`. -/
 inductive Outer
   | edgeAmAB
-  deriving DecidableEq, Fintype
+  deriving DecidableEq
+
+instance : Fintype Outer where
+  elems := {Outer.edgeAmAB}
+  complete := by intro o; cases o <;> simp
 
 /-- The vertex coloring: corners `0, 1, 2`; midpoints chosen in the Sperner-admissible pair of their
 side (`mAB = 1, mAC = 0, mBC = 2`). -/

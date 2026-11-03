@@ -22,8 +22,10 @@ This module provides both forms of the tactic:
 
 Both discharge each obligation on the kernel path: the determinant by `simp` with the closed-form
 determinant lemmas (`det_fin_one`/`two`/`three`, with a `det_succ_row_zero` cofactor fallback) under
-ground reduction — which evaluates the concrete reaction-vector entries in either the codegen
-(inductive `Species`) or the data-driven (`Fin n`) encoding — and the count by rewriting the
+ground reduction, with the remaining entry arithmetic closed by `decide` or — after `norm_cast`
+pushes the casts into `ℤ`, where the kernel evaluates the concrete reaction-vector entries in either
+the codegen (inductive `Species`) or the data-driven (`Fin n`) encoding — by `decide`, and the count
+by rewriting the
 noncomputable `numLinkageClasses` to the evaluable `computeNumLinkageClasses` and then `decide`; no
 `native_decide`.
 
@@ -39,12 +41,16 @@ open Lean Lean.Meta Lean.Elab Lean.Elab.Tactic
 namespace CRNT
 
 /-- Close a `det ≠ 0` goal for a concrete stoichiometric minor by closed-form expansion under ground
-reduction (cofactor fallback for `k ≥ 4`). -/
+reduction (cofactor fallback for `k ≥ 4`), then discharge the remaining entry arithmetic: `decide`
+when the residue is already decidable, otherwise `norm_cast` to push the casts into `ℤ` (where the
+kernel evaluates the concrete reaction-vector entries) followed by `decide`. -/
 macro "crnt_minor_det" : tactic =>
   `(tactic|
     first
-      | simp +decide [Matrix.det_fin_one, Matrix.det_fin_two, Matrix.det_fin_three]
-      | simp +decide [Matrix.det_succ_row_zero, Fin.sum_univ_succ])
+      | (simp +decide [Matrix.det_fin_one, Matrix.det_fin_two, Matrix.det_fin_three]
+          <;> first | decide | (norm_cast <;> decide))
+      | (simp +decide [Matrix.det_succ_row_zero, Fin.sum_univ_succ]
+          <;> first | decide | (norm_cast <;> decide)))
 
 /-- Close a `N.DeficiencyZero` goal from an explicit nonsingular-minor witness: `f` selects the `k`
 reactions and `σ` the `k` species of a stoichiometric minor with nonzero determinant. -/

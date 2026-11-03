@@ -195,6 +195,68 @@ theorem incidenceTranspose_apply (N : Network S) (w : N.ComplexIdx → ℝ) (r :
   simp only [Matrix.mulVec, dotProduct, Matrix.transpose_apply, incidenceMatrix, sub_mul]
   rw [Finset.sum_sub_distrib, sum_ite_one_mul, sum_ite_one_mul]
 
+/-- Pairing a complex potential with the incidence image of one reaction basis vector gives its
+target-minus-source increment. -/
+theorem sum_mul_incidenceMap_single_eq_edgeIncrement (N : Network S)
+    (w : N.ComplexIdx → ℝ) (r : N.R) :
+    (∑ c : N.ComplexIdx, w c * N.incidenceMap (Pi.single r (1 : ℝ)) c) =
+      w (N.targetIdx r) - w (N.sourceIdx r) := by
+  let e : N.R → ℝ := Pi.single r 1
+  have hinc (c : N.ComplexIdx) :
+      N.incidenceMap e c =
+          (if N.targetIdx r = c then (1 : ℝ) else 0) -
+          (if N.sourceIdx r = c then 1 else 0) := by
+    rw [N.incidenceMap_apply]
+    simp only [e, Pi.single_apply]
+    rw [Finset.sum_eq_single r]
+    · simp
+    · intro r' _ hne
+      simp [hne]
+    · intro h
+      exact False.elim (h (Finset.mem_univ r))
+  have hsplit :
+      (∑ c : N.ComplexIdx, w c * N.incidenceMap e c) =
+        (∑ c : N.ComplexIdx,
+          w c * (if N.targetIdx r = c then (1 : ℝ) else 0)) -
+        ∑ c : N.ComplexIdx,
+          w c * (if N.sourceIdx r = c then (1 : ℝ) else 0) := by
+    calc
+      _ = ∑ c : N.ComplexIdx,
+          w c * ((if N.targetIdx r = c then (1 : ℝ) else 0) -
+            (if N.sourceIdx r = c then 1 else 0)) := by
+              apply Finset.sum_congr rfl
+              intro c _
+              rw [hinc c]
+      _ = _ := by
+        rw [← Finset.sum_sub_distrib]
+        apply Finset.sum_congr rfl
+        intro c _
+        ring
+  have htarget :
+      (∑ c : N.ComplexIdx,
+        w c * (if N.targetIdx r = c then (1 : ℝ) else 0)) =
+          w (N.targetIdx r) := by
+    calc
+      _ = ∑ c : N.ComplexIdx,
+          (if N.targetIdx r = c then (1 : ℝ) else 0) * w c := by
+            apply Finset.sum_congr rfl
+            intro c _
+            ring
+      _ = _ := N.sum_ite_one_mul (N.targetIdx r) w
+  have hsource :
+      (∑ c : N.ComplexIdx,
+        w c * (if N.sourceIdx r = c then (1 : ℝ) else 0)) =
+          w (N.sourceIdx r) := by
+    calc
+      _ = ∑ c : N.ComplexIdx,
+          (if N.sourceIdx r = c then (1 : ℝ) else 0) * w c := by
+            apply Finset.sum_congr rfl
+            intro c _
+            ring
+      _ = _ := N.sum_ite_one_mul (N.sourceIdx r) w
+  change (∑ c : N.ComplexIdx, w c * N.incidenceMap e c) = _
+  rw [hsplit, htarget, hsource]
+
 /-- A function on complexes that is constant along every reaction edge is constant on
 each linkage class. -/
 theorem linked_imp_eq_of_edge_const (N : Network S) {w : N.ComplexIdx → ℝ}

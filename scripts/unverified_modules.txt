@@ -1,0 +1,23 @@
+# Modules that have never been elaborated by Lean.
+#
+# This is the project's exclusion ledger.  `scripts/gen_lakefile.py` turns it into the
+# `excludeGlobs` of the `CRNT` library and the `globs` of the `CRNTFrontier` library, and
+# `scripts/check_exclusions.py` fails if the lakefile drifts out of sync or if this list grows.
+#
+# The rule is: this list only ever shrinks.  To remove an entry, make the module elaborate,
+# delete the line, regenerate the lakefile, and confirm `lake build` is clean.
+#
+# Provenance: the 449-module verified set is exactly the enumerated `globs` list of the
+# lakefile in the locally-built master snapshot.  Everything below was on disk in that
+# snapshot (or arrived with the oscillation expansion) but outside that list.
+#
+# STATUS 2026-09-28: this list is empty.  All 40 remaining entries were removed because each
+# one now elaborates: `lake build <all 40 module names>` completed with zero errors, so did
+# `lake build CRNTFrontier` (42 imports, 0 errors) and `lake build` (the whole `CRNT.+`
+# glob).  The two modules that still carry a `sorry` -- CRNT.Dynamics.HighCodimensionSiphonFace
+# and CRNT.Multistationarity.TrueChemistrySRCriterion -- are deliberately *not* re-listed
+# here: they elaborate, and incomplete-but-elaborating modules are tracked by
+# `scripts/stub_baseline.txt`, not by this file.
+#
+# If a module ever stops elaborating, add it back below, run `scripts/gen_lakefile.py`, and
+# `python3 scripts/check_exclusions.py --write-baseline` to re-arm the growth guard.

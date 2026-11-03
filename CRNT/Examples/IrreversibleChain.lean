@@ -5,6 +5,8 @@ import CRNT.Basic.Network
 import CRNT.Graph.Reachability
 import CRNT.Graph.WeakReversibility
 
+set_option backward.isDefEq.respectTransparency false
+
 /-!
 # Irreversible chain `A → B → C`
 

@@ -1,0 +1,25 @@
+# High-water mark for the orphan set: `CRNT/` modules that are neither named in
+# `scripts/unverified_modules.txt` nor reachable from `CRNT.lean`.
+#
+# The set may shrink below this number, never grow above it -- the same discipline as
+# `scripts/unverified_baseline.txt`, and for the same reason.  A module that leaves the
+# umbrella closure without anybody recording the decision is how a hole stops being checked:
+# it still elaborates, still has an `.olean`, and is now reachable from nothing.
+#
+# An orphan is NOT an unverified module.  Unverified modules are on the ledger; orphans are
+# built by the `CRNT.+` glob and simply have no import path from `CRNT.lean`.  Do not "fix" an
+# orphan by adding it to the ledger -- that removes it from every build target.  Add an
+# `import` line to `CRNT.lean` instead, or record why it stays unreferenced.
+#
+# 145 as of `origin/holes` @ 90bddfc.
+# 126 after the true-SR module graduated into `CRNT.lean` (Banaji--Craciun route).
+# 129: three axiom-clean modules that import the hole-bearing
+# `CRNT.Dynamics.GlobalAttractorTheorem` stay outside `CRNT.lean` so the verified core remains
+# sorryAx-free at module level (C3): `CRNT.Dynamics.GACLowRank`, `CRNT.Dynamics.GACVertexFacet`,
+# `CRNT.Examples.CatalyticChainGAC`.  They are in `scripts/frontier_history.txt` (so
+# `CRNTFrontier.lean` builds them) and their theorems are pinned axiom-clean in
+# `test/AxiomAudit.lean`.  They graduate into `CRNT.lean` once Hole A closes.
+# 93: Hole A closed (CRNT/Persistence/); GlobalAttractorTheorem, HighCodimensionSiphonFace,
+# GACLowRank, GACVertexFacet, CatalyticChainGAC and the twelve CRNT.Persistence modules are
+# imported by CRNT.lean.
+93

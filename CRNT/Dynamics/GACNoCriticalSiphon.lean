@@ -140,7 +140,9 @@ theorem gac_of_hasNoCriticalSiphon
   -- forward invariance keeps ω-orbits inside ω
   have hyωt_gen : ∀ y ∈ omegaLimit atTop ϕ {x₀}, ∀ t : ℝ, 0 ≤ t →
       γ y t ∈ omegaLimit atTop ϕ {x₀} := by
-    intro y hy t ht; have := hωinv ⟨t, ht⟩ hy; rwa [hϕγ] at this
+    intro y hy t ht
+    have hflow := hωinv ⟨t, ht⟩ hy
+    exact (hϕγ y ⟨t, ht⟩) ▸ hflow
   -- nonnegativity of ω-points (from the sublevel set)
   have hωnn : ∀ y ∈ omegaLimit atTop ϕ {x₀}, Concentration.Nonnegative y :=
     fun y hy => (hωSC hy).1

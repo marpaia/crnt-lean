@@ -4,6 +4,8 @@ import CRNT.Dynamics.GACNoCriticalSiphon
 import CRNT.Theorems.DeficiencyZero.Existence
 import CRNT.Equilibria.CompatibilityClass
 
+set_option backward.isDefEq.respectTransparency false
+
 /-!
 # Global attraction for the reversible pair `A ⇌ B`
 
@@ -28,6 +30,7 @@ open scoped NNReal
 membership of either species forces the other. -/
 theorem mem_of_siphon (P : Finset Species) (hsiph : N.IsSiphon P) (hne : P.Nonempty) :
     ∀ s : Species, s ∈ P := by
+  classical
   have stepA : A ∈ P → B ∈ P := by
     intro hA
     obtain ⟨t, htP, ht⟩ := hsiph Rxn.bwd ⟨A, hA, by decide⟩

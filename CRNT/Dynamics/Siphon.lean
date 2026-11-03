@@ -143,7 +143,11 @@ open CRNT
 inductive Species
   | A
   | B
-  deriving DecidableEq, Fintype, Repr
+  deriving DecidableEq, Repr
+
+instance : Fintype Species where
+  elems := {Species.A, Species.B}
+  complete := by intro s; cases s <;> simp
 
 open Species
 
@@ -157,7 +161,11 @@ def cB : Complex Species := fun s => match s with | A => 0 | B => 1
 inductive Rxn
   | fwd
   | bwd
-  deriving DecidableEq, Fintype, Repr
+  deriving DecidableEq, Repr
+
+instance : Fintype Rxn where
+  elems := {Rxn.fwd, Rxn.bwd}
+  complete := by intro r; cases r <;> simp
 
 /-- The reaction map. -/
 def rxn : Rxn → Reaction Species

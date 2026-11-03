@@ -118,39 +118,11 @@ i.e. `x s = y s` by injectivity of `log` on the positives. -/
 theorem crossClassRatio_eq_iff_robust (N : Network S) {x y : Concentration S}
     (hx : x.Positive) (hy : y.Positive) {s : S} {c d : N.ComplexIdx}
     (hdiff : ∀ t, t ≠ s → c.val t = d.val t) (hne : c.val s ≠ d.val s) :
-    N.logMonomialRatio x y c = N.logMonomialRatio x y d ↔ x s = y s := by
-  set μ : S → ℝ := fun t => Real.log (x t) - Real.log (y t) with hμ
-  -- Expand both ratios as pairings with `μ` and reduce the difference to a single coordinate.
-  have hc := N.logMonomialRatio_eq hx hy c
-  have hd := N.logMonomialRatio_eq hx hy d
-  have hcollapse :
-      N.logMonomialRatio x y c - N.logMonomialRatio x y d
-        = ((c.val s : ℝ) - (d.val s : ℝ)) * μ s := by
-    rw [hc, hd, ← Finset.sum_sub_distrib]
-    rw [Finset.sum_eq_single s]
-    · ring
-    · intro t _ ht
-      rw [hdiff t ht]; ring
-    · intro hsabsent; exact absurd (Finset.mem_univ s) hsabsent
-  have hcoef : ((c.val s : ℝ) - (d.val s : ℝ)) ≠ 0 := by
-    rw [sub_ne_zero]; exact_mod_cast hne
-  constructor
-  · intro heq
-    have hzero : ((c.val s : ℝ) - (d.val s : ℝ)) * μ s = 0 := by
-      rw [← hcollapse, heq, sub_self]
-    have hμs : μ s = 0 := by
-      rcases mul_eq_zero.mp hzero with h | h
-      · exact absurd h hcoef
-      · exact h
-    have hlog : Real.log (x s) = Real.log (y s) := by
-      rw [hμ] at hμs; simp only at hμs; linarith
-    have := congrArg Real.exp hlog
-    rwa [Real.exp_log (hx s), Real.exp_log (hy s)] at this
-  · intro hxy
-    have hμs : μ s = 0 := by rw [hμ]; simp only; rw [hxy]; ring
-    have : N.logMonomialRatio x y c - N.logMonomialRatio x y d = 0 := by
-      rw [hcollapse, hμs, mul_zero]
-    linarith
+    N.logMonomialRatio x y c = N.logMonomialRatio x y d ↔ x s = y s :=
+  -- Deduplicated: the argument now lives at its natural home in
+  -- `Deficiency/LogMonomialRatio.lean`, next to `logMonomialRatio_eq`, where the
+  -- deficiency-one side of the tree can reach it without importing `Design`.
+  N.logMonomialRatio_eq_iff_of_differOnlyAt hx hy hdiff (by exact_mod_cast hne)
 
 /-- **The cross-class `Φ`-equality exponentiates to the pinned monomial ratio.** For the two
 non-terminal complexes of the Shinar–Feinberg hypotheses, `Φ(c) = Φ(d)` rearranges and

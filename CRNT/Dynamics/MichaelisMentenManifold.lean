@@ -146,7 +146,8 @@ theorem continuousOn_mmManifoldMap (rate : ℝ) (hrate : 0 < rate) {Km : ℝ} (V
       = fun s => mmComplexEquil Km Vmax s • e0 :=
     funext fun s => mmManifoldMap_eq rate hrate Km Vmax s
   rw [hfun]
-  apply ContinuousOn.smul _ continuousOn_const
+  refine ContinuousOn.smul (f := fun s => mmComplexEquil Km Vmax s)
+    (g := fun _ => e0) ?_ continuousOn_const
   have : mmComplexEquil Km Vmax = fun s => Vmax * s / (Km + s) := rfl
   rw [this]
   apply ContinuousOn.div

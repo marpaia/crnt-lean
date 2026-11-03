@@ -244,6 +244,138 @@ theorem omegaLimit_eq_singleton_of_comparableGrowthDescent
     (N.omegaLimit_positive_of_comparableGrowthDescent κ hϕγ hK hKcl hmaps hωnn hgenω hωaff hx0pos
       hdesc)
 
+/-! ## Branch (I) of the high-codimension residue: where the descent iteration actually stops
+
+Branch (I) of the residue of `CRNT.Network.exists_positive_omegaPoint_of_highCodimension_siphonFace`
+is the trichotomy's second disjunct: a carried critical siphon `Q` with `Q.card < Pmax.card`
+exists (`hzcard` does not refute it — it only bounds zero sets from above).  `Q` is not itself a
+positive ω-point, so the obvious rescue is to iterate: run the induction of
+`omegaLimit_positive_of_descend` from `Pmax` to `Q`, `Q'`, … down to the empty siphon.  The lemmas
+below pin down exactly what such an iteration can and cannot do; all five are pure combinatorics
+of the carried/critical data — no orbit hypotheses are needed.
+
+* `descendStep_of_carried_card_lt`: above any carried critical siphon of strictly smaller
+  cardinality the descent step's right disjunct is available **for free** — the smaller siphon
+  itself is the witness.  Branch (I) therefore supplies the descent step at `Pmax` (and at every
+  carried critical siphon of cardinality strictly above the minimum, by `Pm` below).
+* `exists_cardMinimal_carried_siphon`: cardinalities of carried critical siphons are a nonempty
+  set of naturals, so a cardinality-minimal carried critical siphon `Pm` exists.
+* `exists_cardMinimal_carried_siphon_lt`: under branch (I) relative to a carried critical `P₀`
+  (in the residual, `P₀ = Pmax`, carried by `wmax`), that minimum satisfies `Pm.card < P₀.card`.
+* `descendStep_iff_omegaPointPositive_of_cardMinimal`: **at the minimum the descent step is the
+  goal itself.**  Its right disjunct would need a carried critical siphon of cardinality strictly
+  below `Pm.card`, which minimality forbids, so the disjunction collapses to its left disjunct —
+  byte-identical to this theorem's conclusion.  Unconditional.
+* `comparableGrowthDescent_iff_omegaPointPositive`: consequently the *whole* structure
+  `N.ComparableGrowthDescent ϕ x₀` is equivalent to the goal once a single carried critical
+  siphon is in hand: `→` is `omegaLimit_positive_of_descend`, `←` is `Or.inl`.
+
+**Verdict for branch (I).**  Read against the in-tree proof of `omegaLimit_positive_of_descend`:
+under a failed goal its induction can only follow *right* disjuncts, each strictly decreasing the
+cardinality of a carried critical siphon; cardinalities are naturals, so the chain reaches a
+cardinality-minimal `Pm`, and the next (final) call of `descend` there can neither recurse — no
+strictly smaller carried siphon exists — nor fire its left disjunct without *being* the goal.
+Hence neither "iterate the argument at `Q, Q', …`" nor "prove `descend` only at the specific
+siphons the residual produces" can discharge branch (I) without already proving the conclusion:
+the specific siphons always include a cardinality-minimal one, and there `descend` is literally
+this theorem's statement (`descendStep_iff_omegaPointPositive_of_cardMinimal`), while assembling
+the full structure is the statement itself (`comparableGrowthDescent_iff_omegaPointPositive`).
+Closing branch (I) therefore requires *excluding* it (a dynamical argument under the genuine
+orbit hypotheses) or an argument that does not route through `ComparableGrowthDescent`. -/
+
+/-- **A strictly smaller carried critical siphon supplies the descent step's right disjunct at any
+larger siphon — no further hypotheses.** -/
+theorem descendStep_of_carried_card_lt (N : Network S)
+    {ϕ : Flow ℝ≥0 (Concentration S)} {x₀ : Concentration S} {P Q : Finset S}
+    (hQne : Q.Nonempty) (hQcrit : N.IsCriticalSiphon Q) (hQcarr : N.SiphonCarried ϕ x₀ Q)
+    (hlt : Q.card < P.card) :
+    (∃ p ∈ omegaLimit atTop ϕ {x₀}, p.Positive) ∨
+      (∃ R : Finset S, R.Nonempty ∧ N.IsCriticalSiphon R ∧ R.card < P.card ∧
+        N.SiphonCarried ϕ x₀ R) :=
+  Or.inr ⟨Q, hQne, hQcrit, hlt, hQcarr⟩
+
+/-- **A cardinality-minimal carried critical siphon exists.**  The cardinalities realized by
+nonempty carried critical siphons form a nonempty set of natural numbers, so `Nat.find` realizes
+the minimum. -/
+theorem exists_cardMinimal_carried_siphon (N : Network S)
+    {ϕ : Flow ℝ≥0 (Concentration S)} {x₀ : Concentration S}
+    (h : ∃ P : Finset S, N.IsCriticalSiphon P ∧ N.SiphonCarried ϕ x₀ P) :
+    ∃ m : ℕ, ∃ Pm : Finset S,
+      N.IsCriticalSiphon Pm ∧ N.SiphonCarried ϕ x₀ Pm ∧ Pm.card = m ∧
+        ∀ Q : Finset S, N.IsCriticalSiphon Q → N.SiphonCarried ϕ x₀ Q → m ≤ Q.card := by
+  classical
+  obtain ⟨P₀, hP₀crit, hP₀carr⟩ := h
+  let hm : ∃ n : ℕ, ∃ Q : Finset S,
+      N.IsCriticalSiphon Q ∧ N.SiphonCarried ϕ x₀ Q ∧ Q.card = n :=
+    ⟨P₀.card, P₀, hP₀crit, hP₀carr, rfl⟩
+  obtain ⟨Pm, hPmcrit, hPmcarr, hPmcard⟩ :
+      ∃ Q : Finset S, N.IsCriticalSiphon Q ∧ N.SiphonCarried ϕ x₀ Q ∧
+        Q.card = Nat.find hm :=
+    Nat.find_spec hm
+  refine ⟨Nat.find hm, Pm, hPmcrit, hPmcarr, hPmcard, fun Q hQcrit hQcarr => ?_⟩
+  by_contra hle
+  push Not at hle
+  exact Nat.find_min hm hle ⟨Q, hQcrit, hQcarr, rfl⟩
+
+/-- **Branch (I) produces a cardinality-minimal carried critical siphon strictly below the
+reference siphon.**  In the residual the reference is `P₀ = Pmax` (carried by `wmax`, critical by
+`isCriticalSiphon_of_siphonCarried`), and the branch-(I) witness `Q` with `Q.card < Pmax.card`
+bounds the minimum from above. -/
+theorem exists_cardMinimal_carried_siphon_lt (N : Network S)
+    {ϕ : Flow ℝ≥0 (Concentration S)} {x₀ : Concentration S} {P₀ : Finset S}
+    (hI : ∃ Q : Finset S, N.IsCriticalSiphon Q ∧ N.SiphonCarried ϕ x₀ Q ∧ Q.card < P₀.card) :
+    ∃ Pm : Finset S,
+      N.IsCriticalSiphon Pm ∧ N.SiphonCarried ϕ x₀ Pm ∧ Pm.card < P₀.card ∧
+        ∀ Q : Finset S, N.IsCriticalSiphon Q → N.SiphonCarried ϕ x₀ Q → Pm.card ≤ Q.card := by
+  obtain ⟨Q, hQcrit, hQcarr, hlt⟩ := hI
+  obtain ⟨m, Pm, hPmcrit, hPmcarr, hPmcard, hmin⟩ :=
+    N.exists_cardMinimal_carried_siphon ⟨Q, hQcrit, hQcarr⟩
+  have hPmlt : Pm.card < P₀.card := by
+    rw [hPmcard]
+    exact lt_of_le_of_lt (hmin Q hQcrit hQcarr) hlt
+  exact ⟨Pm, hPmcrit, hPmcarr, hPmlt, fun R hRcrit hRcarr => by
+    rw [hPmcard]
+    exact hmin R hRcrit hRcarr⟩
+
+/-- **At a cardinality-minimal carried critical siphon the descent step is the goal itself.**
+
+The hypothesis `hmin` says `P` realizes the minimum cardinality among carried critical siphons —
+exactly the invariant `exists_cardMinimal_carried_siphon` establishes.  The step's right disjunct
+would exhibit a carried critical siphon of cardinality strictly below that minimum, so under
+`hmin` the disjunction reduces to its left disjunct, which is this theorem's conclusion
+verbatim; the reverse implication is `Or.inl`. -/
+theorem descendStep_iff_omegaPointPositive_of_cardMinimal (N : Network S)
+    {ϕ : Flow ℝ≥0 (Concentration S)} {x₀ : Concentration S} {P : Finset S}
+    (hmin : ∀ Q : Finset S, N.IsCriticalSiphon Q → N.SiphonCarried ϕ x₀ Q → P.card ≤ Q.card) :
+    ((∃ p ∈ omegaLimit atTop ϕ {x₀}, p.Positive) ∨
+      (∃ Q : Finset S, Q.Nonempty ∧ N.IsCriticalSiphon Q ∧ Q.card < P.card ∧
+        N.SiphonCarried ϕ x₀ Q)) ↔
+      (∃ p ∈ omegaLimit atTop ϕ {x₀}, p.Positive) := by
+  constructor
+  · intro h
+    rcases h with h | ⟨Q, _, hQcrit, hlt, hQcarr⟩
+    · exact h
+    · exact absurd hlt (not_lt.mpr (hmin Q hQcrit hQcarr))
+  · exact Or.inl
+
+/-- **The full descent structure is the conclusion.**  Given any nonempty carried critical siphon
+(in the residual: `Pmax`, nonempty by `hPmaxne`, critical by
+`isCriticalSiphon_of_siphonCarried`, carried by `⟨wmax, hwmax, hzeroMax⟩`),
+`N.ComparableGrowthDescent ϕ x₀` holds **iff** a strictly positive ω-point exists: `→` is
+`omegaLimit_positive_of_descend` launched at that siphon, `←` fills every `descend` instance with
+the left disjunct.  So no proof can assemble the structure — fully or for any set of siphons
+covering a cardinality-minimal one — as a strictly weaker stepping stone to the goal. -/
+theorem comparableGrowthDescent_iff_omegaPointPositive (N : Network S)
+    {ϕ : Flow ℝ≥0 (Concentration S)} {x₀ : Concentration S} {P₀ : Finset S}
+    (hP₀crit : N.IsCriticalSiphon P₀) (hP₀carr : N.SiphonCarried ϕ x₀ P₀) :
+    N.ComparableGrowthDescent ϕ x₀ ↔
+      (∃ p ∈ omegaLimit atTop ϕ {x₀}, p.Positive) := by
+  constructor
+  · intro hdesc
+    exact N.omegaLimit_positive_of_descend hdesc hP₀crit.1 hP₀crit hP₀carr
+  · intro h
+    exact ⟨fun _P _hne _hcrit _hcarr => Or.inl h⟩
+
 end Network
 
 end CRNT

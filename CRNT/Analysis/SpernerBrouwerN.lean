@@ -1,6 +1,7 @@
 import CRNT.Analysis.SpernerNGeometric
 import CRNT.Analysis.SpernerNClose
 import CRNT.Analysis.SpernerSimplexLimitN
+import Mathlib.Order.Filter.AtTopBot.Archimedean
 
 /-!
 # The n-dimensional Brouwer fixed-point theorem

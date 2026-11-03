@@ -58,7 +58,7 @@ species with rate the nonnegative concentration `c s`. This is the product-form
 stationary candidate of Anderson–Craciun–Kurtz. -/
 noncomputable def productPoisson (c : Concentration S) (hc : c.Nonnegative) :
     Measure (S → ℕ) :=
-  Measure.pi (fun s => poissonMeasure ⟨c s, hc s⟩)
+  Measure.pi (fun s => poissonMeasure (NNReal.mk (c s) (hc s)))
 
 instance (c : Concentration S) (hc : c.Nonnegative) :
     IsProbabilityMeasure (productPoisson c hc) := by

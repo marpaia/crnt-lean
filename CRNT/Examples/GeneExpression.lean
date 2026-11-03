@@ -6,6 +6,8 @@ import CRNT.Stoich.Vector
 import CRNT.Kinetics.Concentration
 import CRNT.Kinetics.MassAction
 
+set_option backward.isDefEq.respectTransparency false
+
 /-!
 # Simple gene expression
 

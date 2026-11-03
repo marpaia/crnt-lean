@@ -180,7 +180,9 @@ noncomputable def lift (d : Cell n N) (hN : 0 < N) : Cell (n + 1) N where
         apply Finset.sum_eq_zero
         intro l hl
         simp only [Finset.mem_filter, Finset.mem_univ, true_and, Fin.val_zero] at hl
-        exact absurd hl (Nat.not_lt_zero _)
+        exfalso
+        have hl' : (l : ℕ) < 0 := by simpa using hl
+        exact Nat.not_lt_zero (l : ℕ) hl'
       rw [hz, add_zero]
       exact_mod_cast Nat.zero_le (liftBase d i)
     · refine Fin.lastCases ?_ (fun j => ?_) i
@@ -192,8 +194,10 @@ noncomputable def lift (d : Cell n N) (hN : 0 < N) : Cell (n + 1) N where
             = (d.base j : ℤ) + voff d.perm m j := by ring
         rw [heq]; exact hv
 
-@[simp] theorem lift_base (d : Cell n N) (hN : 0 < N) : (lift d hN).base = liftBase d := rfl
-@[simp] theorem lift_perm (d : Cell n N) (hN : 0 < N) : (lift d hN).perm = liftPerm d.perm := rfl
+@[simp] theorem lift_base (d : Cell n N) (hN : 0 < N) : (lift d hN).base = liftBase d := by
+  simp [lift]
+@[simp] theorem lift_perm (d : Cell n N) (hN : 0 < N) : (lift d hN).perm = liftPerm d.perm := by
+  simp [lift]
 
 @[simp] theorem lift_base_last (d : Cell n N) (hN : 0 < N) :
     (lift d hN).base (Fin.last (n + 1)) = 1 := liftBase_last d
@@ -213,7 +217,9 @@ theorem lift_vertex_one_coord (d : Cell n N) (hN : 0 < N) (i : Fin (n + 1)) :
     apply Finset.sum_eq_zero
     intro l hl
     simp only [Finset.mem_filter, Finset.mem_univ, true_and, Fin.val_zero] at hl
-    exact absurd hl (Nat.not_lt_zero _)
+    exfalso
+    have hl' : (l : ℕ) < 0 := by simpa using hl
+    exact Nat.not_lt_zero (l : ℕ) hl'
   rw [hz] at hval
   have h2 : (((lift d hN).vertex (0 : Fin (n + 1)).succ).1 i.castSucc : ℤ) = (d.base i : ℤ) := by
     rw [hval]; ring
@@ -237,7 +243,7 @@ theorem bcellBase_eq (c : Cell (n + 1) N) (hp0 : c.perm 0 = Fin.last n) (j : Fin
     ext l
     simp only [Finset.mem_filter, Finset.mem_univ, true_and, Finset.mem_singleton,
       Fin.val_one, Fin.ext_iff, Fin.val_zero]
-    omega
+    simp [Nat.lt_one_iff]
   have hv1 : voff c.perm 1 j.castSucc = root (Fin.last n) j.castSucc := by
     unfold voff; rw [hfilter, Finset.sum_singleton, hp0]
   have hval := c.vertex_val 1 j.castSucc

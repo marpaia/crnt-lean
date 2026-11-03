@@ -146,6 +146,38 @@ theorem ZeroSeparatingSurfaceExists.genuineZeroSeparating {f : E → E} {x₀ : 
   exact ⟨g, c, r,
     genuineZeroSeparating_of_descent hgc hg hγcont hγderiv hδ hdescent h0 hr hsep⟩
 
+/-- Craciun v3, §8 Step 2: cylindrically extend a zero-separating surface when the projected
+component of the product field is the original lower-dimensional field. Pulling the defining
+function back along the first projection preserves its derivative inequality, while the product
+norm ensures its sublevel set remains separated from the origin in the larger space. -/
+theorem ZeroSeparatingSurfaceExists.product_left
+    {F : Type*} [NormedAddCommGroup F] [NormedSpace ℝ F]
+    {f : E → E} {x₀ : E} (hsurf : ZeroSeparatingSurfaceExists f x₀)
+    (G : E × F → E × F) (hproj : ∀ p, (G p).1 = f p.1) (y₀ : F) :
+    ZeroSeparatingSurfaceExists G (x₀, y₀) := by
+  obtain ⟨g, g', c, δ, r, hgc, hg, hδ, hdescent, hx₀, hr, hsep⟩ := hsurf.exists_surface
+  let gProd : E × F → ℝ := fun p => g p.1
+  let gProd' : E × F → (E × F →L[ℝ] ℝ) := fun p =>
+    g' p.1 ∘L ContinuousLinearMap.fst ℝ E F
+  refine ⟨gProd, gProd', c, δ, r, ?_, ?_, hδ, ?_, ?_, hr, ?_⟩
+  · exact hgc.comp continuous_fst
+  · intro p
+    change HasFDerivAt (fun q : E × F => g q.1)
+      (g' p.1 ∘L ContinuousLinearMap.fst ℝ E F) p
+    exact (hg p.1).comp p (ContinuousLinearMap.fst ℝ E F).hasFDerivAt
+  · intro p hlo hhi
+    change g' p.1 ((G p).1) ≤ 0
+    rw [hproj p]
+    exact hdescent p.1 hlo hhi
+  · simpa [gProd] using hx₀
+  · intro p hp hball
+    have hnorm : ‖p‖ < r := by
+      simpa [Metric.mem_ball, dist_eq_norm] using hball
+    have hnormFst : ‖p.1‖ < r := lt_of_le_of_lt (norm_fst_le p) hnorm
+    have hballFst : p.1 ∈ Metric.ball (0 : E) r := by
+      simpa [Metric.mem_ball, dist_eq_norm] using hnormFst
+    exact (hsep hp) hballFst
+
 end DifferentialInclusion
 
 /-! ## Item 1 (continued) — the toric wrapper

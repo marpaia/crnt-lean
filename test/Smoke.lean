@@ -9,6 +9,7 @@ import CRNT.Examples.HopfOscillator3
 import CRNT.Examples.HopfNetwork3
 import CRNT.Examples.HopfNetwork3Branches
 import CRNT.Examples.StochasticConvergenceExample
+import CRNT.Interop.Analysis
 
 /-!
 # Smoke tests
@@ -51,6 +52,15 @@ example : Examples.ReversiblePair.N.DeficiencyZero := Examples.ReversiblePair.de
 example : Examples.ReversiblePair.N.SatisfiesDeficiencyZeroHypotheses :=
   Examples.ReversiblePair.satisfiesDeficiencyZeroHypotheses
 
+-- The oscillation layer promotes the same theorem to an all-parameter non-oscillation certificate.
+example : Examples.ReversiblePair.N.NeverPositivePeriodic :=
+  Examples.ReversiblePair.N.neverPositivePeriodic_of_weaklyReversible_deficiencyZero
+    Examples.ReversiblePair.weaklyReversible Examples.ReversiblePair.deficiencyZero
+example :
+    (Network.deficiencyZeroOscillationCertificate Examples.ReversiblePair.N
+      Examples.ReversiblePair.weaklyReversible Examples.ReversiblePair.deficiencyZero).status
+      = Network.OscillationStatus.excluded := rfl
+
 -- The computable linkage count reduces under `decide`; the computable deficiency assembly
 -- agrees with the deficiency via the bridge theorem (the value itself is `#eval`-only).
 example : Examples.ReversiblePair.N.computeNumLinkageClasses = 1 := by decide
@@ -67,6 +77,60 @@ def interopRevData : NetworkData :=
   { numSpecies := 2,
     reactions := #[ { source := #[1, 0], target := #[0, 1] },
                     { source := #[0, 1], target := #[1, 0] } ] }
+
+/-- The stoichiometric rank of `interopRevData` is one: the 1 × 1 minor at species `0` (entry
+`0 - 1`) bounds it below, the backward reaction vector is the negation of the forward one, so the
+subspace is the line spanned by a single nonzero vector. -/
+theorem interopRev_stoichRank : interopRevData.toNetwork.stoichRank = 1 := by
+  have hv : interopRevData.toNetwork.reactionVector
+      (⟨0, by simp [interopRevData]⟩ : interopRevData.toNetwork.R) ≠ 0 := by
+    intro h
+    have h0 : interopRevData.toNetwork.reactionVector
+        (⟨0, by simp [interopRevData]⟩ : interopRevData.toNetwork.R) (0 : Fin 2) = (0 : ℝ) :=
+      congrFun h (0 : Fin 2)
+    simp only [Network.reactionVector, Reaction.vector] at h0
+    rw [show (interopRevData.toNetwork.reaction
+            (⟨0, by simp [interopRevData]⟩ : interopRevData.toNetwork.R)).target
+          (0 : Fin 2) = 0 from by decide,
+      show (interopRevData.toNetwork.reaction
+            (⟨0, by simp [interopRevData]⟩ : interopRevData.toNetwork.R)).source
+          (0 : Fin 2) = 1 from by decide] at h0
+    norm_num at h0
+  have hbwd : interopRevData.toNetwork.reactionVector
+      (⟨1, by simp [interopRevData]⟩ : interopRevData.toNetwork.R)
+      = fun s => -interopRevData.toNetwork.reactionVector
+          (⟨0, by simp [interopRevData]⟩ : interopRevData.toNetwork.R) s := by
+    funext s
+    fin_cases s
+    all_goals
+      simp [Network.reactionVector, Reaction.vector, NetworkData.toNetwork,
+        NetworkData.toComplex, interopRevData]
+  have hsub : interopRevData.toNetwork.stoichSubspace
+      = Submodule.span ℝ {interopRevData.toNetwork.reactionVector
+          (⟨0, by simp [interopRevData]⟩ : interopRevData.toNetwork.R)} := by
+    apply le_antisymm
+    · apply Submodule.span_le.2
+      rintro x ⟨r, rfl⟩
+      fin_cases r
+      · exact Submodule.subset_span rfl
+      · rw [hbwd]
+        exact Submodule.neg_mem _ (Submodule.subset_span rfl)
+    · apply Submodule.span_le.2
+      intro x hx
+      rw [Set.mem_singleton_iff] at hx
+      subst hx
+      exact interopRevData.toNetwork.reactionVector_mem_stoichSubspace
+        (⟨0, by simp [interopRevData]⟩ : interopRevData.toNetwork.R)
+  rw [Network.stoichRank, hsub, finrank_span_singleton hv]
+
+/-- With the rank pinned to one, the low-rank route of the exclusion disjunction certifies no
+positive periodic orbit. -/
+theorem interopRev_noPositivePeriodicOrbitCertified :
+    interopRevData.analyze.noPositivePeriodicOrbitCertified = true := by
+  rw [NetworkData.analyze_noPositivePeriodicOrbitCertified_eq,
+    NetworkData.analyze_stoichRank_eq, interopRev_stoichRank]
+  exact Bool.or_true _
+
 example : interopRevData.toNetwork.numComplexes = 2 := by decide
 example : interopRevData.toNetwork.numReactions = 2 := by decide
 
@@ -188,7 +252,7 @@ example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (hwr : N.WeaklyRe
   N.gac_of_deficiencyZero_decide hwr κ hδ hdec hx0
 
 -- The analysis tags the current contract version.
-example : interopRevData.analyze.version = 14 := by decide
+example : interopRevData.analyze.version = 19 := by decide
 
 -- Single-linkage persistence and deficiency-one linkage conditions on the reversible pair `A ⇌ B`.
 -- The persistence flag equates to its two-field structural definition (the value's `decide` on weak
@@ -222,6 +286,24 @@ example : interopRevData.analyze.numACRSpecies = 0 := by decide
 example : interopRevData.analyze.numTerminalSLC = 1 := by decide
 example : interopRevData.analyze.numDiagonalDriveSpecies = 0 := by decide
 example : interopRevData.analyze.hopfBoundaryMargin = none := by decide
+-- The reversible pair is weakly reversible and deficiency zero, so the analyzer can certify that
+-- no positive mass-action parameterization admits a nonconstant positive periodic orbit.  The flag
+-- is certified through the rank bridge (`computeRank` does not kernel-reduce under `decide`).
+example : interopRevData.analyze.noPositivePeriodicOrbitCertified = true :=
+  interopRev_noPositivePeriodicOrbitCertified
+example (h : interopRevData.analyze.noPositivePeriodicOrbitCertified = true) :
+    interopRevData.toNetwork.NeverPositivePeriodic :=
+  NetworkData.neverPositivePeriodic_of_analyze interopRevData h
+-- Its stoichiometric rank is one, so it is not a planar (rank-two) compatibility-class candidate.
+example : interopRevData.analyze.stoichRankTwo = false := by
+  refine Bool.eq_false_iff.mpr ?_
+  intro h
+  rw [NetworkData.analyze_stoichRankTwo_eq] at h
+  rw [interopRev_stoichRank] at h
+  omega
+example : interopRevData.oscillationStatus = Network.OscillationStatus.excluded :=
+  NetworkData.oscillationStatus_eq_excluded_of_certified interopRevData
+    interopRev_noPositivePeriodicOrbitCertified
 example (d : NetworkData) :
     d.analyze.numDiagonalDriveSpecies = d.numSpecies ↔ d.toNetwork.ConsistentDiagonalDrive :=
   NetworkData.analyze_numDiagonalDriveSpecies_eq_card_iff d
@@ -234,7 +316,61 @@ def interopTriData : NetworkData :=
     reactions := #[ { source := #[1, 0, 0], target := #[0, 1, 0] },
                     { source := #[0, 1, 0], target := #[0, 0, 1] },
                     { source := #[0, 0, 1], target := #[1, 0, 0] } ] }
+
+/-- The stoichiometric rank of the three-cycle is two: the 2 × 2 minor on species `0, 1` and
+reactions `0, 1` has determinant `1`, and the third reaction vector is the negation of the sum of
+the first two, so the subspace is spanned by two vectors. -/
+theorem interopTri_stoichRank : interopTriData.toNetwork.stoichRank = 2 := by
+  have hge : 2 ≤ interopTriData.toNetwork.stoichRank :=
+    interopTriData.toNetwork.stoichRank_ge_of_det_ne_zero
+      (k := 2)
+      (fun j => (⟨j.val, j.isLt.trans (by simp [interopTriData])⟩ : interopTriData.toNetwork.R))
+      (fun i => (⟨i.val, i.isLt.trans (by simp [interopTriData])⟩ : Fin interopTriData.numSpecies))
+      (by
+        simp +decide [Matrix.det_fin_one, Matrix.det_fin_two, Matrix.det_fin_three]
+        all_goals first | decide | (norm_cast <;> decide))
+  have hv2 : interopTriData.toNetwork.reactionVector
+      (⟨2, by simp [interopTriData]⟩ : interopTriData.toNetwork.R)
+      = fun s =>
+        -((interopTriData.toNetwork.reactionVector
+            (⟨0, by simp [interopTriData]⟩ : interopTriData.toNetwork.R)) s
+          + (interopTriData.toNetwork.reactionVector
+            (⟨1, by simp [interopTriData]⟩ : interopTriData.toNetwork.R)) s) := by
+    funext s
+    fin_cases s
+    all_goals
+      simp [Network.reactionVector, Reaction.vector, NetworkData.toNetwork,
+        NetworkData.toComplex, interopTriData]
+  have hle : interopTriData.toNetwork.stoichSubspace
+      ≤ Submodule.span ℝ
+          {interopTriData.toNetwork.reactionVector
+              (⟨0, by simp [interopTriData]⟩ : interopTriData.toNetwork.R),
+           interopTriData.toNetwork.reactionVector
+              (⟨1, by simp [interopTriData]⟩ : interopTriData.toNetwork.R)} := by
+    apply Submodule.span_le.2
+    rintro x ⟨r, rfl⟩
+    fin_cases r
+    · exact Submodule.subset_span (by simp)
+    · exact Submodule.subset_span (by simp)
+    · rw [hv2]
+      exact Submodule.neg_mem _
+        (Submodule.add_mem _
+          (Submodule.subset_span (by simp))
+          (Submodule.subset_span (by simp)))
+  have hle2 : interopTriData.toNetwork.stoichRank ≤ 2 := by
+    rw [Network.stoichRank]
+    refine (Submodule.finrank_mono hle).trans ?_
+    refine (finrank_span_le_card _).trans ?_
+    simpa using Finset.card_le_two
+  omega
+
 example : interopTriData.analyze.hopfBoundaryMargin.isSome = true := by decide
+-- The three-cycle has a two-dimensional stoichiometric subspace, exposing the planar-global route.
+example : interopTriData.analyze.stoichRankTwo = true := by
+  rw [NetworkData.analyze_stoichRankTwo_eq, interopTri_stoichRank]
+example (d : NetworkData) :
+    d.analyze.stoichRankTwo = true ↔ d.toNetwork.stoichRank = 2 :=
+  NetworkData.analyze_stoichRankTwo_eq d
 
 -- Sard in equal dimension: the critical values of a differentiable self-map of a finite-dimensional
 -- space carry no measure, so almost every value is regular — the measure-theoretic input that lifts
@@ -1810,7 +1946,7 @@ example {Y E : Type*} [TopologicalSpace Y] [NormedAddCommGroup E] [CompleteSpace
     (hfix : F.op (G.manifold : Y → E) = (G.manifold : Y → E)) :
     IsInvariant (fun n : ℕ => F.flow.toFun (n • F.τ)) (ODE.graphSet (G.manifold : Y → E)) ∧
       dist G.base G.manifold ≤ G.defect / (1 - G.factor) :=
-  ODE.fenichel_persistence G F hfix
+  ODE.graphTransform_discrete_invariant_and_dist_le G F hfix
 
 -- Local center manifold (Lyapunov–Perron): when the spectral gap K·δ < α between center and
 -- hyperbolic directions dominates the nonlinearity's Lipschitz constant, the center-manifold operator
@@ -3834,7 +3970,7 @@ example (τ : NNReal) :
     let F := ODE.constDriftCoupled (Y := ℝ) (E := ℝ) 0 τ
     IsInvariant (fun n : ℕ => F.flow.toFun (n • F.τ)) (ODE.graphSet (G.manifold : ℝ → ℝ)) ∧
       dist G.base G.manifold ≤ G.defect / (1 - G.factor) :=
-  ODE.fenichel_persistence_constDrift 2 1 (by norm_num) (by norm_num) (by norm_num) τ
+  ODE.graphTransform_discrete_invariant_and_dist_le_constDrift 2 1 (by norm_num) (by norm_num) (by norm_num) τ
 
 -- End-to-end Fenichel ε-persistence for the genuinely contracting fast-fibre field on `ℝ × ℝ`
 -- (`ż = -rate·(z - c)`), with the operator-from-flow `flow_mapsTo` proved from the closed-form
@@ -3847,7 +3983,7 @@ example :
     let F := ODE.contractingCoupled (Y := ℝ) (E := ℝ) 3 (7 : ℝ) (1 : NNReal)
     IsInvariant (fun n : ℕ => F.flow.toFun (n • F.τ)) (ODE.graphSet (G.manifold : ℝ → ℝ)) ∧
       dist G.base G.manifold ≤ G.defect / (1 - G.factor) :=
-  ODE.fenichel_persistence_contracting 3 (7 : ℝ) (1 : NNReal) (by norm_num) (by norm_num)
+  ODE.graphTransform_discrete_invariant_and_dist_le_contracting 3 (7 : ℝ) (1 : NNReal) (by norm_num) (by norm_num)
 -- End-to-end Fenichel ε-persistence over a GENUINELY DRIFTING slow base on `ℝ × ℝ`
 -- (`ẏ = ε·b`, `ż = -rate·(z - c)`): the base coordinate honestly moves under the closed-form coupled
 -- flow `(y, z) ↦ (y + (ε·t)·b, c + e^{-rate·t}·(z - c))`, removing the frozen-base idealization. The
@@ -3859,7 +3995,7 @@ example :
     let F := ODE.coupledDriftCoupled (Y := ℝ) (E := ℝ) (5 : ℝ) (2 : ℝ) 3 (7 : ℝ) (1 : NNReal)
     IsInvariant (fun n : ℕ => F.flow.toFun (n • F.τ)) (ODE.graphSet (G.manifold : ℝ → ℝ)) ∧
       dist G.base G.manifold ≤ G.defect / (1 - G.factor) :=
-  ODE.fenichel_persistence_coupledDrift (5 : ℝ) (2 : ℝ) 3 (7 : ℝ) (1 : NNReal)
+  ODE.graphTransform_discrete_invariant_and_dist_le_coupledDrift (5 : ℝ) (2 : ℝ) 3 (7 : ℝ) (1 : NNReal)
     (by norm_num) (by norm_num)
 -- End-to-end Fenichel ε-persistence over a GENERAL NONLINEAR slow base flow on `ℝ × ℝ`: the base
 -- evolves by the genuine `exists_flow` semiflow of the bounded Lipschitz nonlinear field `ε·sin y`
@@ -3874,7 +4010,7 @@ example :
         (fun n : ℕ => (ODE.productContractFlow (ODE.logisticDriftFlow (5 : ℝ)) 3 (7 : ℝ)).toFun
           (n • (1 : NNReal))) (ODE.graphSet (G.manifold : ℝ → ℝ)) ∧
       dist G.base G.manifold ≤ G.defect / (1 - G.factor) :=
-  ODE.fenichel_persistence_logisticDrift (5 : ℝ) 3 (7 : ℝ) (1 : NNReal) (by norm_num) (by norm_num)
+  ODE.graphTransform_discrete_invariant_and_dist_le_logisticDrift (5 : ℝ) 3 (7 : ℝ) (1 : NNReal) (by norm_num) (by norm_num)
 -- End-to-end Fenichel ε-persistence of a MOVING slow manifold over a genuinely moving base on
 -- `ℝ × ℝ`: the non-constant fibre `h(y)` is regraphed through the base back-map `slowInv` (the
 -- moving-target machinery is exercised on every candidate section by `movingFlow_mapsTo`), here over
@@ -3889,7 +4025,7 @@ example :
         (fun n : ℕ => (ODE.productContractFlow (ODE.affineBaseFlow (5 : ℝ)) 3 (7 : ℝ)).toFun
           (n • (1 : NNReal))) (ODE.graphSet (G.manifold : ℝ → ℝ)) ∧
       dist G.base G.manifold ≤ G.defect / (1 - G.factor) :=
-  ODE.fenichel_persistence_affineBase (5 : ℝ) 3 (7 : ℝ) (1 : NNReal) (by norm_num) (by norm_num)
+  ODE.graphTransform_discrete_invariant_and_dist_le_affineBase (5 : ℝ) 3 (7 : ℝ) (1 : NNReal) (by norm_num) (by norm_num)
 -- End-to-end Fenichel ε-persistence of a MOVING slow manifold over the genuinely CURVED logistic base
 -- `ẏ = ε·sin y` on `ℝ × ℝ`, with NO explicit inverse supplied: the time-τ base map's left-inverse
 -- comes from injectivity alone (`logisticDriftFlow_injective`, via integral-curve uniqueness), bundled
@@ -3902,7 +4038,7 @@ example :
     let F := ODE.movingCoupled (ODE.logisticInjectiveBase (5 : ℝ) (1 : NNReal)) 3 (7 : ℝ)
     IsInvariant (fun n : ℕ => F.flow.toFun (n • F.τ)) (ODE.graphSet (G.manifold : ℝ → ℝ)) ∧
       dist G.base G.manifold ≤ G.defect / (1 - G.factor) :=
-  ODE.fenichel_persistence_logisticMovingBase (5 : ℝ) 3 (7 : ℝ) (1 : NNReal)
+  ODE.graphTransform_discrete_invariant_and_dist_le_logisticMovingBase (5 : ℝ) 3 (7 : ℝ) (1 : NNReal)
     (by norm_num) (by norm_num)
 -- Strict boundary support for the GENUINE toric mass-action field, discharged from the dynamics:
 -- the fan cone geometry gives only `0 ≤ ⟪n, v⟫`; an enabled strictly-inward reaction per active
@@ -4507,3 +4643,494 @@ example : interopRevData.analyze.gershgorinColStabilityMargin.isSome = true := b
 example (d : NetworkData) (h : d.numSpecies = 0) :
     d.analyze.gershgorinColStabilityMargin = none :=
   NetworkData.analyze_gershgorinColStabilityMargin_eq_none_of_zero_species d h
+
+/-! ## The newest modules, exercised on the library API -/
+
+-- Hopf averaging: the radial drift of the averaged field is the cubic normal form.
+example (α ω : ℝ) (c₁ : ℂ) (R : ℝ) :
+    CRNT.Hopf.radialDrift (fun w => (↑α + ↑ω * Complex.I) * w + c₁ * w * ↑(Complex.normSq w)) R
+      = α * R + c₁.re * R ^ 3 :=
+  CRNT.Hopf.radialDrift_normalForm α ω c₁ R
+
+-- The Poincaré–Dulac normal form to cubic order: the quadratic jet at the critical point.
+example (lam a b : ℂ) (hlam : lam ≠ 0) (w : ℂ) :
+    CRNT.Hopf.quadJet lam a b (-a / lam) w
+      = lam * w + CRNT.Hopf.e3 lam a b * w ^ 3 + CRNT.Hopf.e4 lam a b * w ^ 4
+        + CRNT.Hopf.e5 lam a b * w ^ 5 :=
+  CRNT.Hopf.cubic_normal_form hlam w
+
+-- The Lyapunov calibration: the cubic combination of the planar partials is `16·c₂₁`.
+example (q20 q11 q02 c30 c21 c12 c03 : ℂ) :
+    (CRNT.Hopf.planarPartialsOf q20 q11 q02 c30 c21 c12 c03).fxxx
+      + (CRNT.Hopf.planarPartialsOf q20 q11 q02 c30 c21 c12 c03).fxyy
+      + (CRNT.Hopf.planarPartialsOf q20 q11 q02 c30 c21 c12 c03).gxxy
+      + (CRNT.Hopf.planarPartialsOf q20 q11 q02 c30 c21 c12 c03).gyyy
+      = 16 * c21.re :=
+  CRNT.Hopf.cubicCombination_eq q20 q11 q02 c30 c21 c12 c03
+
+-- Hirsch generic convergence: a strongly monotone flow with a convex ω-limit set converges.
+open Filter in
+example {S : Type} [DecidableEq S] [Fintype S]
+    (ϕ : Flow ℝ≥0 (Concentration S)) (f : Concentration S → Concentration S)
+    (V : Concentration S → ℝ) (hV : Continuous V) (x₀ : Concentration S)
+    (K : Set (Concentration S)) (hK : IsCompact K)
+    (habs : ∃ v ∈ Filter.atTop, closure (Set.image2 ϕ.toFun v {x₀}) ⊆ K)
+    (hmonoV : ∀ (s t : ℝ≥0), s ≤ t → V (ϕ.toFun t x₀) ≤ V (ϕ.toFun s x₀))
+    (hVcrit : ∀ y ∈ K, (∀ (t : ℝ≥0), V (ϕ.toFun t y) = V y) → f y = 0)
+    (hc : ℝ) (hsm : CRNT.OrderPreservingStronglyMonotoneOperator f hc) (hcpos : 0 < hc)
+    (hωoc : ∀ (a b z : Concentration S),
+      a ∈ omegaLimit Filter.atTop ϕ.toFun {x₀} →
+        b ∈ omegaLimit Filter.atTop ϕ.toFun {x₀} → a ≤ z → z ≤ b →
+        z ∈ omegaLimit Filter.atTop ϕ.toFun {x₀})
+    (hmonFlow : CRNT.Monotone.IsMonotoneFlow ϕ) :
+    ∃ xstar, f xstar = 0 ∧
+      Filter.Tendsto (fun t => ϕ.toFun t x₀) Filter.atTop (nhds xstar) :=
+  CRNT.converges_of_lasalle_of_stronglyMonotoneOperator ϕ f V hV x₀ K hK habs hmonoV hVcrit hc hsm hcpos hωoc hmonFlow
+
+-- The mass-action instance of the Hirsch theorem.
+open Filter in
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
+    {c : ℝ} (hc : 0 < c) (hsm : CRNT.OrderPreservingStronglyMonotoneOperator (N.massActionVectorField κ) c)
+    (ϕ : Flow ℝ≥0 (Concentration S)) (f : Concentration S → Concentration S)
+    (V : Concentration S → ℝ) (hV : Continuous V) (x₀ : Concentration S)
+    (K : Set (Concentration S)) (hK : IsCompact K)
+    (habs : ∃ v ∈ Filter.atTop, closure (Set.image2 ϕ.toFun v {x₀}) ⊆ K)
+    (hmonoV : ∀ (s t : ℝ≥0), s ≤ t → V (ϕ.toFun t x₀) ≤ V (ϕ.toFun s x₀))
+    (hVcrit : ∀ y ∈ K, (∀ (t : ℝ≥0), V (ϕ.toFun t y) = V y) → f y = 0)
+    (hωoc : ∀ (a b z : Concentration S),
+      a ∈ omegaLimit Filter.atTop ϕ.toFun {x₀} →
+        b ∈ omegaLimit Filter.atTop ϕ.toFun {x₀} → a ≤ z → z ≤ b →
+        z ∈ omegaLimit Filter.atTop ϕ.toFun {x₀})
+    (hmonFlow : CRNT.Monotone.IsMonotoneFlow ϕ) (hf : f = N.massActionVectorField κ) :
+    ∃ xstar, N.massActionVectorField κ xstar = 0 ∧
+      Filter.Tendsto (fun t => ϕ.toFun t x₀) Filter.atTop (nhds xstar) :=
+  CRNT.massAction_converges_of_lasalle_of_stronglyMonotoneOperator N κ hc hsm ϕ f V hV x₀ K hK habs hmonoV hVcrit hωoc hmonFlow hf
+
+-- Order convexity of the ω-limit set of a strongly monotone flow.
+open Filter in
+example {S : Type} [DecidableEq S] [Fintype S]
+    (f : Concentration S → Concentration S) (ϕ : Flow ℝ≥0 (Concentration S)) (hc : ℝ)
+    (hsm : CRNT.OrderPreservingStronglyMonotoneOperator f hc) (hcpos : 0 < hc) (x₀ : Concentration S)
+    (K : Set (Concentration S)) (hK : IsCompact K)
+    (habs : ∃ v ∈ Filter.atTop, closure (Set.image2 ϕ.toFun v {x₀}) ⊆ K)
+    (hΩE : ∀ y ∈ omegaLimit Filter.atTop ϕ.toFun {x₀}, f y = 0)
+    (p q z : Concentration S) :
+    p ∈ omegaLimit Filter.atTop ϕ.toFun {x₀} →
+      q ∈ omegaLimit Filter.atTop ϕ.toFun {x₀} → p ≤ z → z ≤ q →
+      z ∈ omegaLimit Filter.atTop ϕ.toFun {x₀} :=
+  CRNT.omegaLimit_orderConvex_of_stronglyMonotoneOperator f ϕ hc hsm hcpos x₀ K hK habs hΩE p q z
+
+-- Escape direction: a trajectory stays in the orthogonal complement of the conservation laws.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
+    {x : ℝ → Concentration S} {t : ℝ} (ht : 0 ≤ t)
+    (hsol : ∀ (τ : ℝ), 0 ≤ τ → HasDerivAt x (N.massActionVectorField κ (x τ)) τ) :
+    x t - x 0 ∈ CRNT.orthSum N.conservationLawSpace :=
+  N.escape_in_orthogonalComplement κ ht hsol
+
+-- Tikhonov: a Hurwitz linear part decays exponentially.
+example {E : Type*} [NormedAddCommGroup E] [InnerProductSpace ℝ E] {A : E →L[ℝ] E} {μ : ℝ}
+    (hA : CRNT.HurwitzRate A μ) (hμ : 0 < μ) {z : ℝ → E}
+    (hz : ∀ (t : ℝ), HasDerivAt z (A (z t)) t) (t : ℝ) :
+    0 ≤ t → ‖z t‖ ≤ Real.exp (-μ * t) * ‖z 0‖ :=
+  CRNT.hurwitz_linear_decay hA hμ hz t
+
+-- Exit mass: the exit mass factors through the one-step kernel stopped outside the set.
+example {α : Type} [DecidableEq α] (J : CRNT.JumpSystem α) (K : Finset α) (c : α)
+    {h₁ h₂ : ℝ} (ht₁ : 0 ≤ h₁) (ht₂ : 0 ≤ h₂) :
+    J.exitMass K c (h₁ + h₂) = ∑' (c' : α), (J.stopOutside K).Pmin h₁ c c' * J.exitMass K c' h₂ :=
+  J.exitMass_factor K c ht₁ ht₂
+
+-- The ENN-valued counterpart: the mass outside the set factors the same way.
+example {α : Type} [DecidableEq α] (J : CRNT.JumpSystem α) (K : Finset α) (c : α)
+    {h₁ h₂ : ℝ} (ht₁ : 0 ≤ h₁) (ht₂ : 0 ≤ h₂) :
+    J.outsideMassENN K c (h₁ + h₂) =
+      ∑' (c' : α), ENNReal.ofReal ((J.stopOutside K).Pmin h₁ c c') * J.outsideMassENN K c' h₂ :=
+  J.outsideMassENN_factor K c ht₁ ht₂
+
+-- Endotactic positive recurrence: an endotactic network with a linear Lyapunov function has a
+-- stationary law and converges to it geometrically.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
+    (d : N.LinearLyapunovData κ) (hirr : ∀ a b : S → ℕ, (N.jumpSystem κ).ReachPos a b) :
+    ∃ π : (S → ℕ) → ℝ,
+      (∀ b, 0 ≤ π b) ∧ HasSum π 1 ∧
+        (∀ s, 0 ≤ s → ∀ b, ∑' (x : S → ℕ), π x * (N.jumpSystem κ).Pmin s x b = π b) ∧
+          ∃ β : ℝ, 0 < β ∧ ∃ ρ : ℝ, 0 ≤ ρ ∧ ρ < 1 ∧ ∃ C₀ : ℝ, ∀ a, ∀ t, 0 ≤ t →
+            ∑' (b : S → ℕ),
+              |(N.jumpSystem κ).Pmin t a b - π b| * (1 + β * CRNT.Network.linearObservable d.w b) ≤
+                C₀ * (1 + CRNT.Network.linearObservable d.w a) * ρ ^ ⌊t⌋₊ :=
+  CRNT.Network.positiveRecurrence_of_linearLyapunovData N κ d hirr
+
+-- The Foster hitting-time estimate that feeds the recurrence statement.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
+    (d : N.LinearLyapunovData κ) [DecidablePred fun x => x ∈ d.C] (x : S → ℕ) :
+    (∀ m, ∑ k ∈ Finset.range m, (N.jumpChain κ).survival d.C k x ≤
+        1 + (N.jumpChain κ).expect (CRNT.Network.linearObservable d.w) x / d.εJ) ∧
+      Filter.Tendsto (fun m => (N.jumpChain κ).survival d.C m x) Filter.atTop (nhds 0) :=
+  CRNT.Network.foster_hitting_time_of_linearLyapunovData N κ d x
+
+-- Tier-wise positive recurrence: a tier balance gives a stationary law with full support.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
+    (T : N.CountTier) (hirr : ∀ a b : S → ℕ, (N.jumpSystem κ).ReachPos a b) :
+    ∃ π : (S → ℕ) → ℝ,
+      (∀ b : S → ℕ, 0 ≤ π b) ∧ HasSum π 1 ∧
+        (∀ s : ℝ, 0 ≤ s → ∀ b : S → ℕ,
+          ∑' (x : S → ℕ), π x * (N.jumpSystem κ).Pmin s x b = π b) ∧
+          (∀ b : S → ℕ, 0 < π b) ∧
+            ∀ a : S → ℕ, Filter.Tendsto (fun t => N.transition κ t a a) Filter.atTop (nhds (π a)) :=
+  CRNT.Network.tier_positiveRecurrence N κ T hirr
+
+-- Non-explosion of the tier-wise semigroup.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
+    (T : N.CountTier) {t : ℝ} (ht : 0 ≤ t) (n : S → ℕ) :
+    HasSum (fun m => N.transition κ t n m) 1 :=
+  CRNT.Network.tier_nonExplosion N κ T ht n
+
+-- Geometric ergodicity of the tier-wise semigroup.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
+    (T : N.CountTier) (hirr : ∀ a b : S → ℕ, (N.jumpSystem κ).ReachPos a b) :
+    ∃ π : (S → ℕ) → ℝ,
+      (∀ b : S → ℕ, 0 ≤ π b) ∧ HasSum π 1 ∧
+        (∀ s : ℝ, 0 ≤ s → ∀ b : S → ℕ,
+          ∑' (x : S → ℕ), π x * (N.jumpSystem κ).Pmin s x b = π b) ∧
+          ∃ β : ℝ, 0 < β ∧ ∃ ρ : ℝ, 0 ≤ ρ ∧ ρ < 1 ∧ ∃ C₀ : ℝ, ∀ a : S → ℕ, ∀ t : ℝ, 0 ≤ t →
+            ∑' (b : S → ℕ),
+              |(N.jumpSystem κ).Pmin t a b - π b| * (1 + β * N.CountLyapunov κ T b) ≤
+                C₀ * (1 + N.CountLyapunov κ T a) * ρ ^ ⌊t⌋₊ :=
+  CRNT.Network.tier_geometricErgodic N κ T hirr
+
+-- The tier-balance hypothesis is a genuine drift condition: constant negative drift off a
+-- finite set.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
+    (B : N.CountTierBalance κ) :
+    ∃ V : (S → ℕ) → ℝ,
+      (∀ n : S → ℕ, 0 ≤ V n) ∧ (∀ R : ℝ, {n | V n ≤ R}.Finite) ∧
+        ∃ C : Set (S → ℕ), C.Finite ∧ ∃ c : ℝ, 0 < c ∧
+          ∀ n ∉ C, N.observableGenerator κ V n ≤ -c :=
+  CRNT.Network.tierBalanceDrift_le_of N κ B
+
+-- Tier-balanced networks are positively recurrent.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
+    (B : N.CountTierBalance κ) (hirr : ∀ a b : S → ℕ, (N.jumpSystem κ).ReachPos a b) :
+    ∃ π : (S → ℕ) → ℝ,
+      (∀ b : S → ℕ, 0 ≤ π b) ∧ HasSum π 1 ∧
+        (∀ s : ℝ, 0 ≤ s → ∀ b : S → ℕ,
+          ∑' (x : S → ℕ), π x * (N.jumpSystem κ).Pmin s x b = π b) ∧
+          (∀ b : S → ℕ, 0 < π b) ∧
+            ∀ a : S → ℕ, Filter.Tendsto (fun t => N.transition κ t a a) Filter.atTop (nhds (π a)) :=
+  CRNT.Network.tierBalance_positiveRecurrence N κ B hirr
+
+-- The tier-domination counterexample: the top tier does not dominate the escape count.
+example (k : ℕ) (hk : 1 ≤ k) :
+    CRNT.Network.countDescFactorial (CRNT.Examples.EndotacticCounterexample.net.reaction 3).source
+        (CRNT.Examples.EndotacticCounterexample.escapeCount k) >
+      CRNT.Network.countDescFactorial (CRNT.Examples.EndotacticCounterexample.net.reaction 1).source
+        (CRNT.Examples.EndotacticCounterexample.escapeCount k) :=
+  CRNT.Examples.EndotacticCounterexample.topTier_does_not_dominate k hk
+
+-- The weak multivariate CLT for the open system.
+open Filter in
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
+    {xs : Concentration S} (heq : N.massActionVectorField κ xs = 0)
+    (hxs0 : ∀ s : S, 0 ≤ xs s) {T : ℝ} (hT : 0 < T) (n : ℕ → S → ℕ)
+    {z₀ : S → ℝ}
+    (hz : Tendsto (fun k : ℕ => CRNT.Network.zeta ((k : ℝ) + 1) xs (n k)) atTop (nhds z₀)) :
+    Tendsto
+      (fun k : ℕ => N.flucLawOpenDefect κ (V := (k : ℝ) + 1) (by positivity) xs hT.le (n k))
+      atTop (nhds (N.gaussLimit κ xs T z₀)) :=
+  CRNT.Network.multivariate_clt_open_weak N κ heq hxs0 hT n hz
+
+-- Uniform concentration of the fluctuation increments on the uniform time grid.
+open Filter in
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
+    {T Rx δ : ℝ} (hT : 0 < T) (hRx : 0 ≤ Rx) (hδ : 0 < δ) (hδ1 : δ ≤ 1)
+    (x : ℝ → Concentration S) (hxc : ContinuousOn x (Set.Icc 0 T))
+    (hx : ∀ t ∈ Set.Ioo 0 T, HasDerivAt x (N.massActionVectorField κ (x t)) t)
+    (hxB : ∀ t ∈ Set.Icc 0 T, x t ∈ Set.Icc 0 fun _ => Rx) (n : ℕ → S → ℕ)
+    (hn0 : Tendsto (fun k => ∑ s, ((n k s : ℝ) / ((k : ℝ) + 1) - x 0 s) ^ 2) atTop (nhds 0)) :
+    ∃ m : ℕ, 0 < m ∧
+      (∀ i < m, ∀ σ ∈ Set.Icc 0 (T / m),
+        ∑ s, (x (i * (T / m) + σ) s - x (i * (T / m)) s) ^ 2 ≤ δ ^ 2 / 4) ∧
+      (Tendsto (fun k : ℕ => ∑ i ∈ Finset.range m,
+          N.windowExitMass κ (V := (k : ℝ) + 1) (by positivity) Rx δ (T / m) x i (n k))
+        atTop (nhds 0)) ∧
+      (∀ k : ℕ, ∀ i < m, ∀ c : S → ℕ, ∀ τ ∈ Set.Icc 0 (T / m),
+        (∑' b, (if b ∈ CRNT.Network.ballSet ((k : ℝ) + 1) Rx (x (i * (T / m))) δ then 0 else
+            (N.jumpSystem (N.volumeScale κ ((k : ℝ) + 1) (by positivity))).Pmin τ c b))
+          ≤ (∑' b, (if b ∈ CRNT.Network.ballSet ((k : ℝ) + 1) Rx (x (i * (T / m))) δ then 0 else
+            ((N.jumpSystem (N.volumeScale κ ((k : ℝ) + 1) (by positivity))).stopOutside
+              (CRNT.Network.ballSet ((k : ℝ) + 1) Rx (x (i * (T / m))) δ)).Pmin (T / m) c b))) :=
+  CRNT.Network.fluctuation_uniform_concentration N κ hT hRx hδ hδ1 x hxc hx hxB n hn0
+
+-- Degree existence: a nonzero degree on the nonnegative class forces a positive steady state.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
+    (x₀ : Concentration S)
+    (hfin : (N.steadyStateMap κ x₀ ⁻¹' {0} ∩ N.nonnegativeClassRegion x₀).Finite)
+    (hdeg : N.nonnegativeClassDegree κ x₀ hfin ≠ 0)
+    (hbd : ∀ y ∈ N.classBoundary x₀, N.steadyStateMap κ x₀ y ≠ 0) :
+    ∃ x : Concentration S,
+      N.StoichCompatible x₀ x ∧ Concentration.Positive x ∧ N.IsMassActionSteadyState κ x :=
+  CRNT.Network.exists_positiveSteadyState_of_nonnegativeClassDegree_ne_zero N κ x₀ hfin hdeg hbd
+
+-- Degree structure: the class degree is the sign of the reduced Jacobian determinant.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
+    (x₀ : Concentration S) (y₀ : N.ClassCoord)
+    (hzero : N.steadyStateMap κ x₀ y₀ = 0) (hy₀ : y₀ ∈ N.nonnegativeClassRegion x₀)
+    (huniq : ∀ y : N.ClassCoord, N.steadyStateMap κ x₀ y = 0 → y = y₀)
+    (hfin : (N.steadyStateMap κ x₀ ⁻¹' {0} ∩ N.nonnegativeClassRegion x₀).Finite) :
+    N.nonnegativeClassDegree κ x₀ hfin =
+      ((SignType.sign (N.reducedJacobian κ x₀ y₀).det : SignType) : ℤ) :=
+  CRNT.Network.nonnegativeClassDegree_eq_sign_reducedDet_of_unique_preimage N κ x₀ y₀ hzero hy₀ huniq hfin
+
+-- A positive reduced determinant at the unique preimage forces a positive steady state.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
+    (x₀ : Concentration S) (y₀ : N.ClassCoord)
+    (hzero : N.steadyStateMap κ x₀ y₀ = 0) (hy₀ : y₀ ∈ N.nonnegativeClassRegion x₀)
+    (huniq : ∀ y : N.ClassCoord, N.steadyStateMap κ x₀ y = 0 → y = y₀)
+    (hfin : (N.steadyStateMap κ x₀ ⁻¹' {0} ∩ N.nonnegativeClassRegion x₀).Finite)
+    (hdet : 0 < (N.reducedJacobian κ x₀ y₀).det)
+    (hbd : ∀ y ∈ N.classBoundary x₀, N.steadyStateMap κ x₀ y ≠ 0) :
+    ∃ x : Concentration S,
+      N.StoichCompatible x₀ x ∧ Concentration.Positive x ∧ N.IsMassActionSteadyState κ x :=
+  CRNT.Network.exists_positiveSteadyState_of_positive_reducedDet N κ x₀ y₀ hzero hy₀ huniq hfin
+    hdet hbd
+
+-- Degree multistationarity: a negative local degree against the class degree gives two
+-- distinct positive steady states.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
+    (x₀ : Concentration S) (ystar : N.ClassCoord)
+    (hzero : N.steadyStateMap κ x₀ ystar = 0) (hystar : ystar ∈ N.nonnegativeClassRegion x₀)
+    (hfin : (N.steadyStateMap κ x₀ ⁻¹' {0} ∩ N.nonnegativeClassRegion x₀).Finite)
+    (hdeg : N.nonnegativeClassDegree κ x₀ hfin ≠ 0)
+    (hlocal : ((SignType.sign (N.reducedJacobian κ x₀ ystar).det : SignType) : ℤ)
+        = -(N.nonnegativeClassDegree κ x₀ hfin))
+    (hbd : ∀ y ∈ N.classBoundary x₀, N.steadyStateMap κ x₀ y ≠ 0) :
+    ∃ x y : Concentration S,
+      x ≠ y ∧ N.StoichCompatible x₀ x ∧ Concentration.Positive x ∧ N.IsMassActionSteadyState κ x ∧
+      N.StoichCompatible x₀ y ∧ Concentration.Positive y ∧ N.IsMassActionSteadyState κ y :=
+  CRNT.Network.exists_two_positiveSteadyStates_of_classDegree_neg_localDegree N κ x₀ ystar hzero
+    hystar hfin hdeg hlocal hbd
+
+-- The deficiency-one algorithm decides the multistationarity capacity.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) :
+    N.HasMultistationarityCapacity ↔ N.DOAFeasible :=
+  CRNT.Network.hasMultistationarityCapacity_iff_doaFeasible N
+
+-- The one-reaction case is decided by an explicit inequality.
+example {S : Type} [DecidableEq S] [Fintype S] (a b : Complex S) :
+    (CRNT.Network.oneRxn a b).fullyOpen.DOAFeasible ↔ 1 < ∑ s with a s < b s, a s :=
+  CRNT.Network.oneRxn_doaFeasible_iff a b
+
+-- The advanced deficiency algorithm decides the multistationarity capacity too.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) :
+    N.HasMultistationarityCapacity ↔ N.ADAFeasible :=
+  CRNT.Network.hasMultistationarityCapacity_iff_adaFeasible N
+
+-- The advanced deficiency algorithm's verdict affirms the capacity.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (h : N.ADAFeasible) :
+    N.ADAAffirmsCapacity :=
+  CRNT.Network.adaFeasible_implies_adaAffirmsCapacity N h
+
+-- The two-reaction atom criterion.
+example {S : Type} [DecidableEq S] [Fintype S] (a b c d : Complex S) :
+    CRNT.Network.TwoRxnIsAtom a b c d ↔
+      (CRNT.Network.twoRxnOpen a b c d).fullyOpen.HasMultistationarityCapacity ∧
+        ∑ s with a s < b s, a s ≤ 1 ∧ ∑ s with c s < d s, c s ≤ 1 :=
+  CRNT.Network.twoRxnOpen_isAtom_iff a b c d
+
+-- The multistationarity region is open.
+example {S : Type} [DecidableEq S] [Fintype S] {E₁ E₂ : Type} [Fintype E₁] [Fintype E₂]
+    (N : Network S) (Z : (S → ℝ) →ₗ[ℝ] E₁ → ℝ) (L : (S → ℝ) →ₗ[ℝ] E₂ → ℝ)
+    (hZ : ∀ v ∈ N.stoichSubspace, Z v = 0 → v = 0)
+    (hL : ∀ v : S → ℝ, L v = 0 ↔ v ∈ N.stoichSubspace)
+    (hcard : Fintype.card (E₁ ⊕ E₂) = Fintype.card S) :
+    IsOpen (N.MultistationarityRegion Z L) :=
+  CRNT.Network.isOpen_multistationarityRegion N Z L hZ hL hcard
+
+-- SingletonSource networks: the steady-state condition is a linear one.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
+    (hM : N.SingletonSource) (x : Concentration S) :
+    N.IsMassActionSteadyState κ x ↔ ∀ s : S, ∑ i, N.singletonSourceCoeff κ i s * x i = 0 :=
+  CRNT.Network.singletonSource_steadyState_iff_linear N κ hM x
+
+-- SingletonSource networks: there is no pair of distinct positive steady states in a class.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
+    (hM : N.SingletonSource) {c x y : Concentration S} (hx : x ∈ N.PositiveSteadyStatesInClass κ c)
+    (hy : y ∈ N.PositiveSteadyStatesInClass κ c) (hxy : x ≠ y) :
+    x ∈ N.PositiveSteadyStatesInClass κ c ∧
+      y ∈ N.PositiveSteadyStatesInClass κ c ∧
+        (fun s => (x s + y s) / 2) ∈ N.PositiveSteadyStatesInClass κ c ∧
+          x ≠ (fun s => (x s + y s) / 2) ∧ (fun s => (x s + y s) / 2) ≠ y :=
+  CRNT.Network.singletonSource_no_exactly_two N κ hM hx hy hxy
+
+-- SingletonSource networks: the steady-state invariants are the row space of the coefficient matrix.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
+    (hM : N.SingletonSource) (w : S → ℝ) :
+    N.IsSteadyStateInvariant κ w ↔ ∃ c : S → ℝ, ∀ i : S, w i = ∑ s, c s * N.singletonSourceCoeff κ i s :=
+  CRNT.Network.singletonSource_linearInvariant_iff_rowSpace N κ hM w
+
+-- Toric parametrization: the positive steady states are the parametrized kernel.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
+    {n : ℕ} (a b : Fin n → Complex S) (c : Fin n → ℝ) (hc : ∀ i, 0 < c i)
+    (htor : ∀ x : Concentration S, x.Positive →
+      (N.IsMassActionSteadyState κ x ↔
+        ∀ i, (a i).massActionMonomial x = c i * (b i).massActionMonomial x))
+    {xs : Concentration S} (hxs : xs.Positive) (hxss : N.IsMassActionSteadyState κ xs) :
+    { x : Concentration S | x.Positive ∧ N.IsMassActionSteadyState κ x }
+      = { CRNT.toricParametrization xs v | v ∈ CRNT.expLogKernel a b } :=
+  CRNT.Network.toric_positiveSteadyStates_eq_parametrization N κ a b c hc htor hxs hxss
+
+-- Toric parametrization: the steady-state invariants are the log-orthogonal ones.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
+    {n : ℕ} (a b : Fin n → Complex S) (c : Fin n → ℝ) (hc : ∀ i, 0 < c i)
+    (htor : ∀ x : Concentration S, x.Positive →
+      (N.IsMassActionSteadyState κ x ↔
+        ∀ i, (a i).massActionMonomial x = c i * (b i).massActionMonomial x))
+    {xs : Concentration S} (hxs : xs.Positive) (hxss : N.IsMassActionSteadyState κ xs)
+    (g : Concentration S → ℝ) :
+    (∀ x y : Concentration S, x.Positive → N.IsMassActionSteadyState κ x →
+      y.Positive → N.IsMassActionSteadyState κ y → g x = g y) ↔
+      ∀ v ∈ CRNT.expLogKernel a b, g (CRNT.toricParametrization xs v) = g xs :=
+  CRNT.Network.steadyStateInvariant_iff_log_orthogonal N κ a b c hc htor hxs hxss g
+
+-- Non-isothermal kinetics: at a fixed temperature the species equations are the mass-action ones.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S)
+    (k : CRNT.NonIsothermal.TemperatureDependentRates N) (ΔH : N.R → ℝ) (ρ cp T₀ : ℝ)
+    (x : Concentration S) :
+    N.massActionVectorField
+        ({ k := fun r => k.k r T₀, positive := fun r => k.pos r T₀ } : N.RateConstants) x =
+      CRNT.NonIsothermal.nonIsothermalVectorField N k ΔH ρ cp x T₀ :=
+  CRNT.NonIsothermal.isothermal_species_eq_massAction N k ΔH ρ cp T₀ x
+
+-- Non-isothermal kinetics: the temperature equation is minus the total heat release.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S)
+    (k : CRNT.NonIsothermal.TemperatureDependentRates N) (ΔH : N.R → ℝ) (ρ cp : ℝ)
+    (x : Concentration S) (T : ℝ) :
+    CRNT.NonIsothermal.temperatureEquation N k ΔH ρ cp x T =
+      -(1 / (ρ * cp)) * ∑ r, ΔH r * CRNT.NonIsothermal.nonIsothermalRate N k T r x :=
+  CRNT.NonIsothermal.temperatureEquation_eq_neg_sum_heat N k ΔH ρ cp x T
+
+-- Delay equations: the limit of a delay trajectory is a steady state.
+open Filter in
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
+    (τ : N.R → ℝ) {x : ℝ → Concentration S} (hx : N.IsDelaySolution κ τ x)
+    (y : Concentration S) (hy : Tendsto x atTop (nhds y)) :
+    N.IsMassActionSteadyState κ y :=
+  CRNT.Network.delay_limit_isSteadyState N κ τ hx y hy
+
+-- Delay equations: a compact delay trajectory with a unique cluster point converges to it.
+open Filter in
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
+    (τ : N.R → ℝ) {x : ℝ → Concentration S} (hx : N.IsDelaySolution κ τ x)
+    (hcompact : IsCompact (closure (Set.range x))) (y : Concentration S)
+    (huniq : ∀ z : Concentration S, ClusterPt z (Filter.map x atTop) → z = y) :
+    Tendsto x atTop (nhds y) ∧ N.IsMassActionSteadyState κ y :=
+  CRNT.Network.delay_semistability N κ τ hx hcompact y huniq
+
+-- Reaction-diffusion: local existence of a solution of the reaction-diffusion equation.
+example {ι : Type} [Fintype ι] [DecidableEq ι] (D : ι → ℝ) (f : ι → ℝ → ℝ) (L : ℝ)
+    (hL : 0 ≤ L) (hf : ∀ (i : ι) (x y : ℝ), |f i x - f i y| ≤ L * |x - y|) (x₀ : ι → ℝ)
+    [Nonempty ι] :
+    ∃ ε : ℝ, 0 < ε ∧ ∃ γ, γ 0 = x₀ ∧
+      ∀ t ∈ Set.Ioo (-ε) ε,
+        HasDerivAt γ (CRNT.ReactionDiffusion.reactionDiffusionField D f (γ t)) t :=
+  CRNT.ReactionDiffusion.exists_reactionDiffusion_solution D f L hL hf x₀
+
+-- Reaction-diffusion: the Brusselator is Turing-unstable.
+example :
+    CRNT.IsHurwitz (CRNT.Turing.charPoly (2 - 1) (3 ^ 2) (-2) (-(3 ^ 2))) ∧
+      0 < 64 * (2 - 1) + 1 * (-(3 ^ 2)) ∧
+      4 * 1 * 64 * ((2 - 1) * (-(3 ^ 2)) - 3 ^ 2 * (-2))
+        < (64 * (2 - 1) + 1 * (-(3 ^ 2))) ^ 2 :=
+  CRNT.ReactionDiffusion.brusselator_turing_instance
+
+-- General-plant design: the antithetic loop pins the output at its setpoint.
+example {n : ℕ} (P : CRNT.Design.GeneralPlant.LinearPlant n) {μ θ : ℝ} (hθ : θ ≠ 0)
+    {z : (Fin n → ℝ) × ℝ} (h : P.antitheticLoop μ θ z = (0, 0)) : P.output z.1 = μ / θ :=
+  CRNT.Design.GeneralPlant.LinearPlant.antitheticLoop_setpoint P hθ h
+
+-- General-plant design: a Foster drift makes the stochastic plant ergodic.
+example {α : Type*} [Countable α] [Nonempty α] [DecidableEq α]
+    (J : CRNT.JumpSystem α) (V f : α → ℝ) (H : CRNT.Design.GeneralPlant.FosterDrift J V f)
+    (hstoch : ∀ t : ℝ, 0 ≤ t → ∀ x : α, HasSum (fun b => J.Pmin t x b) 1)
+    (hirr : ∀ a b : α, J.ReachPos a b) :
+    ∃ π : α → ℝ, (∀ b : α, 0 < π b) ∧ HasSum π 1 ∧
+      (∀ s : ℝ, 0 ≤ s → ∀ b : α, ∑' x, π x * J.Pmin s x b = π b) ∧
+        (∀ a : α, Filter.Tendsto (fun t => ∑' b, |J.Pmin t a b - π b|) Filter.atTop (nhds 0)) ∧
+          (∀ μ : α → ℝ, (∀ b : α, 0 ≤ μ b) → HasSum μ 1 →
+            (∀ s : ℝ, 0 ≤ s → ∀ b : α, ∑' x, μ x * J.Pmin s x b = μ b) → μ = π) :=
+  CRNT.Design.GeneralPlant.ergodic_of_fosterDrift J V f H hstoch hirr
+
+-- Planar oscillation: a monotone planar periodic solution is constant.
+example {F : Concentration (Fin 2) → Concentration (Fin 2)} (hmono : Monotone F)
+    {x : ℝ → Concentration (Fin 2)} (hsol : ∀ (t : ℝ), HasDerivAt x (F (x t)) t)
+    {T : ℝ} (hT : 0 < T) (hper : Function.Periodic x T) {lo hi : ℝ}
+    (horizon : ∀ (t : ℝ), x t ∈ CRNT.Oscillation.planarBox lo hi)
+    (hLip : ∃ L, LipschitzOnWith L F (CRNT.Oscillation.planarBox lo hi)) :
+    ∃ p, ∀ (t : ℝ), x t = p :=
+  CRNT.Oscillation.periodicSolution_constant_of_monotone hmono hsol hT hper horizon hLip
+
+-- Planar oscillation: a cooperative planar network has no positive periodic orbit.
+example {N : Network (Fin 2)} (hcoop : N.IsCooperativeNetwork) : N.NeverPositivePeriodic :=
+  CRNT.Oscillation.Network.neverPositivePeriodic_of_cooperative hcoop
+
+-- Trapping regions: the Lotka network has a positive periodic orbit.
+example (K : CRNT.Planar.PoincareBendixsonKernelBundle)
+    (κ : CRNT.Examples.Lotka.N.RateConstants) (h0 : 0 < κ.k CRNT.Examples.Lotka.grow)
+    (h1 : 0 < κ.k CRNT.Examples.Lotka.prey) (h2 : 0 < κ.k CRNT.Examples.Lotka.decay) :
+    CRNT.Examples.Lotka.N.HasPositivePeriodicOrbit κ :=
+  CRNT.Oscillation.lotka_hasPositivePeriodicOrbit_of_trappingRegion K κ h0 h1 h2
+
+-- No chaos: a planar trapping-region ω-set is not chaotic.
+example (K : CRNT.Planar.PoincareBendixsonKernelBundle) {field : CRNT.Phase2 → CRNT.Phase2}
+    (D : CRNT.Planar.FlowTrappingData field) (hsmooth : ContDiff ℝ 1 field) :
+    ¬ CRNT.Planar.HasNonregularMinimalSubset field D.flow D.omegaSet :=
+  CRNT.Planar.omegaSet_no_nonregular_minimal_subset K D hsmooth
+
+-- Descartes' rule of signs for exponential sums.
+example {n : ℕ} (w : Fin (n + 1) → ℝ) (hw : StrictMono w) (c : Fin (n + 1) → ℝ)
+    (hc : ∃ k, c k ≠ 0) (Z : Finset ℝ)
+    (hZ : ∀ t ∈ Z, ∑ k, c k * Real.exp (w k * t) = 0) :
+    Z.card ≤ CRNT.CircuitDescartes.signVariations c :=
+  CRNT.CircuitDescartes.card_zeros_exp_sum_le w hw c hc Z hZ
+
+-- Circuit polynomials: the number of positive solutions is bounded by the sign variations.
+example {n : ℕ} (Cm : Matrix (Fin n) (Fin n) ℝ) (hC : IsUnit Cm.det)
+    (c₀ c₁ μ : Fin n → ℝ)
+    (hP : CRNT.Circuit.circuitPoly (-(Cm⁻¹.mulVec c₀)) (-(Cm⁻¹.mulVec c₁)) μ ≠ 0)
+    (Y : Finset (Fin n → ℝ))
+    (hY : ∀ y ∈ Y, (∀ k : Fin n, 0 < y k) ∧ Cm.mulVec y + c₀ + CRNT.Circuit.rmono μ y • c₁ = 0) :
+    Y.card ≤
+      (CRNT.Circuit.circuitPoly (-(Cm⁻¹.mulVec c₀)) (-(Cm⁻¹.mulVec c₁)) μ).signVariations + 1 :=
+  CRNT.Circuit.card_circuit_solutions_le_signVariations Cm hC c₀ c₁ μ hP Y hY
+
+-- Tropical reduction: the reduced system has the same support.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (a : N.R → ℝ) (w : S → ℝ)
+    (h : N.IsTropicalEquilibration a w) :
+    {s : S | ∃ r ∈ N.tropicalReduced a w, N.reactionVector r s ≠ 0} =
+      {s : S | ∃ r : N.R, N.reactionVector r s ≠ 0} :=
+  CRNT.Network.tropicalReduced_species_eq N a w h
+
+-- Tropical reduction: the leading system of the reduction is the leading system of the network.
+example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (a : N.R → ℝ) (w : S → ℝ)
+    (_h : N.IsTropicalEquilibration a w) :
+    Finset.image (fun r => r.1)
+        ((N.restrictReactions (N.tropicalReduced a w)).tropicalLeadingSystem (fun r => a r.1) w) =
+      N.tropicalLeadingSystem a w :=
+  CRNT.Network.leadingSystem_eq_reduced_of_equilibration N a w _h
+
+-- PiecewiseNatAffine computation: `2 ^ v` is not piecewiseNatAffine.
+example : ¬ CRNT.Computation.PiecewiseNatAffine fun v : Fin 1 → ℕ => 2 ^ v 0 :=
+  CRNT.Computation.not_piecewiseNatAffine_pow2
+
+-- PiecewiseNatAffine computation: the affine chemical reaction network stably computes its update map.
+example (k a : ℕ) (m : Fin k → ℕ) :
+    CRNT.Computation.StablyComputes (CRNT.Computation.affineCRN k a m) (CRNT.Computation.affineInit k)
+      (Sum.inr (0 : Fin 2)) (fun x => a + ∑ j, m j * x j) :=
+  CRNT.Computation.affineCRN_stablyComputes k a m
+
+-- The presented deficiency-one algorithm: a run of the algorithm affirms the capacity.
+example {S : Type} [DecidableEq S] [Fintype S] {N : Network S} (run : N.DOARun)
+    (d : N.DOAShelfFluxes)
+    (hsrc : ∀ sh ∈ d.shelves, ∀ r ∈ sh, run.sp.shelf (N.sourceIdx r) = CRNT.Network.Shelf.middle) :
+    N.HasMultistationarityCapacity :=
+  CRNT.Network.doaRun_hasMultistationarityCapacity run d hsrc

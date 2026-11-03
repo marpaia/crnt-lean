@@ -1,5 +1,7 @@
 # Stochastic CRN
 
+Recurrence/non-explosion results use explicit Lyapunov data, restricted count-tier structures, one-species hypotheses, or the other assumptions in their signatures. Several-species strong endotacticity alone is insufficient; the unrestricted assertion is false (arXiv:1808.05328, Examples 3.1–3.2). Scaling theorems include generator estimates and fixed-time Gaussian weak limits; a general filtered path process and path-space LLN/CLT remain incomplete. `IsDeadlockedCount` excludes enabled channels; `IsAbsorbingCount` permits enabled null channels.
+
 This document describes the discrete-molecule regime of the `CRNT` library: the
 chemical master equation of stochastic mass-action kinetics, the Anderson–Craciun–Kurtz
 product-form stationary distribution for complex-balanced networks, and the ergodic and

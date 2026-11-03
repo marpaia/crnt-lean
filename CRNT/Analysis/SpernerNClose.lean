@@ -148,7 +148,9 @@ def predCell (c : Cell (n + 1) N) (h : DownValid c) : Cell (n + 1) N where
         apply Finset.sum_eq_zero
         intro l hl
         simp only [mem_filter, mem_univ, true_and, Fin.val_zero] at hl
-        exact absurd hl (Nat.not_lt_zero _)
+        exfalso
+        have hl' : (l : ℕ) < 0 := by simpa using hl
+        exact Nat.not_lt_zero (l : ℕ) hl'
       rw [hz, add_zero]
       exact_mod_cast Nat.zero_le (predBase c i)
     · rw [voff_predPerm_ne_zero c.perm k hk i, predBase_cast c h i]
@@ -169,7 +171,9 @@ theorem voff_zero (σ : Equiv.Perm (Fin (n + 1))) (i : Fin (n + 2)) : voff σ 0 
   apply Finset.sum_eq_zero
   intro l hl
   simp only [mem_filter, mem_univ, true_and, Fin.val_zero] at hl
-  exact absurd hl (Nat.not_lt_zero _)
+  exfalso
+  have hl' : (l : ℕ) < 0 := by simpa using hl
+  exact Nat.not_lt_zero (l : ℕ) hl'
 
 /-- **Vertex `1` of the predecessor recovers `c.base`.** -/
 theorem predCell_vertex_one (c : Cell (n + 1) N) (h : DownValid c) (i : Fin (n + 2)) :

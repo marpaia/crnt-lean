@@ -2,6 +2,7 @@ import CRNT.Dynamics.ToricEmbedding
 import Mathlib.Geometry.Convex.Cone.Pointed
 import Mathlib.Analysis.InnerProductSpace.Basic
 import Mathlib.Algebra.BigOperators.Module
+import Mathlib.Algebra.Order.Rearrangement
 import Mathlib.Data.Fin.Tuple.Sort
 
 /-!
@@ -86,6 +87,51 @@ def polarCone (s : Set E) : PointedCone ℝ E where
 @[simp] theorem mem_polarCone {s : Set E} {y : E} :
     y ∈ polarCone s ↔ ∀ ⦃x⦄, x ∈ s → ⟪x, y⟫_ℝ ≤ 0 :=
   Iff.rfl
+
+/-- **A polar direction pairs strictly with any point that can move a little along it inside
+the cone.** If `v ∈ Cᵒ` is nonzero and `n + ε v ∈ C` for some `ε > 0`, then
+`⟪n, v⟫ < 0`. This is the strict-support step used when a toric chamber admits an inward
+perturbation in the velocity direction. -/
+theorem polarCone_inner_lt_zero_of_positivePerturbation {s : Set E} {n v : E}
+    (hv : v ∈ polarCone s) (hne : v ≠ 0)
+    (hperturb : ∃ ε : ℝ, 0 < ε ∧ n + ε • v ∈ s) :
+    ⟪n, v⟫_ℝ < 0 := by
+  rcases hperturb with ⟨ε, hε, hmem⟩
+  have hle := (mem_polarCone.mp hv) hmem
+  have hnorm : 0 < ⟪v, v⟫_ℝ := by
+    rw [real_inner_self_eq_norm_sq]
+    exact sq_pos_of_pos (norm_pos_iff.mpr hne)
+  rw [inner_add_left, real_inner_smul_left] at hle
+  by_contra hnot
+  have hn : 0 ≤ ⟪n, v⟫_ℝ := le_of_not_gt hnot
+  have hprod : 0 < ε * ⟪v, v⟫_ℝ := mul_pos hε hnorm
+  linarith
+
+/-- **Strict support at interior points.** A nonzero polar direction pairs strictly negatively
+with every interior point of the cone, by perturbing that point a small distance along the polar
+direction while staying inside the cone. -/
+theorem polarCone_inner_lt_zero_of_mem_interior {s : Set E} {n v : E}
+    (hv : v ∈ polarCone s) (hne : v ≠ 0) (hn : n ∈ interior s) :
+    ⟪n, v⟫_ℝ < 0 := by
+  have hsn := mem_interior_iff_mem_nhds.mp hn
+  obtain ⟨r, hr, hball⟩ := Metric.mem_nhds_iff.mp hsn
+  have hperturb : ∃ ε : ℝ, 0 < ε ∧ n + ε • v ∈ s := by
+    let ε : ℝ := r / (‖v‖ + 1)
+    have hε : 0 < ε := by
+      dsimp [ε]
+      positivity
+    have hratio : ‖v‖ / (‖v‖ + 1) < 1 := by
+      apply (div_lt_iff₀ (by positivity : 0 < ‖v‖ + 1)).2
+      nlinarith [norm_nonneg v]
+    have hdist : dist (n + ε • v) n < r := by
+      rw [dist_eq_norm, add_sub_cancel_left, norm_smul, Real.norm_eq_abs, abs_of_pos hε]
+      dsimp [ε]
+      calc
+        r / (‖v‖ + 1) * ‖v‖ = r * (‖v‖ / (‖v‖ + 1)) := by ring
+        _ < r * 1 := mul_lt_mul_of_pos_left hratio hr
+        _ = r := by ring
+    exact ⟨ε, hε, hball (Metric.mem_ball.mpr hdist)⟩
+  exact polarCone_inner_lt_zero_of_positivePerturbation hv hne hperturb
 
 end PolarCone
 
@@ -209,5 +255,275 @@ theorem sorted_head_proj_min {m : ℕ} [NeZero m] (u : Fin m → E) (w : E)
   hσ (by simp)
 
 end Sorting
+
+section ProjectedCycleVelocity
+
+variable {ι E : Type*} [Fintype ι] [NormedAddCommGroup E] [InnerProductSpace ℝ E]
+
+/-- A closed cycle's projected velocity points toward lower levels whenever its coefficients
+are monotone in source level. The level used to order coefficients may differ from the test
+direction, provided both induce the same strict ordering of the cycle vertices. -/
+theorem cyclicProjectedVelocity_nonpos_of_orderedCoefficients
+    (σ : Equiv.Perm ι) (u : ι → E) (a : ι → ℝ) (z₀ z : E)
+    (ha : Monovary a (fun i => ⟪z₀, u i⟫_ℝ))
+    (horder : ∀ i j, ⟪z, u i⟫_ℝ < ⟪z, u j⟫_ℝ →
+      ⟪z₀, u i⟫_ℝ < ⟪z₀, u j⟫_ℝ) :
+    (∑ i, a i * ⟪z, u (σ i) - u i⟫_ℝ) ≤ 0 := by
+  have hmono : Monovary a (fun i => ⟪z, u i⟫_ℝ) := by
+    intro i j hij
+    exact ha (horder i j hij)
+  have hrearrange := hmono.sum_mul_comp_perm_le_sum_mul (σ := σ)
+  have hsum : (∑ i, a i * ⟪z, u (σ i) - u i⟫_ℝ) =
+      (∑ i, a i * ⟪z, u (σ i)⟫_ℝ) - ∑ i, a i * ⟪z, u i⟫_ℝ := by
+    simp_rw [inner_sub_right, mul_sub, Finset.sum_sub_distrib]
+  rw [hsum]
+  linarith
+
+/-- **Closed-walk ordering with a reference direction.** Let `target` and `source` be the target
+and source vertex lists of a closed directed walk, so they are permutations of one another. If the
+walk's coefficients vary monotonically with a reference projection `z₀`, and every strict ordering
+seen by a test direction `z` is also an ordering in `z₀`, then the walk has nonpositive projected
+velocity along `z`. This list form is the bridge from concrete reaction walks to
+`cyclicProjectedVelocity_nonpos_of_orderedCoefficients`. -/
+theorem cyclicProjectedVelocity_nonpos_of_permutedList_of_orderedCoefficients
+    {α E : Type*} [BEq α] [LawfulBEq α]
+    [NormedAddCommGroup E] [InnerProductSpace ℝ E]
+    (target source : List α) (hperm : List.Perm target source)
+    (f : α → E) (z₀ z : E) (a : Fin source.length → ℝ)
+    (ha : Monovary a (fun i => ⟪z₀, f (source.get i)⟫_ℝ))
+    (horder : ∀ i j, ⟪z, f (source.get i)⟫_ℝ < ⟪z, f (source.get j)⟫_ℝ →
+      ⟪z₀, f (source.get i)⟫_ℝ < ⟪z₀, f (source.get j)⟫_ℝ) :
+    (∑ i : Fin source.length,
+      a i * ⟪z, f (target.get (finCongr hperm.length_eq.symm i)) -
+        f (source.get i)⟫_ℝ) ≤ 0 := by
+  classical
+  let eCast : Fin source.length ≃ Fin target.length := finCongr hperm.length_eq.symm
+  have hbij : Function.Bijective hperm.idxBij :=
+    ⟨hperm.idxBij_injective, hperm.idxBij_surjective⟩
+  let eIdx : Fin target.length ≃ Fin source.length := Equiv.ofBijective hperm.idxBij hbij
+  let σ : Equiv.Perm (Fin source.length) := eCast.trans eIdx
+  let u : Fin source.length → E := fun i => f (source.get i)
+  have htarget : ∀ i, f (target.get (eCast i)) = u (σ i) := by
+    intro i
+    have hi := hperm.getElem_idxBij_eq_getElem (eCast i)
+    simpa [u, σ, eCast, eIdx, List.get_eq_getElem] using congrArg f hi.symm
+  have hsum :
+      (∑ i : Fin source.length,
+        a i * ⟪z, f (target.get (eCast i)) - f (source.get i)⟫_ℝ) =
+      ∑ i : Fin source.length, a i * ⟪z, u (σ i) - u i⟫_ℝ := by
+    apply Finset.sum_congr rfl
+    intro i _
+    rw [htarget i]
+  rw [hsum]
+  apply cyclicProjectedVelocity_nonpos_of_orderedCoefficients σ u a z₀ z ha
+  intro i j hij
+  exact horder i j hij
+
+omit [Fintype ι] in
+/-- A uniform coefficient interval and a sufficiently large gap in the exponent levels make
+exponential source coefficients monotone in those levels. -/
+theorem expWeightedCoefficients_monovary_of_separation
+    {k p : ι → ℝ} {kmin kmax δ : ℝ}
+    (hkmin : 0 ≤ kmin) (hscale : kmax ≤ kmin * Real.exp δ)
+    (hk : ∀ i, kmin ≤ k i ∧ k i ≤ kmax)
+    (hgap : ∀ i j, p i < p j → p i + δ ≤ p j) :
+    Monovary (fun i => k i * Real.exp (p i)) p := by
+  intro i j hij
+  calc
+    k i * Real.exp (p i) ≤ kmax * Real.exp (p i) :=
+      mul_le_mul_of_nonneg_right (hk i).2 (le_of_lt (Real.exp_pos _))
+    _ ≤ (kmin * Real.exp δ) * Real.exp (p i) :=
+      mul_le_mul_of_nonneg_right hscale (le_of_lt (Real.exp_pos _))
+    _ = kmin * Real.exp (p i + δ) := by rw [Real.exp_add]; ring
+    _ ≤ kmin * Real.exp (p j) :=
+      mul_le_mul_of_nonneg_left (Real.exp_le_exp.mpr (hgap i j hij)) hkmin
+    _ ≤ k j * Real.exp (p j) :=
+      mul_le_mul_of_nonneg_right (hk j).1 (le_of_lt (Real.exp_pos _))
+
+/-- A finite family of positive prefactors admits one common lower bound, upper bound, and
+exponential separation margin. The margin `δ = log(kmax / kmin)` makes
+`kmax = kmin * exp δ`, so `expWeightedCoefficients_monovary_of_separation` applies uniformly to
+every member of the family. -/
+theorem exists_uniform_exp_prefactor_separation {ι : Type*} [Fintype ι] [Nonempty ι]
+    (k : ι → ℝ) (hk : ∀ i, 0 < k i) :
+    ∃ kmin kmax δ : ℝ, 0 < kmin ∧
+      (∀ i, kmin ≤ k i ∧ k i ≤ kmax) ∧
+      kmax ≤ kmin * Real.exp δ := by
+  classical
+  let values : Finset ℝ := Finset.univ.image k
+  have hvalues : values.Nonempty := by
+    obtain ⟨i⟩ := ‹Nonempty ι›
+    exact ⟨k i, Finset.mem_image.mpr ⟨i, Finset.mem_univ _, rfl⟩⟩
+  let kmin : ℝ := values.min' hvalues
+  let kmax : ℝ := values.max' hvalues
+  let δ : ℝ := Real.log (kmax / kmin)
+  have hminpos : 0 < kmin := by
+    obtain ⟨i, _, hi⟩ := Finset.mem_image.mp (Finset.min'_mem values hvalues)
+    dsimp [kmin]
+    rw [← hi]
+    exact hk i
+  have hmaxpos : 0 < kmax := by
+    obtain ⟨i, _, hi⟩ := Finset.mem_image.mp (Finset.max'_mem values hvalues)
+    dsimp [kmax]
+    rw [← hi]
+    exact hk i
+  refine ⟨kmin, kmax, δ, hminpos, ?_, ?_⟩
+  · intro i
+    constructor
+    · dsimp [kmin]
+      exact Finset.min'_le values (k i)
+        (Finset.mem_image.mpr ⟨i, Finset.mem_univ _, rfl⟩)
+    · dsimp [kmax]
+      exact Finset.le_max' values (k i)
+        (Finset.mem_image.mpr ⟨i, Finset.mem_univ _, rfl⟩)
+  · dsimp [δ]
+    rw [Real.exp_log (div_pos hmaxpos hminpos)]
+    field_simp [ne_of_gt hminpos]
+    norm_num
+
+/-- A finite family of real levels has a positive lower bound on all of its strictly positive
+gaps, provided at least one strict gap occurs. This is the finite gap used when a logarithmic
+state moves out along a generic ray: every distinct source level eventually separates by any
+fixed prefactor margin. -/
+theorem exists_positive_uniform_strict_gap {ι : Type*} [Fintype ι] {p : ι → ℝ}
+    (hstrict : ∃ i j, p i < p j) :
+    ∃ ε : ℝ, 0 < ε ∧ ∀ i j, p i < p j → ε ≤ p j - p i := by
+  classical
+  let pairs : Finset (ι × ι) := Finset.univ.filter (fun ij => p ij.1 < p ij.2)
+  let gaps : Finset ℝ := pairs.image (fun ij => p ij.2 - p ij.1)
+  have hpairs : pairs.Nonempty := by
+    obtain ⟨i, j, hij⟩ := hstrict
+    exact ⟨(i, j), Finset.mem_filter.mpr ⟨Finset.mem_univ _, hij⟩⟩
+  have hgaps : gaps.Nonempty := by
+    obtain ⟨ij, hij⟩ := hpairs
+    exact ⟨p ij.2 - p ij.1, Finset.mem_image.mpr ⟨ij, hij, rfl⟩⟩
+  let ε : ℝ := gaps.min' hgaps
+  have hεpos : 0 < ε := by
+    have hmem : gaps.min' hgaps ∈ gaps := Finset.min'_mem gaps hgaps
+    rcases Finset.mem_image.mp hmem with ⟨⟨i, j⟩, hij, hgapEq⟩
+    change 0 < gaps.min' hgaps
+    rw [← hgapEq]
+    exact sub_pos.mpr (Finset.mem_filter.mp hij).2
+  refine ⟨ε, hεpos, ?_⟩
+  intro i j hij
+  dsimp [ε]
+  exact Finset.min'_le gaps (p j - p i)
+    (Finset.mem_image.mpr ⟨(i, j), Finset.mem_filter.mpr ⟨Finset.mem_univ _, hij⟩, rfl⟩)
+
+/-- The projected cycle-sign lemma with explicit uniform bounds on the reaction coefficients.
+The separation margin `δ` must dominate the coefficient range, expressed by
+`kmax ≤ kmin * exp δ`. This is the finite core used to embed one weakly reversible cycle into a
+toric differential inclusion away from the uncertainty hyperplanes. -/
+theorem cyclicProjectedVelocity_nonpos_of_rateSeparation
+    (σ : Equiv.Perm ι) (u : ι → E) (k p : ι → ℝ) (z₀ z : E)
+    {kmin kmax δ : ℝ}
+    (hkmin : 0 ≤ kmin) (hscale : kmax ≤ kmin * Real.exp δ)
+    (hk : ∀ i, kmin ≤ k i ∧ k i ≤ kmax)
+    (hgap : ∀ i j, p i < p j → p i + δ ≤ p j)
+    (hp : ∀ i, p i = ⟪z₀, u i⟫_ℝ)
+    (horder : ∀ i j, ⟪z, u i⟫_ℝ < ⟪z, u j⟫_ℝ → p i < p j) :
+    (∑ i, (k i * Real.exp (p i)) * ⟪z, u (σ i) - u i⟫_ℝ) ≤ 0 := by
+  have hcoeff : Monovary (fun i => k i * Real.exp (p i))
+      (fun i => ⟪z₀, u i⟫_ℝ) := by
+    intro i j hij
+    apply expWeightedCoefficients_monovary_of_separation hkmin hscale hk hgap
+    rw [hp i, hp j]
+    exact hij
+  exact cyclicProjectedVelocity_nonpos_of_orderedCoefficients σ u
+    (fun i => k i * Real.exp (p i)) z₀ z hcoeff
+    (by
+      intro i j hzij
+      rw [← hp i, ← hp j]
+      exact horder i j hzij)
+
+/-- **Closed-walk rate separation with a reference direction.** The source/target lists of a
+closed walk induce a permutation of its vertices. If the coefficient prefactors stay in
+`[kmin,kmax]`, their range is dominated by `exp δ`, and each strict reference-projection gap is at
+least `δ`, then the exponential coefficients increase in the reference order. If the test direction
+respects that order, the walk's projected velocity is nonpositive. This is the finite estimate
+needed when fixed equilibrium-rate factors perturb the pure monomial ordering. -/
+theorem cyclicProjectedVelocity_nonpos_of_permutedList_rateSeparation
+    {α E : Type*} [BEq α] [LawfulBEq α]
+    [NormedAddCommGroup E] [InnerProductSpace ℝ E]
+    (target source : List α) (hperm : List.Perm target source)
+    (f : α → E) (k p : Fin source.length → ℝ) (z₀ z : E)
+    {kmin kmax δ : ℝ}
+    (hkmin : 0 ≤ kmin) (hscale : kmax ≤ kmin * Real.exp δ)
+    (hk : ∀ i, kmin ≤ k i ∧ k i ≤ kmax)
+    (hgap : ∀ i j, p i < p j → p i + δ ≤ p j)
+    (hp : ∀ i, p i = ⟪z₀, f (source.get i)⟫_ℝ)
+    (horder : ∀ i j, ⟪z, f (source.get i)⟫_ℝ < ⟪z, f (source.get j)⟫_ℝ →
+      p i < p j) :
+    (∑ i : Fin source.length,
+      (k i * Real.exp (p i)) *
+        ⟪z, f (target.get (finCongr hperm.length_eq.symm i)) -
+          f (source.get i)⟫_ℝ) ≤ 0 := by
+  have hcoeff : Monovary (fun i => k i * Real.exp (p i))
+      (fun i => ⟪z₀, f (source.get i)⟫_ℝ) := by
+    intro i j hij
+    apply expWeightedCoefficients_monovary_of_separation hkmin hscale hk hgap
+    rw [hp i, hp j]
+    exact hij
+  exact cyclicProjectedVelocity_nonpos_of_permutedList_of_orderedCoefficients
+    target source hperm f z₀ z (fun i => k i * Real.exp (p i)) hcoeff
+    (by
+      intro i j hzij
+      rw [← hp i, ← hp j]
+      exact horder i j hzij)
+
+/-- A constant circulation weight around a cycle needs no separation margin: multiplying every
+source monomial by the same nonnegative cycle-flow coefficient preserves the ordering of its
+exponential weights. This is the single-cycle form consumed after decomposing a graph
+circulation into simple directed cycles. -/
+theorem cyclicProjectedVelocity_nonpos_of_constantCycleFlow
+    (σ : Equiv.Perm ι) (u : ι → E) (p : ι → ℝ) (z₀ z : E) (q : ℝ)
+    (hq : 0 ≤ q)
+    (hp : ∀ i, p i = ⟪z₀, u i⟫_ℝ)
+    (horder : ∀ i j, ⟪z, u i⟫_ℝ < ⟪z, u j⟫_ℝ → p i < p j) :
+    (∑ i, (q * Real.exp (p i)) * ⟪z, u (σ i) - u i⟫_ℝ) ≤ 0 := by
+  exact cyclicProjectedVelocity_nonpos_of_rateSeparation σ u (fun _ => q) p z₀ z
+    (kmin := q) (kmax := q) (δ := 0) hq (by simp)
+    (fun _ => ⟨le_rfl, le_rfl⟩)
+    (fun i j hij => by simpa using hij.le)
+    hp horder
+
+/-- A closed list of vertices yields a nonpositive exponentially weighted projected velocity.
+The permutation identifies each target position with a source position carrying the same vertex;
+the exponential coefficient is monotone in the projected source level. -/
+theorem cyclicProjectedVelocity_nonpos_of_permutedList
+    {α E : Type*} [BEq α] [LawfulBEq α]
+    [NormedAddCommGroup E] [InnerProductSpace ℝ E]
+    (target source : List α) (hperm : List.Perm target source)
+    (f : α → E) (z : E) (q : ℝ) (hq : 0 ≤ q) :
+    (∑ i : Fin source.length,
+      (q * Real.exp (⟪z, f (source.get i)⟫_ℝ)) *
+        ⟪z, f (target.get (finCongr hperm.length_eq.symm i)) -
+          f (source.get i)⟫_ℝ) ≤ 0 := by
+  classical
+  let eCast : Fin source.length ≃ Fin target.length := finCongr hperm.length_eq.symm
+  have hbij : Function.Bijective hperm.idxBij :=
+    ⟨hperm.idxBij_injective, hperm.idxBij_surjective⟩
+  let eIdx : Fin target.length ≃ Fin source.length := Equiv.ofBijective hperm.idxBij hbij
+  let σ : Equiv.Perm (Fin source.length) := eCast.trans eIdx
+  let u : Fin source.length → E := fun i => f (source.get i)
+  have htarget : ∀ i, f (target.get (eCast i)) = u (σ i) := by
+    intro i
+    have hi := hperm.getElem_idxBij_eq_getElem (eCast i)
+    simpa [u, σ, eCast, eIdx, List.get_eq_getElem] using congrArg f hi.symm
+  have hsum :
+      (∑ i : Fin source.length,
+        (q * Real.exp (⟪z, f (source.get i)⟫_ℝ)) *
+          ⟪z, f (target.get (eCast i)) - f (source.get i)⟫_ℝ) =
+      ∑ i : Fin source.length,
+        (q * Real.exp (⟪z, u i⟫_ℝ)) * ⟪z, u (σ i) - u i⟫_ℝ := by
+    apply Finset.sum_congr rfl
+    intro i _
+    rw [htarget i]
+  rw [hsum]
+  exact cyclicProjectedVelocity_nonpos_of_constantCycleFlow σ u
+    (fun i => ⟪z, u i⟫_ℝ) z z q hq (fun _ => rfl)
+    (by intro i j hij; exact hij)
+
+end ProjectedCycleVelocity
 
 end CRNT

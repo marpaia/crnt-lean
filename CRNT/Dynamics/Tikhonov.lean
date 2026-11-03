@@ -4,6 +4,11 @@ import Mathlib.Analysis.Calculus.MeanValue
 import Mathlib.Analysis.SpecialFunctions.Exp
 import CRNT.Dynamics.QSSA
 
+-- `⟪x, y⟫_ℝ` lives in the `InnerProductSpace` scope; without this open the bracket is
+-- not a valid token.
+open scoped InnerProductSpace
+
+
 /-!
 # Boundary-layer exponential attraction for a contracting fast subsystem
 

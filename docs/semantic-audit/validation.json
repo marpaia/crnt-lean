@@ -1,0 +1,17 @@
+{
+  "commit": "537ed72071a5957ada8e4edfbc606bd9d950910a",
+  "field_map_rows": 99,
+  "distinct_declarations": 1382,
+  "axiom_reports": 1382,
+  "missing": [],
+  "extra": [],
+  "unexpected_axioms": {},
+  "lean_exit_code": 0,
+  "correspondence_checks": {
+    "file": "docs/semantic-audit/CorrespondenceChecks.lean",
+    "lean_exit_code": 0,
+    "headline_axiom_reports": 7,
+    "unexpected_axioms": {},
+    "warnings": 0
+  }
+}

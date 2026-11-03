@@ -62,7 +62,7 @@ theorem massActionMonomial_le_coord_mul_pow {y : Complex S} {x : Concentration S
   -- residual product over erased universe bounded by `B ^ (sum over erased)`
   have hresid : ∏ s ∈ (Finset.univ.erase sstar), x s ^ (y s)
       ≤ ∏ s ∈ (Finset.univ.erase sstar), B ^ (y s) := by
-    refine Finset.prod_le_prod (fun s _ => pow_nonneg (hxnn s) _) (fun s _ => ?_)
+    refine Finset.prod_le_prod₀ (fun s _ => pow_nonneg (hxnn s) _) (fun s _ => ?_)
     exact pow_le_pow_left₀ (hxnn s) (hxB s) _
   have hxstar0 : 0 ≤ x sstar ^ (y sstar) := pow_nonneg (hxnn sstar) _
   -- combine: bound the residual, then the s*-factor

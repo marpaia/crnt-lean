@@ -299,7 +299,8 @@ theorem michaelisMenten_reduced_qssa_error (rate : ℝ) (hrate : 0 < rate) (Km V
   have hσcont : Continuous σ := continuous_iff_continuousAt.2 fun u =>
     (mmSubstrate_hasDerivAt Km Vmax hKm hV s₀ u).continuousAt
   have hσc : ContinuousOn (fun t => mmComplexEquil Km Vmax (σ t) • e0) (Icc 0 T) := by
-    refine (ContinuousOn.smul ?_ continuousOn_const)
+    refine ContinuousOn.smul (f := fun t => mmComplexEquil Km Vmax (σ t))
+      (g := fun _ => e0) ?_ continuousOn_const
     have hmm : ContinuousOn (mmComplexEquil Km Vmax) (Ici 0) := by
       have hfun : mmComplexEquil Km Vmax = fun s => Vmax * s / (Km + s) := rfl
       rw [hfun]

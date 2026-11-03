@@ -10,6 +10,7 @@ import CRNT.Graph.WeakReversibility
 import CRNT.Graph.LinkageClass
 import CRNT.Deficiency.Definition
 import CRNT.Theorems.DeficiencyZero.Statement
+import CRNT.Equilibria.WegscheiderConverse
 
 /-!
 # Reversible pair `A ⇌ B`
@@ -28,7 +29,11 @@ open CRNT
 inductive Species
   | A
   | B
-  deriving DecidableEq, Fintype, Repr
+  deriving DecidableEq, Repr
+
+instance : Fintype Species where
+  elems := {Species.A, Species.B}
+  complete := by intro s; cases s <;> simp
 
 open Species
 
@@ -42,7 +47,11 @@ def cB : Complex Species := fun s => match s with | A => 0 | B => 1
 inductive Rxn
   | fwd
   | bwd
-  deriving DecidableEq, Fintype, Repr
+  deriving DecidableEq, Repr
+
+instance : Fintype Rxn where
+  elems := {Rxn.fwd, Rxn.bwd}
+  complete := by intro r; cases r <;> simp
 
 /-- The reaction map. -/
 def rxn : Rxn → Reaction Species
@@ -133,5 +142,88 @@ theorem deficiencyZero : N.DeficiencyZero := by
 /-- The network satisfies the structural hypotheses of the deficiency-zero theorem. -/
 theorem satisfiesDeficiencyZeroHypotheses : N.SatisfiesDeficiencyZeroHypotheses :=
   ⟨weaklyReversible, deficiencyZero⟩
+
+/-! ## Detailed balance: a non-vacuity witness
+
+`ReversibleStructure` and `IsDetailedBalanced` are quantified predicates, and such a predicate can
+be accidentally unsatisfiable, or accidentally trivial, with no error appearing. This repository
+has already produced one such defect: `FloquetOrbitalStabilityTarget` asked only for *some* basin
+containing the orbit, satisfied by taking the basin to be the orbit itself, so it said nothing.
+
+The results below rule that out for the detailed-balance layer: this network carries a reversible
+structure, and it has a positive concentration that is detailed balanced -- hence, by
+`IsDetailedBalanced.isComplexBalanced` and `IsComplexBalanced.isSteadyState`, all three predicates
+of the classical chain are simultaneously satisfiable on a concrete network. -/
+
+/-- Products over the two-element species type expand to a single multiplication. `Species` is a
+derived-`Fintype` inductive, so neither `Finset.prod_univ_two` nor `decide` applies directly. -/
+theorem prod_univ_species (f : Species → ℝ) : (∏ s : Species, f s) = f A * f B := by
+  have huniv : (Finset.univ : Finset Species) = {A, B} := by decide
+  rw [huniv, Finset.prod_insert (by decide), Finset.prod_singleton]
+
+/-- Swapping the two channels exchanges source and target, so `A ⇌ B` carries a reversible
+pairing. -/
+def revStruct : Network.ReversiblePairing N where
+  rev := fun r => match r with | .fwd => .bwd | .bwd => .fwd
+  involutive := by intro r; cases r <;> rfl
+  source_rev := by intro r; cases r <;> rfl
+  target_rev := by intro r; cases r <;> rfl
+
+/-- Rate constants: `k₀` forward, `k₁` backward. -/
+def rates {k₀ k₁ : ℝ} (h₀ : 0 < k₀) (h₁ : 0 < k₁) : Network.RateConstants N where
+  k := fun r => match r with | .fwd => k₀ | .bwd => k₁
+  positive := by intro r; cases r <;> assumption
+
+/-- The equilibrium concentration `(k₁, k₀)`: reciprocal to the rate constants, which is the
+detailed-balance condition for a single reversible pair. -/
+def equilibrium (k₀ k₁ : ℝ) : Concentration Species :=
+  fun s => match s with | A => k₁ | B => k₀
+
+/-- The equilibrium concentration is strictly positive. -/
+theorem equilibrium_positive {k₀ k₁ : ℝ} (h₀ : 0 < k₀) (h₁ : 0 < k₁) :
+    (equilibrium k₀ k₁).Positive := by
+  intro s
+  cases s
+  · exact h₁
+  · exact h₀
+
+/-- **The witness.** At `(k₁, k₀)` the forward flux `k₀ · k₁` and the reverse flux `k₁ · k₀`
+coincide, so the concentration is detailed balanced. -/
+theorem equilibrium_isReactionwiseDetailedBalanced {k₀ k₁ : ℝ} (h₀ : 0 < k₀) (h₁ : 0 < k₁) :
+    N.IsReactionwiseDetailedBalanced revStruct (rates h₀ h₁) (equilibrium k₀ k₁) := by
+  intro r
+  cases r <;>
+    simp [Network.massActionRate, Complex.massActionMonomial, revStruct, rates, equilibrium,
+      N, rxn, cA, cB, prod_univ_species] <;>
+    ring
+
+/-- Hence the equilibrium is complex balanced -- the first link of the chain, on a concrete
+network. -/
+theorem equilibrium_isComplexBalanced {k₀ k₁ : ℝ} (h₀ : 0 < k₀) (h₁ : 0 < k₁) :
+    N.IsComplexBalanced (rates h₀ h₁) (equilibrium k₀ k₁) :=
+  N.isComplexBalanced_of_isDetailedBalanced _ _
+    (N.isDetailedBalanced_of_reactionwiseDetailedBalanced revStruct _ _
+      (equilibrium_isReactionwiseDetailedBalanced h₀ h₁))
+
+/-- And hence a genuine steady state of the mass-action dynamics -- the second link. -/
+theorem equilibrium_isSteadyState {k₀ k₁ : ℝ} (h₀ : 0 < k₀) (h₁ : 0 < k₁) :
+    N.IsMassActionSteadyState (rates h₀ h₁) (equilibrium k₀ k₁) :=
+  (equilibrium_isComplexBalanced h₀ h₁).isMassActionSteadyState N _
+
+/-- **The Wegscheider layer is non-vacuous.** `SatisfiesWegscheider` and
+`HasWegscheiderPotential` are quantified predicates over an orthogonal complement; this shows
+the concrete network `A ⇌ B` satisfies them for every choice of positive rate constants, via the
+detailed-balanced point exhibited above. -/
+theorem satisfiesWegscheider {k₀ k₁ : ℝ} (h₀ : 0 < k₀) (h₁ : 0 < k₁) :
+    N.SatisfiesWegscheider revStruct (rates h₀ h₁) :=
+  N.satisfiesWegscheider_of_reactionwiseDetailedBalanced revStruct (rates h₀ h₁)
+    (equilibrium_positive h₀ h₁) (equilibrium_isReactionwiseDetailedBalanced h₀ h₁)
+
+/-- Hence the species potential exists too, closing the loop on the equivalence in
+`WegscheiderConverse` for a concrete network. -/
+theorem hasWegscheiderPotential {k₀ k₁ : ℝ} (h₀ : 0 < k₀) (h₁ : 0 < k₁) :
+    N.HasWegscheiderPotential revStruct (rates h₀ h₁) :=
+  (N.satisfiesWegscheider_iff_hasWegscheiderPotential revStruct (rates h₀ h₁)).mp
+    (satisfiesWegscheider h₀ h₁)
 
 end CRNT.Examples.ReversiblePair

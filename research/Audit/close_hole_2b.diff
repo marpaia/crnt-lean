@@ -1,0 +1,32 @@
+--- orig/close_hole.sh	2026-10-04 00:00:44.842887000 -0400
++++ scripts/close_hole.sh	2026-10-04 00:00:45.160690330 -0400
+@@ -275,6 +275,29 @@
+ fi
+ 
+ 
++# ------------------------------------- 2b. transitive sorryAx of the whole module
++
++# Step 2 certifies ONE theorem.  That is the right granularity for "is this proof
++# axiom-clean" and the wrong one for "is this module trustworthy": `#print axioms` reports
++# the axiom closure of the named declaration only, so a module that imports a hole and uses
++# a holed declaration reports CLEAN for every theorem that does not happen to touch that
++# declaration.  A per-theorem check therefore passes a module whose other 200 theorems are
++# sorryAx-contaminated.
++#
++# `CRNT.Dynamics.GlobalAttractorTheorem` is the live example on `holes`: zero `sorry` of its
++# own, and `complexBalanced_genuinePermanent` at :1490 ends in an `exact` on
++# `N.exists_positive_omegaPoint_of_highCodimension_siphonFace` (:1555) -- Hole A's
++# `sorryAx`.  The bug this catches: close Hole A, and this module silently keeps a stale
++# `.olean` whose dependencies were never rebuilt.
++step "2b. transitive sorryAx of $MODULE"
++if "$PY" research/Audit/ledger_coverage.py --module "$MODULE_PATH"; then
++  record "transitive-sorryAx" "PASS"
++else
++  fail "the module (not just $THEOREM) is sorryAx-contaminated -- see step 2b above" \
++       "transitive-sorryAx"
++fi
++
++
+ # ---------------------------------------------------------- 3. sorry inventory
+ 
+ step "3. sorry inventory"

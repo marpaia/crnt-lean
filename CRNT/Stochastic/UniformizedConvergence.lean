@@ -219,7 +219,11 @@ theorem uRegionMatrix_stronglyConnected_of_regionStronglyConnected (N : Network 
     ∀ i j : ↥T, supportReaches (N.uRegionMatrix κ hTfin) i j := by
   intro i j
   -- lift the embedded support walk edge by edge to the uniformized support digraph.
-  refine Relation.ReflTransGen.mono ?_ (hsc i j)
+  have hsc' := hsc i j
+  unfold supportReaches at hsc' ⊢
+  refine (Relation.ReflTransGen.mono
+    (r := fun a c => N.regionMatrix κ T a c ≠ 0)
+    (p := fun a c => N.uRegionMatrix κ hTfin a c ≠ 0) ?_) i j hsc'
   intro a c hac
   -- a nonzero embedded entry is a positive entry, which forces a positive uniformized entry.
   have hpos : 0 < N.regionMatrix κ T a c :=

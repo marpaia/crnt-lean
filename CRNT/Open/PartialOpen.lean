@@ -57,18 +57,18 @@ def partialOpen (N : Network S) (O : Finset S) : Network S where
 theorem reactionVector_partialOpen_inflow (N : Network S) (O : Finset S) (s : {s // s ∈ O}) :
     (N.partialOpen O).reactionVector (Sum.inr (Sum.inl s)) = Pi.single s.val (1 : ℝ) := by
   funext s'
-  rw [reactionVector_apply, partialOpen_reaction_inflow]
+  simp only [reactionVector, partialOpen_reaction_inflow]
   simp only [inflowReaction, singletonComplex_apply, Complex.zero_apply, Pi.single_apply]
-  split <;> simp
+  split <;> simp_all
 
 /-- The outflow reaction's vector for an open species is `-e_s`. -/
 theorem reactionVector_partialOpen_outflow (N : Network S) (O : Finset S) (s : {s // s ∈ O}) :
     (N.partialOpen O).reactionVector (Sum.inr (Sum.inr s)) = -Pi.single s.val (1 : ℝ) := by
   funext s'
-  rw [reactionVector_apply, partialOpen_reaction_outflow]
+  simp only [reactionVector, partialOpen_reaction_outflow]
   simp only [outflowReaction, singletonComplex_apply, Complex.zero_apply, Pi.neg_apply,
     Pi.single_apply]
-  split <;> simp
+  split <;> simp_all
 
 /-- **The mass-action field of the partial-open extension at an open species splits** into the
 original reaction part, the constant inflow `κ(0 → s)`, and the linear outflow `−κ(s → 0)·x s`,
@@ -102,7 +102,7 @@ theorem massActionVectorField_partialOpen_apply_mem (N : Network S) (O : Finset 
       (N.partialOpen O).reactionVector (Sum.inl r) s) =
       ∑ r : N.R, (N.partialOpen O).massActionRate κ (Sum.inl r) x * N.reactionVector r s := by
     refine Finset.sum_congr rfl fun r _ => ?_
-    rw [reactionVector_apply, reactionVector_apply, partialOpen_reaction_inl]
+    simp only [reactionVector, partialOpen_reaction_inl]
   -- The inflow block collapses to its diagonal `⟨s, hsO⟩` term.
   have hin : (∑ t : {s // s ∈ O}, (N.partialOpen O).massActionRate κ (Sum.inr (Sum.inl t)) x *
       (N.partialOpen O).reactionVector (Sum.inr (Sum.inl t)) s) =
@@ -161,7 +161,10 @@ theorem partialOpen_originalRate_mul_reactionVector_nonneg_of_zero (N : Network 
       rw [partialOpen_reaction_inl, Complex.massActionMonomial,
         Finset.prod_eq_zero (Finset.mem_univ s)]
       rw [hs, zero_pow hsource]
-    rw [massActionRate, hmono, mul_zero, zero_mul]
+    have hmono' : (N.reaction r).source.massActionMonomial x = 0 := by
+      simpa [partialOpen_reaction_inl] using hmono
+    simp only [massActionRate, partialOpen_reaction_inl, hmono', mul_zero, zero_mul]
+    exact le_rfl
 
 /-- **A nonnegative steady state of the partial-open extension is strictly positive on every open
 species.** At an absent open species the field reduces to a sum of nonnegative original

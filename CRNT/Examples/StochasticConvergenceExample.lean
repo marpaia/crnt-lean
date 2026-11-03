@@ -141,7 +141,11 @@ attribute [local instance] CRNT.Network.instMeasurableSpaceCount
 inductive Species
   | A
   | B
-  deriving DecidableEq, Fintype, Repr
+  deriving DecidableEq, Repr
+
+instance : Fintype Species where
+  elems := {Species.A, Species.B}
+  complete := by intro s; cases s <;> simp
 
 open Species
 
@@ -155,7 +159,11 @@ def cB : Complex Species := fun s => match s with | A => 0 | B => 1
 inductive Rxn
   | fwd
   | bwd
-  deriving DecidableEq, Fintype, Repr
+  deriving DecidableEq, Repr
+
+instance : Fintype Rxn where
+  elems := {Rxn.fwd, Rxn.bwd}
+  complete := by intro r; cases r <;> simp
 
 /-- The reaction map. -/
 def rxn : Rxn → Reaction Species
@@ -197,7 +205,7 @@ theorem pair_not_closed_of_mem (κ : RateConstants N) {T : Set (Species → ℕ)
   -- firing `fwd` from `n` stays in `T` by closure, and lands on a count with first coordinate `0`.
   have hmem : N.jumpNextCount n Rxn.fwd ∈ T := hT.forward n hn Rxn.fwd
   have hzero : N.jumpNextCount n Rxn.fwd A = 0 := by
-    rw [jumpNextCount]; simp [N, rxn, cA, cB, hnA]
+    simp [jumpNextCount, N, rxn, cA, cB, hnA]
   -- but every member is enabled for `fwd`, whose source is `A = (1,0)`, forcing `1 ≤ ·` at `A`.
   have henabled : N.Enabled (N.jumpNextCount n Rxn.fwd) Rxn.fwd := hT.enabled _ hmem Rxn.fwd
   have hge : (1 : ℕ) ≤ N.jumpNextCount n Rxn.fwd A := by

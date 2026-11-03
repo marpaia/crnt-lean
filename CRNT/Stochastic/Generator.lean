@@ -38,7 +38,15 @@ variable {S : Type} [DecidableEq S] [Fintype S]
 species-by-species via `ℕ`-subtraction. This is `π(n − y)`, the inflow/outflow target
 density entering the master-equation balance. -/
 noncomputable def shiftedPMF (c : Concentration S) (n : S → ℕ) (y : Complex S) : ℝ :=
-  productPoissonPMF c (fun s => n s - y s)
+  if ∀ s, y s ≤ n s then productPoissonPMF c (fun s => n s - y s) else 0
+
+/-- Shifted product-Poisson masses are nonnegative at nonnegative concentrations. -/
+theorem shiftedPMF_nonneg (c : Concentration S) (hc : c.Nonnegative)
+    (n : S → ℕ) (y : Complex S) : 0 ≤ shiftedPMF c n y := by
+  unfold shiftedPMF
+  split
+  · exact productPoissonPMF_nonneg hc _
+  · exact le_rfl
 
 /-- The signed master-equation flux of reaction `r` at count `n` in ACK-substituted,
 complex-indexed form: the deterministic mass-action rate at the complex-balanced
@@ -176,6 +184,7 @@ theorem productPoissonPMF_mul_stochasticRate (N : Network S) (κ : RateConstants
     productPoissonPMF c n * N.stochasticMassActionRate κ n r =
       N.massActionRate κ r c * shiftedPMF c n (N.reaction r).source := by
   unfold stochasticMassActionRate shiftedPMF massActionRate Complex.massActionMonomial
+  rw [if_pos hn]
   rw [← mul_assoc, mul_comm (productPoissonPMF c n) (κ.k r), mul_assoc]
   rw [productPoissonPMF_mul_descFactorial N c n r hn]
   ring

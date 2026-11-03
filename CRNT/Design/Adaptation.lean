@@ -1,6 +1,7 @@
 import Mathlib.Tactic.DeriveFintype
 import Mathlib.Tactic.Linarith
 import Mathlib.Tactic.FieldSimp
+import Mathlib.Tactic
 import CRNT.Kinetics.MassAction
 import CRNT.Equilibria.SteadyState
 
@@ -40,7 +41,11 @@ inductive Species
   | Z1
   | Z2
   | X
-  deriving DecidableEq, Fintype, Repr
+  deriving DecidableEq, Repr
+
+instance : Fintype Species where
+  elems := {Species.Z1, Species.Z2, Species.X}
+  complete := by intro s; cases s <;> simp
 
 open Species
 
@@ -58,7 +63,11 @@ inductive Rxn
   | ref
   | sense
   | seq
-  deriving DecidableEq, Fintype, Repr
+  deriving DecidableEq, Repr
+
+instance : Fintype Rxn where
+  elems := {Rxn.ref, Rxn.sense, Rxn.seq}
+  complete := by intro r; cases r <;> simp
 
 /-- The reaction map: `ref` is `0 → Z1`, `sense` is `X → X + Z2`, and `seq` is
 `Z1 + Z2 → 0`. -/
