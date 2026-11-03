@@ -6,7 +6,7 @@ import CRNT.Deficiency.Definition
 import Mathlib.Basic.Sign.Basic
 
 /-!
-# The Deficiency One Algorithm: correctness of its feasibility test
+# Flux feasibility and multistationarity capacity
 
 Feinberg's Deficiency One Algorithm (1995b) decides the capacity of a deficiency-one mass-action
 network for multiple positive steady states by a **parameter-independent feasibility test**: one
@@ -14,9 +14,12 @@ solves, for the unknown log-ratio `μ = log y − log x` of the two candidate st
 system of **linear inequalities** in `μ`, together with a **linear feasibility problem** in the
 fluxes.  The algorithm affirms the capacity iff that system is feasible.
 
-This module formalizes the feasibility test and proves that **the test is correct**: the
-algorithm's system is solvable **iff** the network has the capacity for multiple steady states.
-Both directions are established.
+This module formalizes the semantic flux certificate `DOAFeasible` and proves that it exists
+**iff** the network has the capacity for multiple steady states. Both directions hold for every
+network, without a deficiency-one hypothesis. The certificate quantifies over real log-ratios
+and fluxes and contains exponential balance equations. This existence characterization does not
+provide the finite linear search of the published algorithm; the shelf/confluence and numerical
+obligations are described below.
 
 ## The system
 
@@ -39,8 +42,8 @@ The unknown is the log-ratio `μ ∈ ℝ^𝒮` of the two candidate steady state
   realizing the sign pattern of `μ`.
 * `capacity_implies_doaFeasible` — **the converse direction**: a network with the capacity yields a
   feasible system; the log-ratio of the two witnessing steady states is the solution.
-* `hasMultistationarityCapacity_iff_doaFeasible` — the two together: **the algorithm decides the
-  capacity**.
+* `hasMultistationarityCapacity_iff_doaFeasible` — the two together: capacity is equivalent to
+  the existence of a semantic flux certificate.
 * `doa_feasible_implies_capacity` — the same statement in the classical deficiency-one setting
   (deficiency one, stoichiometric rank one, one-dimensional stoichiometric subspace), the shape in
   which Feinberg's theorem is usually stated.
@@ -214,8 +217,8 @@ theorem capacity_implies_doaFeasible (N : Network S) (h : N.HasMultistationarity
   have hsc : N.SignCompatibleWithStoich μ := ⟨σ, hσS, sameSign_of_sign_eq hsign⟩
   exact ⟨{ μ := μ, α := α, μ_ne_zero := hμ0, α_pos := hα, sign_compatible := hsc, lower_balance := hflux, upper_balance := hflux' }⟩
 
-/-- **The Deficiency One Algorithm decides the capacity for multiple steady states**: the algorithm
-affirms the capacity exactly when its system is feasible. -/
+/-- Multistationarity capacity is equivalent to the existence of a semantic flux certificate.
+This theorem does not supply a decision procedure for the real existential statement. -/
 theorem hasMultistationarityCapacity_iff_doaFeasible (N : Network S) :
     N.HasMultistationarityCapacity ↔ N.DOAFeasible :=
   ⟨N.capacity_implies_doaFeasible, N.doaFeasible_implies_capacity⟩

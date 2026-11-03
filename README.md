@@ -110,6 +110,8 @@ example : N.WeaklyReversible := by
 - **Lean and formal methods:** [`docs/architecture.md`](docs/architecture.md) lays out the two layers,
   the core abstractions, and how the theorems depend on one another.
 - **Chemical reaction network theory:** the per-area documents below, starting from the result you want.
+- **Upgrading from Lean 4.31:** [`docs/pr1-migration.md`](docs/pr1-migration.md) describes the
+  toolchain, analyzer contract, compatibility entry points, and validation commands.
 
 ## Highlights
 
@@ -260,9 +262,9 @@ Grouped by area; the precise statements and module names are in each linked doc.
 - The **degree equals the sign of the reduced Jacobian determinant** at a steady state, with the
   Conradi–Feliu–Mincheva–Wiuf conclusion (a second positive steady state) obtained by a perturbation
   argument, and the degree shown independent of the rate constants
-- The **Deficiency One and Advanced Deficiency Algorithms proved to decide multistationarity
-  capacity**, in both directions, with the rank-one reduction of the algorithm's inequality system
-  and the shelf/confluence presentation bridged to the semantic criterion
+- **Flux-feasibility characterizations of multistationarity capacity**, in both directions, with
+  rank-one reductions and conditional bridges from shelf/confluence data. The finite published
+  Deficiency One and Advanced Deficiency Algorithms are not yet verified end to end.
 - The **two-reaction atom criterion** for the fully open network, and the **parity theorem** (the
   number of positive steady states of a fully open network is odd)
 - An **explicit description of the multistationarity region** of a rank-one network: the sign of the
@@ -363,11 +365,14 @@ remains is a specific missing piece.
   - The apparatus is formalized (network consistency via Stiemke, cut pairs, regularity, confluence
     vectors with their proven antisymmetry, shelves, signatures, colinearity classes), and the
     exclusion direction is proven: an injective network has no capacity for multiple steady states
-  - The **correctness equivalences are now proved in both directions**: a network has the capacity for
-    multiple steady states **iff** the Deficiency One Algorithm affirms it, and likewise for the
-    Advanced Deficiency Algorithm, whose shelf decomposition and per-shelf confluence vectors are
-    formalized. What remains is the multi-shelf converse (decomposing an arbitrary capacity flux into
-    shelf-wise confluence vectors) and the numerical version of the algorithm
+  - `HasMultistationarityCapacity ↔ DOAFeasible` and
+    `HasMultistationarityCapacity ↔ ADAFeasible` are proved for semantic flux certificates.
+    `DOAFeasible` quantifies over real log-ratios and fluxes with exponential balance equations;
+    `ADAFeasible` allows a one-shelf certificate. These equivalences do not supply a finite decision
+    procedure or establish correctness of the separately defined shelf verdicts
+    `DOAAffirmsCapacity` and `ADAAffirmsCapacity`. The bridge requires additional shelf-flux and
+    placement data; the general shelf construction, multi-shelf converse, and numerical procedure
+    remain incomplete. See [`docs/pr1-migration.md`](docs/pr1-migration.md).
 - Absolute concentration robustness (Shinar–Feinberg 2010) is proved:
   `Network.shinarFeinberg_ACRAt` (leaf S13 of `docs/field-map.md`).
 

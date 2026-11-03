@@ -5,7 +5,7 @@ import CRNT.Decision.ComputableDeficiency
 import Mathlib.Basic.Sign.Basic
 
 /-!
-# The Advanced Deficiency Algorithm: correctness of its feasibility test
+# Shelf flux certificates for multistationarity capacity
 
 The **Advanced Deficiency Algorithm** (ADA) is the higher-deficiency successor of Feinberg's
 Deficiency One Algorithm (DOA, 1995b): for a mass-action network of deficiency `δ ≥ 1` it decides
@@ -14,10 +14,11 @@ Like the DOA, the test is a finite system of **linear equalities and inequalitie
 log-ratio `μ = log y − log x` of the two candidate steady states, together with a **linear
 feasibility problem in the fluxes**.
 
-This module formalizes the ADA's feasibility test and proves that **the test is correct**: the
-ADA's system is solvable **iff** the network has the capacity for multiple steady states.  It is
-built directly on the correctness of the Deficiency One Algorithm proved in
-`CRNT.Multistationarity.DeficiencyOneAlgorithm`.
+This module formalizes the semantic shelf-flux certificate `ADAFeasible` and proves that it
+exists **iff** the network has the capacity for multiple steady states. It builds on the
+flux characterization in `CRNT.Multistationarity.DeficiencyOneAlgorithm`. The certificate permits
+one shelf containing every reaction, so the existence equivalence is not a verification of the
+published algorithm's prescribed shelf enumeration or its finite numerical search.
 
 ## The data of an ADA run
 
@@ -48,11 +49,10 @@ confluence vector per shelf.
 * `capacity_implies_adaFeasible` — **the converse direction**: a network with the capacity yields a
   feasible ADA system, namely the *one-shelf* system, in which the single shelf is the whole
   reaction set and its confluence vector is the flux of the witnessing steady states.  This is
-  exactly the Deficiency One Algorithm's system, so the two algorithms agree on the one-shelf
-  decomposition; the ADA's *extra* content is the multi-shelf decomposition, which is a strictly
-  stronger certificate (see `adaFeasible_implies_doaFeasible`).
-* `hasMultistationarityCapacity_iff_adaFeasible` — the two together: **the ADA decides the
-  capacity**.
+  the `DOAFeasible` flux certificate. Multi-shelf certificates carry additional decomposition data;
+  the permitted one-shelf choice makes their existence equivalent to the original flux criterion.
+* `hasMultistationarityCapacity_iff_adaFeasible` — the two together: capacity is equivalent to
+  the existence of a shelf-flux certificate.
 * `adaFeasible_implies_doaFeasible` — **the ADA refines the DOA**: an ADA-feasible network is
   DOA-feasible, the global flux being the DOA witness.
 * `doaFeasible_implies_adaFeasible` — the converse refinement, on the one-shelf system.
@@ -374,8 +374,8 @@ theorem capacity_implies_adaFeasible {S : Type} [DecidableEq S] [Fintype S]
   have hsc : N.SignCompatibleWithStoich μ := ⟨σ, hσS, sameSign_of_sign_eq hsign⟩
   exact ⟨N.oneShelfDecomposition, N.oneShelfConfluences μ α hα hflux hflux', hμ0, hsc⟩
 
-/-- **The Advanced Deficiency Algorithm decides the capacity for multiple steady states**: the
-algorithm affirms the capacity exactly when its system is feasible. -/
+/-- Multistationarity capacity is equivalent to the existence of a shelf-flux certificate.
+The allowed one-shelf certificate suffices for the converse; no finite search is implemented. -/
 theorem hasMultistationarityCapacity_iff_adaFeasible {S : Type} [DecidableEq S] [Fintype S]
     (N : Network S) :
     N.HasMultistationarityCapacity ↔ N.ADAFeasible :=

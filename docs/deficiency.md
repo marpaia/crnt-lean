@@ -10,9 +10,9 @@ keeps its focus on the *existence* and *uniqueness* of equilibria.
 The deficiency program, due to **Horn, Jackson, and Feinberg**, is the observation that a single
 nonnegative integer `δ = n − ℓ − s`, read off purely from the reaction graph (number of complexes
 `n`, linkage classes `ℓ`, stoichiometric rank `s`), governs the equilibrium behavior of a
-mass-action network *independently of the rate constants*. When `δ = 0` the network has, for every
-positive choice of rate constants, exactly one equilibrium per positive compatibility class, and
-that equilibrium is complex-balanced (Feinberg, *Chemical reaction network structure and the
+mass-action network *independently of the rate constants*. When `δ = 0` and the network is weakly
+reversible, every positive choice of rate constants gives exactly one equilibrium per positive
+compatibility class, and that equilibrium is complex-balanced (Feinberg, *Chemical reaction network structure and the
 stability of complex isothermal reactors: the deficiency-zero and deficiency-one theorems*). When
 `δ = 1`, under additional graph hypotheses, uniqueness persists. The deficiency-one and
 advanced-deficiency algorithms that decide the capacity for multiple steady states from this same
@@ -272,6 +272,17 @@ What is proven of each is **non-vacuity**: affirming capacity exhibits a nonzero
 advanced-deficiency module captures the per-class `Mᵢ` variables and shelf constraints but omits the
 within-class sign comparisons and coplanar-set `Mᵢ`-orderings of Ji's advanced-deficiency system,
 which only enlarges the set of runs considered.
+
+**Semantic flux certificates.** The separate modules
+`CRNT/Multistationarity/DeficiencyOneAlgorithm.lean` and
+`CRNT/Multistationarity/AdvancedDeficiencyAlgorithm.lean` prove
+`HasMultistationarityCapacity ↔ DOAFeasible` and
+`HasMultistationarityCapacity ↔ ADAFeasible`. These quantify over real fluxes and log-ratios
+with exponential balance equations. They are existence characterizations; their names do not
+identify them with the finite shelf searches above. The shelf bridge in
+`CRNT/Deficiency/DeficiencyOneAlgorithmCorrectness.lean` requires additional shelf-flux and
+placement data, and `ShelfFluxConstruction.lean` gives conditional assembly results and a
+concrete instance. General algorithm correctness and the numerical procedure remain incomplete.
 
 ## Modules
 
