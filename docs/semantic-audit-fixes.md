@@ -28,3 +28,5 @@ The [audit](semantic-audit.md) records the source at `537ed72`. This document de
 `test/FieldMapAudit.lean` pins the axiom sets for every declaration in the current field map. `scripts/audit_advertised_statements.py` additionally exports their elaborated types and records coverage; it does not decide semantic correspondence. The post-fix validation metadata are in [fixes-validation.json](semantic-audit/fixes-validation.json). Reproduce the checks with the commands in [the migration guide](pr1-migration.md).
 
 The repair branch is local; this record does not assert remote CI, publication, or a merge.
+
+Local validation of implementation commit `c22e38a` passed the full 8,669-job build, all 30 Lean test modules, the audit reproduction entry point, all five compiled analyzer tests, and the five static checks. All 1,397 distinct declarations in the current 99-row map resolved and had axiom dependencies contained in `propext`, `Classical.choice`, and `Quot.sound`. The CI workflow now also requires the advertised-declaration export, and field-map changes trigger CI. The later validation-record commit changes documentation/metadata only.
