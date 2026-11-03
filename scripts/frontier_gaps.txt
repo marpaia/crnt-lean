@@ -2,7 +2,3 @@
 # obligations that remain to be written.  One per line: name<TAB>file.
 # Regenerate with: python3 scripts/check_undefined_names.py --write-gaps
 # This list must only ever shrink.  See LEDGER.md.
-completeOscillationKernelBundle_of_tube	test/FrontierAudit.lean
-noDrainableSiphonOmega_of_minimalDichotomy	test/GlobalPersistenceSmoke.lean
-nondegenerateDependentReactionPersistence_proved	test/FrontierAudit.lean
-stableDependentReactionPersistence_proved	test/FrontierAudit.lean

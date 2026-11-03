@@ -14,7 +14,7 @@ Six checks.  Checks 1-4 are the original four; 5 and 6 replace a coverage gap in
   5. `CRNT.lean` does not reach any module carrying a `sorry`/`axiom`/`admit` --
      asserted DIRECTLY on the import closure, not as an intersection with the ledger.
   6. Every `CRNT/` module is accounted for: in the ledger, or in the closure, or
-     explicitly noted as glob-only.  `Scaffold/` is reported as being in no target.
+     explicitly noted as glob-only. `Scaffold/` must be covered by the `Scaffold.+` target.
 
 WHY 5 EXISTS.  Check 4 has been vacuous since the ledger was emptied at c56739b:
 `set(ledger) & closure` is `set() & anything` == `set()`, so it cannot fail and its
@@ -37,6 +37,7 @@ import os
 import re
 import subprocess
 import sys
+import tomllib
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LEDGER = os.path.join(ROOT, "scripts", "unverified_modules.txt")
@@ -90,6 +91,17 @@ def crnt_modules() -> set[str]:
 
 def scaffold_modules() -> set[str]:
     return _modules_under("Scaffold")
+
+
+def scaffold_target_covers_all() -> bool:
+    with open(os.path.join(ROOT, "lakefile.toml"), "rb") as fh:
+        config = tomllib.load(fh)
+    return any(
+        lib.get("name") == "Scaffold"
+        and "Scaffold.+" in lib.get("globs", [])
+        and not lib.get("excludeGlobs", [])
+        for lib in config.get("lean_lib", [])
+    )
 
 
 CRNT_MODULES = crnt_modules()
@@ -157,7 +169,8 @@ def main() -> int:
                 where = next(k for k, v in buckets.items() if m in v)
                 print(f"  {m}  [{where}]")
         sc = scaffold_modules()
-        print(f"\n  {len(sc):4d}  Scaffold/ modules -- in NO lake target, never elaborated")
+        target = "covered by Scaffold.+" if scaffold_target_covers_all() else "NOT covered by Scaffold.+"
+        print(f"\n  {len(sc):4d}  Scaffold/ modules -- {target}")
         for m in sorted(sc):
             print(f"          {m}")
         return 0
@@ -261,10 +274,8 @@ def main() -> int:
     # ---- 6. every CRNT/ module is in some build target ----------------------
     # The 145 are built by the `CRNT.+` glob, so they are not lost -- but nothing
     # *stated* that, and the only thing that would catch one silently leaving every
-    # target is a check that no module is in no target.  `Scaffold/` is excluded and
-    # reported: it is in no lake target at all (per orchestrator item 6), so a module
-    # there is built by nothing, and `measure.py`'s `scaffold_mods` is a grep count
-    # rather than a build result.  Saying so is the honest reading.
+    # target is a check that no module is in no target. Scaffolds have a separate
+    # blanket glob so new scaffolds cannot silently escape elaboration either.
     on_disk = set(crnt_modules())
     covered = (set(ledger) | reachable) & on_disk
     uncovered = sorted(on_disk - covered)
@@ -277,8 +288,12 @@ def main() -> int:
 
     scaffold = scaffold_modules()
     if scaffold:
-        print(f"note: {len(scaffold)} Scaffold/ module(s) are in NO lake target and are "
-              f"never elaborated; their 'verified' status is a grep, not a build.")
+        if scaffold_target_covers_all():
+            print(f"ok: all {len(scaffold)} Scaffold/ module(s) are covered by Scaffold.+")
+        else:
+            print("::error::Scaffold/ modules must be covered by the Scaffold.+ target",
+                  file=sys.stderr)
+            failed = True
 
     return 1 if failed else 0
 

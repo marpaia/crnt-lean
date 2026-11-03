@@ -53,7 +53,7 @@ theorem tierDescendingPermanence_of_absorbingBoundsKernel
     N.TierDescendingPermanenceClaim := by
   intro htier κ ϕ γ hflow
   exact N.permanentForFlow_of_entry_and_uniform_bounds hflow
-    (K κ ϕ γ hflow htier)
+    (K κ ϕ γ hflow htier) hflow
 
 /-- The single remaining kernel for the standard strongly-endotactic permanence route. -/
 structure StrongEndotacticPermanenceKernels (N : Network S) : Prop where

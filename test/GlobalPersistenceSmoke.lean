@@ -5,7 +5,7 @@ import CRNT.Dynamics.GlobalPersistenceFrontier
 # Global persistence API smoke checks
 
 This file intentionally contains only name/type checks.  It catches accidental module/export
-regressions when the project is compiled in an environment with Lean 4.31 and Mathlib available.
+regressions under the pinned Lean and Mathlib toolchain.
 -/
 
 #check CRNT.Network.PersistentForRates

@@ -1,5 +1,4 @@
-# Number of .lean modules under Scaffold/.  Pin: check_exclusions.py fails when this
-# and the tree disagree, so a scaffold module cannot be added or lost silently.
-# `Scaffold/` is in .gitignore, so a new scaffold file has to be force-added to move
-# this number -- on purpose.  Verified by `lake build Scaffold`.
+# Historical number of .lean modules under Scaffold/ at PR #1's original head.
+# Coverage is enforced by the Scaffold.+ glob and check_exclusions.py; this count is
+# informational. CI elaborates every scaffold with `lake build Scaffold`.
 24

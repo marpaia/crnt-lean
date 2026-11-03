@@ -6,7 +6,9 @@ the list of modules Lean has never elaborated.  Two targets are derived from it:
 
     CRNT           everything under CRNT/ except the ledger  -- must build green
     CRNTFrontier   the ledger, plus every module the ledger has *ever* held
-                   -- allowed to fail, error count tracked
+                   -- must build green
+
+Scaffold.+ and every Lean test module are included in separate required targets.
 
 Two lists, not one, and the second one matters.  The original lakefile enumerated
 the 449 verified modules by name, so a new file was silently left out of the build
@@ -47,22 +49,6 @@ LEDGER = os.path.join(ROOT, "scripts", "unverified_modules.txt")
 HISTORY = os.path.join(ROOT, "scripts", "frontier_history.txt")
 LAKEFILE = os.path.join(ROOT, "lakefile.toml")
 FRONTIER = os.path.join(ROOT, "CRNTFrontier.lean")
-
-# Test modules that cannot build.  Kept tiny and explicit; same shrink-only rule.
-UNVERIFIED_TESTS = [
-    # Stale: five of its `#check`s name declarations that do not exist anywhere
-    # (globalPersistenceCertificate_of_persistenceCertified, ...), and it imports
-    # CRNT.Dynamics.GlobalPersistenceFrontier, which is itself unverified.
-    "test.GlobalPersistenceSmoke",
-    # Staged: imports CRNTFrontier, which does not elaborate yet.  Remove this line the
-    # moment `lake build CRNTFrontier` is clean -- it is the acceptance test for the
-    # oscillation development's central claim.
-    "test.FrontierAudit",
-    # Staged: imports CRNT.Examples.Lotka, which is still in the frontier target.  Holds the
-    # strongest negative control for the exclusion route; move into test/NonVacuity.lean as soon
-    # as the example elaborates.
-    "test.LotkaNonVacuity",
-]
 
 MATHLIB_REV = "v4.34.0"
 
@@ -105,7 +91,7 @@ def all_crnt_modules() -> list[str]:
 
 
 def test_globs() -> list[str]:
-    """Every `test/` module except `UNVERIFIED_TESTS`.
+    """Every `test/` module, including the frontier audits and negative controls.
 
     Lake does not honour `excludeGlobs` on this library -- a module listed there is still
     elaborated (verified by patching the key, both as `excludeGlobs` and `exclude_globs`,
@@ -114,13 +100,12 @@ def test_globs() -> list[str]:
     the original property: a newly added test file is in the build by default.
     """
     out = []
-    for name in sorted(os.listdir(os.path.join(ROOT, "test"))):
-        if not name.endswith(".lean"):
-            continue
-        mod = "test." + name[: -len(".lean")]
-        if mod not in UNVERIFIED_TESTS:
-            out.append(mod)
-    return out
+    for base, _, files in os.walk(os.path.join(ROOT, "test")):
+        for name in files:
+            if name.endswith(".lean"):
+                rel = os.path.relpath(os.path.join(base, name), ROOT)
+                out.append(rel[:-len(".lean")].replace(os.sep, "."))
+    return sorted(out)
 
 
 # ------------------------------------------------------------------- validation
@@ -212,11 +197,15 @@ excludeGlobs = {toml_list(ledger)}
 # The frontier: the ledger plus everything the frontier target has ever covered
 # (scripts/frontier_history.txt).  `CRNTFrontier.lean` is generated from the same set,
 # so a module that graduates out of the ledger is elaborated here instead of quietly
-# dropping out of the metric.  Historically expected to fail; the count, not the
-# colour, is the progress metric.  See CRNTFrontier.lean.
+# dropping out of build coverage. CI requires this target to elaborate successfully.
 [[lean_lib]]
 name = "CRNTFrontier"
 globs = {toml_list(frontier)}
+
+# Research scaffolds are checked for elaboration independently of the public umbrella.
+[[lean_lib]]
+name = "Scaffold"
+globs = ["Scaffold.+"]
 
 [[lean_lib]]
 name = "test"
@@ -247,10 +236,10 @@ def render_frontier(frontier: list[str], ledger: list[str]) -> str:
 /-!
 # Frontier aggregator.
 
-This target is allowed to fail; its elaboration-error count is the tracked metric.
 Every module it imports is elaborated by `lake build CRNTFrontier`, including the
 ones that have graduated into the verified `CRNT` target -- that is what makes the
-count monotone instead of a function of which modules happen to be unverified today.
+coverage independent of which modules happen to be unverified today. CI requires
+this target to build successfully.
 -/
 """
 
@@ -395,13 +384,13 @@ def main() -> int:
             return 1
         print(f"ok: lakefile.toml, CRNTFrontier.lean and frontier_history.txt all in sync "
               f"({len(ledger)} excluded, {len(frontier)} on the frontier, "
-              f"{len(tests)} test module(s) built, {len(UNVERIFIED_TESTS)} test exclusions)")
+              f"{len(tests)} test module(s) built, no test exclusions)")
         return 0
 
     print(f"wrote lakefile.toml: {len(ledger)} excluded from CRNT, "
           f"{len(frontier)} in CRNTFrontier "
           f"({len(frontier) - len(ledger)} graduated), "
-          f"{len(tests)} test module(s) built, {len(UNVERIFIED_TESTS)} excluded")
+          f"{len(tests)} test module(s) built, no test exclusions")
     return 0
 
 

@@ -32,9 +32,6 @@ VOCAB = os.path.join(ROOT, "scripts", "repo_vocabulary.txt")
 ALLOW = os.path.join(ROOT, "scripts", "external_names.txt")
 LEDGER = os.path.join(ROOT, "scripts", "unverified_modules.txt")
 GAPS = os.path.join(ROOT, "scripts", "frontier_gaps.txt")
-# Test modules excluded from the test library; kept in sync with gen_lakefile.py.
-UNVERIFIED_TESTS = {"test/GlobalPersistenceSmoke.lean", "test/FrontierAudit.lean",
-                    "test/LotkaNonVacuity.lean"}
 
 DECL = re.compile(
     r"^\s*(?:@\[[^\]]*\]\s*)?"
@@ -86,7 +83,7 @@ def strip_comments(text: str) -> str:
 
 def unverified_paths() -> set[str]:
     """Files belonging to the frontier target, by relative path."""
-    out = set(UNVERIFIED_TESTS)
+    out: set[str] = set()
     if os.path.exists(LEDGER):
         with open(LEDGER, encoding="utf-8") as fh:
             for ln in fh:

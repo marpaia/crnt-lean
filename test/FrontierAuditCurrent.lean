@@ -2,21 +2,11 @@ import CRNT
 import CRNTFrontier
 
 /-!
-# Frontier axiom audit, reconciled with this source tree
+# Frontier theorem dependency audit
 
-`test/FrontierAudit.lean` is excluded from the `test` library and **cannot run against this
-snapshot**: eight of the nine declarations it audits do not exist here (all of
-`completeOscillationKernelBundle_of_tube`, `planarKernelBundle_proved`,
-`vassenaKernelBundle_proved`, `parameterRichCoreKernelBundle_proved`,
-`stabilityInheritanceKernelBundle_of_tube`, `recipeZeroKernelBundle_proved`,
-`nondegenerateDependentReactionPersistence_proved` and
-`stableDependentReactionPersistence_proved` have zero references in `CRNT/`).  It belongs to a
-different snapshot than the source.  It is left untouched, because deleting its checks would
-silently weaken an acceptance test; reconciling the two is a task for whoever knows where the
-oscillation bundle lives.
-
-This file is the gating audit that *does* match the tree.  Both `CRNT` (700 modules) and
-`CRNTFrontier` (473 modules) build cleanly, so it can run.
+This file pins the current global-attraction, SR-graph, and Floquet endpoints.
+`test.FrontierAudit` separately pins the conditional oscillation bundle constructors. Both run
+under `lake test`; auditing a conditional constructor does not discharge its input hypotheses.
 
 ## Why the incomplete results are pinned too
 
@@ -77,12 +67,8 @@ audit clean.  `test/BanajiCraciunAudit.lean` pins the route itself. -/
 
 /-! ## Clean frontier endpoints
 
-Everything else reachable from `CRNTFrontier` must audit as
-`[propext, Classical.choice, Quot.sound]`.  `floquetOrbitalStability_of_tube` is the one check of
-`test/FrontierAudit.lean` whose target still exists, and it passes; the three Floquet constructions
-that file reports as undeclared (`constructTransverseFloquetSectionData`,
-`constructParameterizedPoincarePersistence`, `massActionFloquetData_of_branchMonodromy`) now have
-zero references anywhere in `CRNT/`, so that gap is closed. -/
+The tube-based Floquet result must retain only the allowed axioms. The general stability and
+inheritance constructors still consume explicit targets, audited in `test.FrontierAudit`. -/
 
 /-- info: 'CRNT.Network.floquetOrbitalStability_of_tube' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in

@@ -31,16 +31,17 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROOTS = {"CRNTFrontier"}  # library roots that are not modules under CRNT/
 
-IMPORT = re.compile(r"^\s*import\s+((?:CRNT|CRNTFrontier)[\w.]*)\s*$")
+IMPORT = re.compile(r"^\s*import\s+((?:CRNT|CRNTFrontier|Scaffold)[\w.]*)\s*$")
 
 
 def modules() -> set[str]:
     out = set()
-    for base, _, files in os.walk(os.path.join(ROOT, "CRNT")):
-        for f in files:
-            if f.endswith(".lean"):
-                rel = os.path.relpath(os.path.join(base, f), ROOT)
-                out.add(rel[:-5].replace(os.sep, "."))
+    for top in ("CRNT", "Scaffold"):
+        for base, _, files in os.walk(os.path.join(ROOT, top)):
+            for f in files:
+                if f.endswith(".lean"):
+                    rel = os.path.relpath(os.path.join(base, f), ROOT)
+                    out.add(rel[:-5].replace(os.sep, "."))
     if os.path.exists(os.path.join(ROOT, "CRNT.lean")):
         out.add("CRNT")
     for r in ROOTS:

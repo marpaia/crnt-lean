@@ -4,12 +4,7 @@ import CRNT.Examples.Lotka
 /-!
 # Non-vacuity, Lotka witness
 
-Split out of `test/NonVacuity.lean` because `CRNT.Examples.Lotka` is still in the frontier target:
-its proofs are written but have never been elaborated. This file is registered in
-`scripts/gen_lakefile.py` under `UNVERIFIED_TESTS` and is excluded from `lake test`.
-
-Move these four checks into `test/NonVacuity.lean` and delete the exclusion the moment
-`CRNT.Examples.Lotka` builds. They are the strongest negative control available for the exclusion
+These checks run under `lake test`. They are a negative control for the exclusion
 route: the Lotka network really does have positive periodic orbits (Lotka-Volterra has a first
 integral whose positive level sets are closed curves), so a `noPositivePeriodicOrbitCertified` flag
 that reported `true` here would be reporting a falsehood, not merely being uninformative.

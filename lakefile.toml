@@ -22,8 +22,7 @@ excludeGlobs = []
 # The frontier: the ledger plus everything the frontier target has ever covered
 # (scripts/frontier_history.txt).  `CRNTFrontier.lean` is generated from the same set,
 # so a module that graduates out of the ledger is elaborated here instead of quietly
-# dropping out of the metric.  Historically expected to fail; the count, not the
-# colour, is the progress metric.  See CRNTFrontier.lean.
+# dropping out of build coverage. CI requires this target to elaborate successfully.
 [[lean_lib]]
 name = "CRNTFrontier"
 globs = [
@@ -75,6 +74,11 @@ globs = [
   "CRNT.Theorems.DeficiencyOne.WeaklyReversibleExistence"
 ]
 
+# Research scaffolds are checked for elaboration independently of the public umbrella.
+[[lean_lib]]
+name = "Scaffold"
+globs = ["Scaffold.+"]
+
 [[lean_lib]]
 name = "test"
 globs = [
@@ -84,10 +88,13 @@ globs = [
   "test.FacetAudit",
   "test.FieldMapAudit",
   "test.FosterAudit",
+  "test.FrontierAudit",
   "test.FrontierAuditCurrent",
+  "test.GlobalPersistenceSmoke",
   "test.InheritanceAudit",
   "test.IntermediateAudit",
   "test.LotkaAudit",
+  "test.LotkaNonVacuity",
   "test.MonotoneAudit",
   "test.NewLeavesAudit",
   "test.NonExplosionAudit",

@@ -52,8 +52,8 @@ import CRNT.Theorems.DeficiencyOne.WeaklyReversibleExistence
 /-!
 # Frontier aggregator.
 
-This target is allowed to fail; its elaboration-error count is the tracked metric.
 Every module it imports is elaborated by `lake build CRNTFrontier`, including the
 ones that have graduated into the verified `CRNT` target -- that is what makes the
-count monotone instead of a function of which modules happen to be unverified today.
+coverage independent of which modules happen to be unverified today. CI requires
+this target to build successfully.
 -/

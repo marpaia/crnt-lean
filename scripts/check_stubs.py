@@ -55,7 +55,7 @@ PATTERNS = [
     ("admit", re.compile(r"(?<!`)\badmit\b(?!`)")),
 ]
 
-SCAN_DIRS = ["CRNT", "test"]
+SCAN_DIRS = ["CRNT", "Scaffold", "test"]
 SCAN_FILES = ["CRNT.lean", "Analyze.lean"]
 
 
