@@ -134,7 +134,7 @@ theorem `massAction_forwardInvariant_nonneg` phrases its `hLip`. The functional 
 the dissipativity bound is the genuine residual structural certificate, while on the face
 itself the field-sum over `P` vanishes unconditionally
 (`faceSum_deriv_witness_eq_zero_on_siphonFace`). -/
-theorem siphonFace_forwardInvariant (N : Network S) (κ : RateConstants N)
+theorem siphonFace_forwardInvariant_forward (N : Network S) (κ : RateConstants N)
     {P : Finset S} {γ : ℝ → Concentration S} {L : ℝ}
     (hderiv : ∀ t, 0 ≤ t → HasDerivAt γ (N.massActionVectorField κ (γ t)) t)
     (hnn : ∀ t, 0 ≤ t → (γ t).Nonnegative)
@@ -282,6 +282,18 @@ theorem siphonFace_forwardInvariant (N : Network S) (κ : RateConstants N)
   have hge : 0 ≤ g t := faceSum_nonneg (hnn t ht)
   have hgeq : faceSum P (γ t) = 0 := le_antisymm (hgle t ht) hge
   exact (mem_siphonFace_iff N).mpr ⟨hnn t ht, hgeq⟩
+
+/-- Siphon-face invariance for a solution defined at every real time. The forward-time form
+`siphonFace_forwardInvariant_forward` only needs the differential equation for `t ≥ 0`. -/
+theorem siphonFace_forwardInvariant (N : Network S) (κ : RateConstants N)
+    {P : Finset S} {γ : ℝ → Concentration S} {L : ℝ}
+    (hderiv : ∀ t, HasDerivAt γ (N.massActionVectorField κ (γ t)) t)
+    (hnn : ∀ t, 0 ≤ t → (γ t).Nonnegative)
+    (hdiss : ∀ t, 0 ≤ t →
+      deriv (fun u => faceSum P (γ u)) t ≤ L * faceSum P (γ t) ∨ faceSum P (γ t) ≤ 0)
+    (h0 : γ 0 ∈ N.SiphonFace P) :
+    ∀ t, 0 ≤ t → γ t ∈ N.SiphonFace P :=
+  N.siphonFace_forwardInvariant_forward κ (fun t _ => hderiv t) hnn hdiss h0
 
 /-- **The derivative witness of the face functional vanishes on a siphon face.** On the
 face of a siphon `P`, the sum over `P` of the mass-action field components — the natural

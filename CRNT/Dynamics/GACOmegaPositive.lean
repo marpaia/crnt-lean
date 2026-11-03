@@ -85,7 +85,7 @@ theorem complexBalanced_and_massActionVectorField_eq_zero_of_mem_boundaryOmega_s
   have hconstant : ∀ t, 0 ≤ t → relEntropy xstar (γ w t) = c :=
     fun t ht => hωc (γ w t) (hyωt t ht)
   have hface : ∀ t, 0 ≤ t → γ w t ∈ N.SiphonFace P :=
-    N.siphonFace_forwardInvariant_of_relEntropy_le κ hP hxs (hgenω w hw) hnonneg
+    N.siphonFace_forwardInvariant_of_relEntropy_le_forward κ hP hxs (hgenω w hw) hnonneg
       (fun t ht => (hconstant t ht).le) hface0
   have hpair := N.complexBalanced_and_massActionVectorField_eq_zero_of_constantEntropy_siphonFaceOrbit
     κ hP hwr hxs hcb (hγ0 w) hface hpositive (hgenω w hw) hconstant

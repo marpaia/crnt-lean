@@ -106,7 +106,7 @@ The box hypothesis of `siphonFace_forwardInvariant_confined` is discharged here:
 (`coord_le_uniformBox`) turns the relative-entropy bound `hrele` into the uniform coordinate
 bound `γ t s ≤ uniformBox x* C`, supplying `hbox` with `B = uniformBox x* C`. No box confinement
 is assumed — only control of the Lyapunov functional. -/
-theorem siphonFace_forwardInvariant_of_relEntropy_le (N : Network S) (κ : N.RateConstants)
+theorem siphonFace_forwardInvariant_of_relEntropy_le_forward (N : Network S) (κ : N.RateConstants)
     {P : Finset S} (hP : N.IsSiphon P) {xstar : Concentration S} (hxs : xstar.Positive)
     {γ : ℝ → Concentration S} {C : ℝ}
     (hderiv : ∀ t, 0 ≤ t → HasDerivAt γ (N.massActionVectorField κ (γ t)) t)
@@ -114,8 +114,20 @@ theorem siphonFace_forwardInvariant_of_relEntropy_le (N : Network S) (κ : N.Rat
     (hrele : ∀ t, 0 ≤ t → relEntropy xstar (γ t) ≤ C)
     (h0 : γ 0 ∈ N.SiphonFace P) :
     ∀ t, 0 ≤ t → γ t ∈ N.SiphonFace P :=
-  N.siphonFace_forwardInvariant_confined κ hP (B := uniformBox xstar C) hderiv hnn
+  N.siphonFace_forwardInvariant_confined_forward κ hP (B := uniformBox xstar C) hderiv hnn
     (fun t ht s => coord_le_uniformBox hxs (hnn t ht) (hrele t ht) s) h0
+
+/-- Relative-entropy-confined siphon-face invariance for a solution defined at every real time. -/
+theorem siphonFace_forwardInvariant_of_relEntropy_le (N : Network S) (κ : N.RateConstants)
+    {P : Finset S} (hP : N.IsSiphon P) {xstar : Concentration S} (hxs : xstar.Positive)
+    {γ : ℝ → Concentration S} {C : ℝ}
+    (hderiv : ∀ t, HasDerivAt γ (N.massActionVectorField κ (γ t)) t)
+    (hnn : ∀ t, 0 ≤ t → (γ t).Nonnegative)
+    (hrele : ∀ t, 0 ≤ t → relEntropy xstar (γ t) ≤ C)
+    (h0 : γ 0 ∈ N.SiphonFace P) :
+    ∀ t, 0 ≤ t → γ t ∈ N.SiphonFace P :=
+  N.siphonFace_forwardInvariant_of_relEntropy_le_forward κ hP hxs
+    (fun t _ => hderiv t) hnn hrele h0
 
 /-- **Unconditional confined siphon-face invariance for a positive complex-balanced orbit.** A
 *positive* genuine mass-action integral curve `γ` with a positive complex-balanced reference
@@ -139,7 +151,7 @@ theorem siphonFace_forwardInvariant_of_complexBalanced (N : Network S) (κ : N.R
     relEntropy_antitone_along_solution N κ hxs hcb hpos
       (fun t s => (hasDerivAt_pi.mp (hderiv t)) s)
   exact N.siphonFace_forwardInvariant_of_relEntropy_le κ hP hxs (C := relEntropy xstar (γ 0))
-    (fun t _ => hderiv t) (fun t _ => (hpos t).nonnegative) (fun t ht => hanti ht) h0
+    hderiv (fun t _ => (hpos t).nonnegative) (fun t ht => hanti ht) h0
 
 end Network
 

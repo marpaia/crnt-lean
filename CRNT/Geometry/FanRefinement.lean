@@ -3884,6 +3884,11 @@ theorem exists_patch_normal_of_card_lt_finrank [FiniteDimensional ℝ E] {ι : T
     ∃ n : E, n ≠ 0 ∧ ∀ i, ⟪v i, n⟫_ℝ = 0 :=
   exists_orthogonal_normal_of_card_lt_finrank v hcard
 
+/-- Compatibility name for `exists_patch_normal_of_card_lt_finrank`. The cardinality bound is
+an explicit hypothesis; constructing a refinement with that bound is a separate obligation. -/
+@[deprecated exists_patch_normal_of_card_lt_finrank (since := "2026-11-03")]
+alias refined_patch_normal_exists := exists_patch_normal_of_card_lt_finrank
+
 /-- Craciun v3, §7.4.3 and §8 Step 1: the bounded normalized projective source is cut by the
 lower-dimensional central-arrangement cells. The last coordinate is the fiber coordinate; the
 arrangement label is pulled back from the projected base. -/

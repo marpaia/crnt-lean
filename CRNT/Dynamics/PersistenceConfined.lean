@@ -189,7 +189,7 @@ This drops the dissipativity hypothesis of `siphonFace_forwardInvariant`: the on
 `V'(γ t) ≤ C·V(γ t)` is supplied internally by the monomial-factoring estimate
 `faceSum_field_le`, since the derivative of `V = faceSum P` along the curve is the face-sum of
 the field. -/
-theorem siphonFace_forwardInvariant_confined (N : Network S) (κ : N.RateConstants)
+theorem siphonFace_forwardInvariant_confined_forward (N : Network S) (κ : N.RateConstants)
     {P : Finset S} (hP : N.IsSiphon P) {γ : ℝ → Concentration S} {B : ℝ}
     (hderiv : ∀ t, 0 ≤ t → HasDerivAt γ (N.massActionVectorField κ (γ t)) t)
     (hnn : ∀ t, 0 ≤ t → (γ t).Nonnegative)
@@ -197,7 +197,7 @@ theorem siphonFace_forwardInvariant_confined (N : Network S) (κ : N.RateConstan
     (h0 : γ 0 ∈ N.SiphonFace P) :
     ∀ t, 0 ≤ t → γ t ∈ N.SiphonFace P := by
   obtain ⟨C, _hCnn, hC⟩ := N.faceSum_field_le κ hP B
-  refine N.siphonFace_forwardInvariant κ (L := C) hderiv hnn ?_ h0
+  refine N.siphonFace_forwardInvariant_forward κ (L := C) hderiv hnn ?_ h0
   intro t ht
   left
   -- `deriv (fun u => faceSum P (γ u)) t = ∑ s ∈ P, f(γ t) s`, then apply `faceSum_field_le`
@@ -213,6 +213,16 @@ theorem siphonFace_forwardInvariant_confined (N : Network S) (κ : N.RateConstan
     exact hsum
   rw [hgderiv.deriv]
   exact hC (γ t) (hnn t ht) (hbox t ht)
+
+/-- Confined siphon-face invariance for a solution defined at every real time. -/
+theorem siphonFace_forwardInvariant_confined (N : Network S) (κ : N.RateConstants)
+    {P : Finset S} (hP : N.IsSiphon P) {γ : ℝ → Concentration S} {B : ℝ}
+    (hderiv : ∀ t, HasDerivAt γ (N.massActionVectorField κ (γ t)) t)
+    (hnn : ∀ t, 0 ≤ t → (γ t).Nonnegative)
+    (hbox : ∀ t, 0 ≤ t → ∀ s, γ t s ≤ B)
+    (h0 : γ 0 ∈ N.SiphonFace P) :
+    ∀ t, 0 ≤ t → γ t ∈ N.SiphonFace P :=
+  N.siphonFace_forwardInvariant_confined_forward κ hP (fun t _ => hderiv t) hnn hbox h0
 
 end Network
 

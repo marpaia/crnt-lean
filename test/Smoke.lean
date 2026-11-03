@@ -1921,7 +1921,7 @@ example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConst
     (hderiv : ∀ t, HasDerivAt γ (N.massActionVectorField κ (γ t)) t)
     (hnn : ∀ t, 0 ≤ t → (γ t).Nonnegative) (hbox : ∀ t, 0 ≤ t → ∀ s, γ t s ≤ B)
     (h0 : γ 0 ∈ N.SiphonFace P) : ∀ t, 0 ≤ t → γ t ∈ N.SiphonFace P :=
-  N.siphonFace_forwardInvariant_confined κ hP (fun t _ => hderiv t) hnn hbox h0
+  N.siphonFace_forwardInvariant_confined κ hP hderiv hnn hbox h0
 
 -- Constructed Fenichel slow manifold: the fibre-equilibrium graph map is stationary by construction.
 example {Y E : Type*} [NormedAddCommGroup E] [InnerProductSpace ℝ E] (M : ODE.SlowManifoldSeed Y E)
@@ -1983,7 +1983,7 @@ example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConst
     (hderiv : ∀ t, HasDerivAt γ (N.massActionVectorField κ (γ t)) t)
     (hnn : ∀ t, 0 ≤ t → (γ t).Nonnegative) (hrele : ∀ t, 0 ≤ t → relEntropy xstar (γ t) ≤ C)
     (h0 : γ 0 ∈ N.SiphonFace P) : ∀ t, 0 ≤ t → γ t ∈ N.SiphonFace P :=
-  N.siphonFace_forwardInvariant_of_relEntropy_le κ hP hxs (fun t _ => hderiv t) hnn hrele h0
+  N.siphonFace_forwardInvariant_of_relEntropy_le κ hP hxs hderiv hnn hrele h0
 
 -- True Michaelis–Menten slow-manifold reduction: the substrate-dependent complex equilibrium is the
 -- Michaelis–Menten rate law `V_max·s/(K_m+s)`.

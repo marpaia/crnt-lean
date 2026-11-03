@@ -564,7 +564,7 @@ theorem massActionVectorField_eq_zero_of_confined_constantEntropy_siphonFaceOrbi
     {c : ℝ} (hconstantEntropy : ∀ t, 0 ≤ t → relEntropy xstar (γ t) = c) :
     N.massActionVectorField κ x = 0 := by
   have hface : ∀ t, 0 ≤ t → γ t ∈ N.SiphonFace P :=
-    N.siphonFace_forwardInvariant_of_relEntropy_le κ hP hxs hderiv hnonneg
+    N.siphonFace_forwardInvariant_of_relEntropy_le_forward κ hP hxs hderiv hnonneg
       (fun t ht => (hconstantEntropy t ht).le) h0
   exact N.massActionVectorField_eq_zero_of_constantEntropy_siphonFaceOrbit
     κ hP hwr hxs hcb hγ0 hface hpositive hderiv hconstantEntropy
