@@ -67,6 +67,44 @@ noncomputable def negativeFluxSystem (N : Network S) (eR : N.R ≃ Fin (Fintype.
   P.toList.map (fun s =>
       encodeRow eR (fun r => N.reactionCoeffQ r s) (-1))
 
+/-- Computable positive-margin encoding with explicit species and reaction enumerations. -/
+def positiveFluxSystemOfEquiv (N : Network S) (eS : S ≃ Fin (Fintype.card S))
+    (eR : N.R ≃ Fin (Fintype.card N.R)) (P : Finset S) : List (Ineq (Fintype.card N.R)) :=
+  ((enumOfEquiv eR).map fun r : N.R =>
+      encodeRow eR (fun q => if q = r then -1 else 0) 0) ++
+  ((enumOfEquiv eS).filter (fun s => decide (s ∈ P))).map (fun s =>
+      encodeRow eR (fun r => -(N.reactionCoeffQ r s)) (-1))
+
+/-- Computable negative-margin encoding with explicit species and reaction enumerations. -/
+def negativeFluxSystemOfEquiv (N : Network S) (eS : S ≃ Fin (Fintype.card S))
+    (eR : N.R ≃ Fin (Fintype.card N.R)) (P : Finset S) : List (Ineq (Fintype.card N.R)) :=
+  ((enumOfEquiv eR).map fun r : N.R =>
+      encodeRow eR (fun q => if q = r then -1 else 0) 0) ++
+  ((enumOfEquiv eS).filter (fun s => decide (s ∈ P))).map (fun s =>
+      encodeRow eR (fun r => N.reactionCoeffQ r s) (-1))
+
+theorem mem_positiveFluxSystemOfEquiv (N : Network S) (eS : S ≃ Fin (Fintype.card S))
+    (eR : N.R ≃ Fin (Fintype.card N.R)) (P : Finset S) (I : Ineq (Fintype.card N.R)) :
+    I ∈ N.positiveFluxSystemOfEquiv eS eR P ↔ I ∈ N.positiveFluxSystem eR P := by
+  simp only [positiveFluxSystemOfEquiv, positiveFluxSystem, List.mem_append, List.mem_map,
+    List.mem_filter, mem_enumOfEquiv, decide_eq_true_eq, true_and, Finset.mem_toList]
+
+theorem mem_negativeFluxSystemOfEquiv (N : Network S) (eS : S ≃ Fin (Fintype.card S))
+    (eR : N.R ≃ Fin (Fintype.card N.R)) (P : Finset S) (I : Ineq (Fintype.card N.R)) :
+    I ∈ N.negativeFluxSystemOfEquiv eS eR P ↔ I ∈ N.negativeFluxSystem eR P := by
+  simp only [negativeFluxSystemOfEquiv, negativeFluxSystem, List.mem_append, List.mem_map,
+    List.mem_filter, mem_enumOfEquiv, decide_eq_true_eq, true_and, Finset.mem_toList]
+
+theorem feasible_positiveFluxSystemOfEquiv_iff (N : Network S) (eS : S ≃ Fin (Fintype.card S))
+    (eR : N.R ≃ Fin (Fintype.card N.R)) (P : Finset S) :
+    Feasible (N.positiveFluxSystemOfEquiv eS eR P) ↔ Feasible (N.positiveFluxSystem eR P) := by
+  simp only [Feasible, Sat, mem_positiveFluxSystemOfEquiv]
+
+theorem feasible_negativeFluxSystemOfEquiv_iff (N : Network S) (eS : S ≃ Fin (Fintype.card S))
+    (eR : N.R ≃ Fin (Fintype.card N.R)) (P : Finset S) :
+    Feasible (N.negativeFluxSystemOfEquiv eS eR P) ↔ Feasible (N.negativeFluxSystem eR P) := by
+  simp only [Feasible, Sat, mem_negativeFluxSystemOfEquiv]
+
 /-- Scaling a strict positive flux witness gives a real solution of the unit-margin rational
 system. -/
 theorem feasibleReal_positiveFluxSystem_of_flux (N : Network S)
@@ -468,61 +506,67 @@ theorem isDrainable_iff_feasible_negativeFluxSystem (N : Network S)
       (N.naturalFluxDrainable_of_feasible_negative eR P hQ)
 
 /-- Exact self-replicability decision using an explicit reaction enumeration. -/
-noncomputable def decidableIsSelfReplicableOfEquiv (N : Network S)
+def decidableIsSelfReplicableOfEquiv (N : Network S)
     (eR : N.R ≃ Fin (Fintype.card N.R)) (P : Finset S) : Decidable (N.IsSelfReplicable P) :=
-  decidable_of_iff _ (N.isSelfReplicable_iff_feasible_positiveFluxSystem eR P).symm
+  Trunc.recOnSubsingleton (Fintype.truncEquivFin S) fun eS =>
+    decidable_of_iff (Feasible (N.positiveFluxSystemOfEquiv eS eR P))
+      ((N.feasible_positiveFluxSystemOfEquiv_iff eS eR P).trans
+        (N.isSelfReplicable_iff_feasible_positiveFluxSystem eR P).symm)
 
 /-- Exact drainability decision using an explicit reaction enumeration. -/
-noncomputable def decidableIsDrainableOfEquiv (N : Network S)
+def decidableIsDrainableOfEquiv (N : Network S)
     (eR : N.R ≃ Fin (Fintype.card N.R)) (P : Finset S) : Decidable (N.IsDrainable P) :=
-  decidable_of_iff _ (N.isDrainable_iff_feasible_negativeFluxSystem eR P).symm
+  Trunc.recOnSubsingleton (Fintype.truncEquivFin S) fun eS =>
+    decidable_of_iff (Feasible (N.negativeFluxSystemOfEquiv eS eR P))
+      ((N.feasible_negativeFluxSystemOfEquiv_iff eS eR P).trans
+        (N.isDrainable_iff_feasible_negativeFluxSystem eR P).symm)
 
 /-- Finite pathway self-replicability is decidable. -/
-noncomputable instance decidableIsSelfReplicable (N : Network S) (P : Finset S) :
+instance decidableIsSelfReplicable (N : Network S) (P : Finset S) :
     Decidable (N.IsSelfReplicable P) :=
   Trunc.recOnSubsingleton (Fintype.truncEquivFin N.R) fun eR =>
     N.decidableIsSelfReplicableOfEquiv eR P
 
 /-- Finite pathway drainability is decidable. -/
-noncomputable instance decidableIsDrainable (N : Network S) (P : Finset S) :
+instance decidableIsDrainable (N : Network S) (P : Finset S) :
     Decidable (N.IsDrainable P) :=
   Trunc.recOnSubsingleton (Fintype.truncEquivFin N.R) fun eR =>
     N.decidableIsDrainableOfEquiv eR P
 
-noncomputable instance decidableIsSelfReplicableSiphon (N : Network S) (P : Finset S) :
+instance decidableIsSelfReplicableSiphon (N : Network S) (P : Finset S) :
     Decidable (N.IsSelfReplicableSiphon P) := by
   unfold IsSelfReplicableSiphon
   infer_instance
 
-noncomputable instance decidableIsDrainableSiphon (N : Network S) (P : Finset S) :
+instance decidableIsDrainableSiphon (N : Network S) (P : Finset S) :
     Decidable (N.IsDrainableSiphon P) := by
   unfold IsDrainableSiphon
   infer_instance
 
-noncomputable instance decidableHasNoSelfReplicableSiphon (N : Network S) :
+instance decidableHasNoSelfReplicableSiphon (N : Network S) :
     Decidable (N.HasNoSelfReplicableSiphon) := by
   unfold HasNoSelfReplicableSiphon
   infer_instance
 
-noncomputable instance decidableHasNoDrainableSiphon (N : Network S) :
+instance decidableHasNoDrainableSiphon (N : Network S) :
     Decidable (N.HasNoDrainableSiphon) := by
   unfold HasNoDrainableSiphon
   infer_instance
 
-noncomputable instance decidableIsMinimalCriticalSiphon (N : Network S) (P : Finset S) :
+instance decidableIsMinimalCriticalSiphon (N : Network S) (P : Finset S) :
     Decidable (N.IsMinimalCriticalSiphon P) := by
   unfold IsMinimalCriticalSiphon
   infer_instance
 
 /-- The Deshpande--Gopalkrishnan alternative is a decidable finite proposition on each concrete
 network even before its universal theorem is formalized. -/
-noncomputable instance decidableMinimalCriticalSiphonDichotomy (N : Network S) :
+instance decidableMinimalCriticalSiphonDichotomy (N : Network S) :
     Decidable (N.MinimalCriticalSiphonDichotomy) := by
   unfold MinimalCriticalSiphonDichotomy
   infer_instance
 
 /-- Flux-form minimal-critical dichotomy is likewise decidable. -/
-noncomputable instance decidableMinimalCriticalSiphonFluxDichotomy (N : Network S) :
+instance decidableMinimalCriticalSiphonFluxDichotomy (N : Network S) :
     Decidable (N.MinimalCriticalSiphonFluxDichotomy) := by
   -- Use the already equivalent finite pathway proposition instead of attempting to decide
   -- existential real functions directly.

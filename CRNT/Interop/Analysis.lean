@@ -253,7 +253,7 @@ structure Analysis where
 namespace NetworkData
 
 /-- **Analyze a data-driven network**: compute its structural invariants in one record. -/
-noncomputable def analyze (d : NetworkData) : Analysis :=
+def analyze (d : NetworkData) : Analysis :=
   let N := d.toNetwork
   let acr : Array Nat := (((List.finRange d.numSpecies).filter
     (fun s => decide (N.HasShinarFeinbergPair s))).map Fin.val).toArray

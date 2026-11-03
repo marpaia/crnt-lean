@@ -1,4 +1,4 @@
-import CRNT
+import CRNT.Interop.Analysis
 
 /-!
 # The `analyze` executable
