@@ -1,114 +1,19 @@
 import CRNT.Equilibria.ToricSteadyStates
-import CRNT.Equilibria.MESSI
+import CRNT.Equilibria.SingletonSource
 import CRNT.LinearAlgebra.OrthogonalComplement
 import Mathlib.LinearAlgebra.Dimension.Free
 import Mathlib.Tactic.FieldSimp
 import Mathlib.Tactic.Linarith
 
 /-!
-# Rational parametrizations of toric steady-state varieties and general
-# steady-state invariants
+# Exponential log-kernel parametrizations and steady-state invariants
 
-This file completes the two remaining items of field-map leaf **S17** (*Linear
-elimination; MESSI systems; toric steady states; rational parametrizations;
-steady-state invariants*): the **rational parametrization** of the toric
-steady-state variety, and the **general** (not only linear) steady-state
-invariants.
-
-## The mathematics
-
-A mass-action system whose steady-state equations are **binomial**,
-`x ^ aᵢ = cᵢ x ^ bᵢ` with `cᵢ > 0`, has a **toric** positive steady-state
-variety: a positive point `x` is a steady state iff `log x` is orthogonal to
-every exponent difference `aᵢ − bᵢ`
-(`CRNT.binomial_solution_iff_log_orthogonal`,
-`CRNT.Network.toricSteadyState_iff_log_orthogonal`).  Equivalently the variety
-is the image of the **torus**
-
-```
-    𝕋 := { exp v | v ∈ ker (aᵢ − bᵢ) }
-```
-
-under the **monomial map** `v ↦ x* · exp v`, where `x*` is any one positive
-steady state (the *rational* parametrization of Pérez Millán–Dickenstein 2018,
-*A characterization of the steady states of mass action systems*).
-
-The **exponent-difference (incidence) matrix** of the binomial system is the
-linear map `CRNT.expPairingMap a b : (S → ℝ) →ₗ[ℝ] (ι → ℝ)`, and its kernel is
-the **log-kernel** `CRNT.expLogKernel a b`, the linear space of
-log-concentrations orthogonal to all `aᵢ − bᵢ`.  It is also the orthogonal
-complement of the span of the exponent differences
-(`CRNT.expLogKernel_eq_orthSum_span`).
-
-Main results of this file:
-
-* `CRNT.Network.toric_positiveSteadyStates_eq_parametrization` — the positive
-  steady states are exactly the image of the monomial parametrization over the
-  log-kernel;
-* `CRNT.Network.exists_unique_toric_parametrization` — the parametrization is
-  a **bijection** onto the positive steady states;
-* `CRNT.Network.toric_steadyStates_eq_exp_kernel` — if all binomial
-  coefficients are `1` — the *homogeneous* binomials `x ^ aᵢ = x ^ bᵢ`, e.g.
-  the reversible pair `X ⇌ Y` at equal rate constants — the variety is
-  *exactly* `{ exp v | v ∈ ker (aᵢ − bᵢ) }`, i.e. the exponentials of the
-  kernel of the incidence matrix
-  (`CRNT.Network.toric_steadyStates_eq_exp_ker` spells the kernel out as
-  `LinearMap.ker (expPairingMap a b)`);
-* `CRNT.Network.toric_steadyStates_eq_exp_affine` — in general the log-condition
-  is *affine*, `⟨aᵢ − bᵢ, v⟩ = log cᵢ`, so the exponential form with a
-  *linear* kernel holds exactly for homogeneous binomials;
-* `CRNT.Network.toric_positiveSteadyStates_eq_coset` — in general the variety
-  is a **coset** `x* · 𝕋` of the torus `𝕋` in the multiplicative monoid of
-  positive vectors: `𝕋` is a group under componentwise multiplication
-  (`CRNT.toricTorus_mul`, `CRNT.toricTorus_inv`, `CRNT.toricTorus_mul_inv`).
-
-The hypotheses are stated precisely: nothing is claimed for arbitrary networks,
-the binomial hypothesis `htor` is an explicit hypothesis of every theorem
-below.
-
-## The linear-elimination (MESSI) class
-
-For a MESSI network (every reaction has a *singleton* source complex) the
-steady-state variety `V` is a **linear subspace** of `ℝ^S`
-(`CRNT.Network.messiVariety`), hence a rational variety; it is parametrized
-linearly by a basis of `V`
-(`CRNT.Network.messi_variety_eq_linearParametrization`,
-`CRNT.Network.messi_positiveSteadyStates_eq_linearParametrization`).  The two
-parametrizations are related as follows: if such a network *additionally* has
-a homogeneous binomial presentation of its steady-state equations, then the
-linear variety is the **linear span of the torus**
-(`CRNT.Network.messi_toric_variety_eq_span_torus`).
-
-## General steady-state invariants
-
-A **steady-state invariant** is a *function* that is constant on the steady
-states (`CRNT.Network.IsSteadyStateInvariantFun`, and
-`CRNT.Network.IsPositiveSteadyStateInvariant` for the positive ones).  For a
-toric network the positive steady states form a single torus orbit, so a
-function is an invariant iff it is constant on that orbit
-(`CRNT.Network.steadyStateInvariant_of_log_orthogonal`, together with the
-converse `CRNT.Network.steadyStateInvariant_iff_log_orthogonal`).  For a
-MESSI network the steady states are a linear subspace, so the general
-invariants are exactly the functions constant on that subspace — and, since the
-subspace contains the origin, they are determined by their value at the origin
-(`CRNT.Network.messi_generalInvariant_iff_constantOnVariety`,
-`CRNT.Network.messi_generalInvariant_iff_valueAtOrigin`,
-`CRNT.Network.messi_generalInvariant_iff_linearParametrization`).  The
-*linear* invariants were developed in `CRNT/Equilibria/MESSI.lean`; they are the
-annihilator of the steady-state variety
-(`CRNT.Network.messi_linearInvariant_iff_rowSpace`).
-
-## A concrete instance
-
-The reversible pair `X ⇌ Y` at equal rate constants is worked out in
-`CRNT.Examples.ToricParametrization`: its steady-state variety is the line
-`x_X = x_Y`, its positive part is the torus `{ (t, t) : t > 0 } = exp { v :
-v_X = v_Y }`, and the *nonlinear* invariant `x ↦ x_X / x_Y` is constant (`= 1`)
-there, while it is **not** constant on the whole (unrestricted) steady-state
-variety — a distinction that the linear invariants do not see.
-
-Depends on: `CRNT.Equilibria.ToricSteadyStates`, `CRNT.Equilibria.MESSI`,
-`CRNT.LinearAlgebra.OrthogonalComplement`.
+The positive binomial steady-state set is parametrized by exponentiating an
+appropriate log-kernel/affine subspace, with the stated coefficient hypotheses.
+The file also characterizes invariants of singleton-source linear systems.
+A rational parametrization in independent algebraic coordinates requires an
+integer-lattice/exponent bridge which is not constructed here. This file does
+not complete the published partitioned MESSI theory.
 -/
 
 namespace CRNT
@@ -400,7 +305,7 @@ theorem toric_steadyState_exists_parametrization
   obtain ⟨v, hv, hxv⟩ := h1
   exact ⟨v, hv, hxv⟩
 
-/-- **The rational parametrization of the toric steady-state variety.**  Under the
+/-- **The exponential log-kernel parametrization of the toric steady-state variety.**  Under the
 binomial hypothesis `htor`, the positive steady states of `N` are exactly the image of
 the monomial parametrization over the log-kernel of the exponent differences: the
 variety is the image of a torus under a monomial map. -/
@@ -597,7 +502,7 @@ theorem toric_positiveSteadyStates_eq_coset
       funext s; simp [monomialMul, toricParametrization, expVec]]
     exact h1
 
-/-! ## The linear parametrization of a MESSI steady-state variety -/
+/-! ## The linear parametrization of a SingletonSource steady-state variety -/
 
 omit [DecidableEq S] [Fintype S] in
 /-- **The ambient coordinates of a linear combination of basis vectors.** -/
@@ -607,69 +512,69 @@ theorem coe_sum_smul {ι : Type} [Fintype ι] (V : Submodule ℝ (S → ℝ))
   simp only [Submodule.coe_sum, Finset.sum_apply, Submodule.coe_smul, Pi.smul_apply,
     smul_eq_mul]
 
-/-- A basis of the steady-state variety of a MESSI network.  The variety is a finite
+/-- A basis of the steady-state variety of a SingletonSource network.  The variety is a finite
 dimensional linear subspace, hence admits a basis. -/
-noncomputable def messiVarietyBasis (N : Network S) (κ : N.RateConstants) :
-    Module.Basis (Fin (Module.finrank ℝ (N.messiVariety κ))) ℝ (N.messiVariety κ) :=
-  Module.finBasis ℝ (N.messiVariety κ)
+noncomputable def singletonSourceVarietyBasis (N : Network S) (κ : N.RateConstants) :
+    Module.Basis (Fin (Module.finrank ℝ (N.singletonSourceVariety κ))) ℝ (N.singletonSourceVariety κ) :=
+  Module.finBasis ℝ (N.singletonSourceVariety κ)
 
 /-- Each basis vector of the steady-state variety is a steady state. -/
-theorem messiVarietyBasis_mem (N : Network S) (κ : N.RateConstants)
-    (B : Module.Basis (Fin (Module.finrank ℝ (N.messiVariety κ))) ℝ (N.messiVariety κ))
-    (j : Fin (Module.finrank ℝ (N.messiVariety κ))) :
-    (B j : S → ℝ) ∈ N.messiVariety κ := by
-  have h : (B j : S → ℝ) ∈ (N.messiVariety κ : Set (S → ℝ)) := SetLike.coe_mem (B j)
+theorem singletonSourceVarietyBasis_mem (N : Network S) (κ : N.RateConstants)
+    (B : Module.Basis (Fin (Module.finrank ℝ (N.singletonSourceVariety κ))) ℝ (N.singletonSourceVariety κ))
+    (j : Fin (Module.finrank ℝ (N.singletonSourceVariety κ))) :
+    (B j : S → ℝ) ∈ N.singletonSourceVariety κ := by
+  have h : (B j : S → ℝ) ∈ (N.singletonSourceVariety κ : Set (S → ℝ)) := SetLike.coe_mem (B j)
   exact h
 
 /-- **The linear parametrization of the steady-state variety.**  With a basis `B` of the
 variety, every steady state is a linear combination `∑ j, u j • B j` of the basis
-vectors; this is the rational parametrization of the (linear, hence rational)
-steady-state variety of a MESSI network. -/
-theorem messi_variety_eq_linearParametrization (N : Network S) (κ : N.RateConstants)
-    (B : Module.Basis (Fin (Module.finrank ℝ (N.messiVariety κ))) ℝ (N.messiVariety κ))
+vectors; this is the exponential log-kernel parametrization of the (linear, hence rational)
+steady-state variety of a SingletonSource network. -/
+theorem singletonSource_variety_eq_linearParametrization (N : Network S) (κ : N.RateConstants)
+    (B : Module.Basis (Fin (Module.finrank ℝ (N.singletonSourceVariety κ))) ℝ (N.singletonSourceVariety κ))
     (x : Concentration S) :
-    x ∈ N.messiVariety κ ↔
-      ∃ u : Fin (Module.finrank ℝ (N.messiVariety κ)) → ℝ,
+    x ∈ N.singletonSourceVariety κ ↔
+      ∃ u : Fin (Module.finrank ℝ (N.singletonSourceVariety κ)) → ℝ,
         x = fun s => ∑ j, u j * (B j : S → ℝ) s := by
   constructor
   · intro hx
     refine ⟨B.repr ⟨x, hx⟩, ?_⟩
     have hsum := B.sum_repr ⟨x, hx⟩
     funext s
-    have hco := coe_sum_smul (N.messiVariety κ) B (B.repr ⟨x, hx⟩) s
+    have hco := coe_sum_smul (N.singletonSourceVariety κ) B (B.repr ⟨x, hx⟩) s
     rw [← hco, hsum]
   · rintro ⟨u, rfl⟩
-    have hmem : ((∑ j, u j • B j : N.messiVariety κ) : S → ℝ) ∈ N.messiVariety κ := by
+    have hmem : ((∑ j, u j • B j : N.singletonSourceVariety κ) : S → ℝ) ∈ N.singletonSourceVariety κ := by
       rw [Submodule.coe_sum]
       exact Submodule.sum_mem _ fun j _ =>
-        (N.messiVariety κ).smul_mem _ (N.messiVarietyBasis_mem κ B j)
+        (N.singletonSourceVariety κ).smul_mem _ (N.singletonSourceVarietyBasis_mem κ B j)
     have hfun : (fun s => ∑ j, u j * (B j : S → ℝ) s)
-        = ((∑ j, u j • B j : N.messiVariety κ) : S → ℝ) := by
+        = ((∑ j, u j • B j : N.singletonSourceVariety κ) : S → ℝ) := by
       funext s
-      exact (coe_sum_smul (N.messiVariety κ) B u s).symm
+      exact (coe_sum_smul (N.singletonSourceVariety κ) B u s).symm
     rw [hfun]
     exact hmem
 
-/-- The image of the linear parametrization of the steady-state variety of a MESSI
+/-- The image of the linear parametrization of the steady-state variety of a SingletonSource
 network, restricted to a set of parameters. -/
-def messiLinearParametrization (N : Network S) (κ : N.RateConstants)
-    (B : Module.Basis (Fin (Module.finrank ℝ (N.messiVariety κ))) ℝ (N.messiVariety κ))
-    (P : Set (Fin (Module.finrank ℝ (N.messiVariety κ)) → ℝ)) : Set (Concentration S) :=
+def singletonSourceLinearParametrization (N : Network S) (κ : N.RateConstants)
+    (B : Module.Basis (Fin (Module.finrank ℝ (N.singletonSourceVariety κ))) ℝ (N.singletonSourceVariety κ))
+    (P : Set (Fin (Module.finrank ℝ (N.singletonSourceVariety κ)) → ℝ)) : Set (Concentration S) :=
   { fun s => ∑ j, u j * (B j : S → ℝ) s | u ∈ P }
 
-/-- **The positive steady states of a MESSI network are the positive part of the linear
+/-- **The positive steady states of a SingletonSource network are the positive part of the linear
 parametrization.** -/
-theorem messi_positiveSteadyStates_eq_linearParametrization (N : Network S)
-    (κ : N.RateConstants) (hM : MESSI N)
-    (B : Module.Basis (Fin (Module.finrank ℝ (N.messiVariety κ))) ℝ (N.messiVariety κ)) :
+theorem singletonSource_positiveSteadyStates_eq_linearParametrization (N : Network S)
+    (κ : N.RateConstants) (hM : SingletonSource N)
+    (B : Module.Basis (Fin (Module.finrank ℝ (N.singletonSourceVariety κ))) ℝ (N.singletonSourceVariety κ)) :
     { x : Concentration S | x.Positive ∧ N.IsMassActionSteadyState κ x }
-      = N.messiLinearParametrization κ B
+      = N.singletonSourceLinearParametrization κ B
           { u | ∀ s, 0 < ∑ j, u j * (B j : S → ℝ) s } := by
   ext x
   constructor
   · rintro ⟨hx, hss⟩
-    have hx' : x ∈ N.messiVariety κ := (mem_messiVariety_iff N κ hM x).mpr hss
-    obtain ⟨u, hu⟩ := (messi_variety_eq_linearParametrization N κ B x).mp hx'
+    have hx' : x ∈ N.singletonSourceVariety κ := (mem_singletonSourceVariety_iff N κ hM x).mpr hss
+    obtain ⟨u, hu⟩ := (singletonSource_variety_eq_linearParametrization N κ B x).mp hx'
     refine ⟨u, ?_, ?_⟩
     · intro s
       have hs : x s = ∑ j, u j * (B j : S → ℝ) s := by rw [hu]
@@ -677,50 +582,50 @@ theorem messi_positiveSteadyStates_eq_linearParametrization (N : Network S)
       exact hx s
     · rw [hu]
   · rintro ⟨u, hu, rfl⟩
-    have hmem : ((∑ j, u j • B j : N.messiVariety κ) : S → ℝ) ∈ N.messiVariety κ := by
+    have hmem : ((∑ j, u j • B j : N.singletonSourceVariety κ) : S → ℝ) ∈ N.singletonSourceVariety κ := by
       rw [Submodule.coe_sum]
       exact Submodule.sum_mem _ fun j _ =>
-        (N.messiVariety κ).smul_mem _ (N.messiVarietyBasis_mem κ B j)
+        (N.singletonSourceVariety κ).smul_mem _ (N.singletonSourceVarietyBasis_mem κ B j)
     have hfun : (fun s => ∑ j, u j * (B j : S → ℝ) s)
-        = ((∑ j, u j • B j : N.messiVariety κ) : S → ℝ) := by
+        = ((∑ j, u j • B j : N.singletonSourceVariety κ) : S → ℝ) := by
       funext s
-      exact (coe_sum_smul (N.messiVariety κ) B u s).symm
-    have hmem' : (fun s => ∑ j, u j * (B j : S → ℝ) s) ∈ N.messiVariety κ := by
+      exact (coe_sum_smul (N.singletonSourceVariety κ) B u s).symm
+    have hmem' : (fun s => ∑ j, u j * (B j : S → ℝ) s) ∈ N.singletonSourceVariety κ := by
       rw [hfun]
       exact hmem
     have hx' : N.IsMassActionSteadyState κ (fun s => ∑ j, u j * (B j : S → ℝ) s) :=
-      (mem_messiVariety_iff N κ hM (fun s => ∑ j, u j * (B j : S → ℝ) s)).mp hmem'
+      (mem_singletonSourceVariety_iff N κ hM (fun s => ∑ j, u j * (B j : S → ℝ) s)).mp hmem'
     refine ⟨?_, hx'⟩
     intro s
     show 0 < ∑ j, u j * (B j : S → ℝ) s
     exact hu s
 
-/-- **The linear variety is spanned by the torus.**  For a MESSI network with a
+/-- **The linear variety is spanned by the torus.**  For a SingletonSource network with a
 homogeneous binomial presentation of its steady-state equations, the linear
 steady-state variety is the linear span of the torus `exp (ker (aᵢ − bᵢ))`. -/
-theorem messi_toric_variety_eq_span_torus (N : Network S) (κ : N.RateConstants)
-    (hM : MESSI N) {n : ℕ} (a b : Fin n → Complex S) (c : Fin n → ℝ) (hc : ∀ i, 0 < c i)
+theorem singletonSource_toric_variety_eq_span_torus (N : Network S) (κ : N.RateConstants)
+    (hM : SingletonSource N) {n : ℕ} (a b : Fin n → Complex S) (c : Fin n → ℝ) (hc : ∀ i, 0 < c i)
     (hc1 : ∀ i, c i = 1)
     (htor : ∀ x : Concentration S, x.Positive →
       (N.IsMassActionSteadyState κ x ↔
         ∀ i, (a i).massActionMonomial x = c i * (b i).massActionMonomial x))
     {xs : Concentration S} (hxs : xs.Positive) (hxss : N.IsMassActionSteadyState κ xs) :
-    N.messiVariety κ = Submodule.span ℝ { expVec v | v ∈ expLogKernel a b } := by
-  have hker : ∀ v ∈ expLogKernel a b, expVec v ∈ N.messiVariety κ := by
+    N.singletonSourceVariety κ = Submodule.span ℝ { expVec v | v ∈ expLogKernel a b } := by
+  have hker : ∀ v ∈ expLogKernel a b, expVec v ∈ N.singletonSourceVariety κ := by
     intro v hv
     have hmem : expVec v ∈ { x : Concentration S | x.Positive ∧ N.IsMassActionSteadyState κ x } := by
       rw [toric_steadyStates_eq_exp_kernel N κ a b c hc hc1 htor hxs hxss]
       exact ⟨v, hv, rfl⟩
-    have hmem' : expVec v ∈ N.messiVariety κ := by
+    have hmem' : expVec v ∈ N.singletonSourceVariety κ := by
       have h1 : Concentration.Positive (expVec v) ∧
           N.IsMassActionSteadyState κ (expVec v) :=
         Set.mem_ofPred_eq.mp hmem
-      exact (mem_messiVariety_iff N κ hM (expVec v)).mpr h1.2
+      exact (mem_singletonSourceVariety_iff N κ hM (expVec v)).mpr h1.2
     exact hmem'
   apply le_antisymm
   · intro x hx
     -- the constant vector `1` lies in the torus, hence in the variety
-    have hone : (1 : S → ℝ) ∈ N.messiVariety κ := by
+    have hone : (1 : S → ℝ) ∈ N.singletonSourceVariety κ := by
       have h := hker 0 (expLogKernel a b).zero_mem
       rwa [← show (1 : S → ℝ) = expVec 0 by funext s; simp [expVec]] at h
     -- shift `x` into the positive orthant
@@ -733,15 +638,15 @@ theorem messi_toric_variety_eq_span_torus (N : Network S) (κ : N.RateConstants)
       have h3 : -x s ≤ max (-x s) 0 := le_max_left _ _
       rw [ht]
       linarith
-    have hmem : x + t • (1 : S → ℝ) ∈ N.messiVariety κ :=
-      (N.messiVariety κ).add_mem hx ((N.messiVariety κ).smul_mem t hone)
+    have hmem : x + t • (1 : S → ℝ) ∈ N.singletonSourceVariety κ :=
+      (N.singletonSourceVariety κ).add_mem hx ((N.singletonSourceVariety κ).smul_mem t hone)
     have hpos' : Concentration.Positive (x + t • (1 : S → ℝ)) := fun s => by
       simp only [Pi.add_apply, Pi.smul_apply, smul_eq_mul]
       have h1s : (1 : S → ℝ) s = 1 := rfl
       rw [h1s, mul_one]
       exact hpos s
     have hss : N.IsMassActionSteadyState κ (x + t • (1 : S → ℝ)) :=
-      (mem_messiVariety_iff N κ hM (x + t • (1 : S → ℝ))).mp hmem
+      (mem_singletonSourceVariety_iff N κ hM (x + t • (1 : S → ℝ))).mp hmem
     have himg : x + t • (1 : S → ℝ) ∈ { fun s => Real.exp (v s) | v ∈ expLogKernel a b } := by
       rw [← toric_steadyStates_eq_exp_kernel N κ a b c hc hc1 htor hxs hxss]
       exact ⟨hpos', hss⟩
@@ -849,36 +754,36 @@ theorem steadyStateInvariant_iff_log_orthogonal
     calc g (toricParametrization xs v) = g xs := h v (mem_expLogKernel.mpr hv)
       _ = g (toricParametrization xs w) := (h w (mem_expLogKernel.mpr hw)).symm
 
-/-- **The general invariants of a MESSI network are the functions constant on the
-steady-state variety.**  The steady-state variety of a MESSI network is a linear
+/-- **The general invariants of a SingletonSource network are the functions constant on the
+steady-state variety.**  The steady-state variety of a SingletonSource network is a linear
 subspace, so the general invariants are exactly the functions that are constant on it. -/
-theorem messi_generalInvariant_iff_constantOnVariety (N : Network S) (κ : N.RateConstants)
-    (hM : MESSI N) (g : Concentration S → ℝ) :
-    IsSteadyStateInvariantFun N κ g ↔ ∀ x ∈ N.messiVariety κ, g x = g 0 := by
+theorem singletonSource_generalInvariant_iff_constantOnVariety (N : Network S) (κ : N.RateConstants)
+    (hM : SingletonSource N) (g : Concentration S → ℝ) :
+    IsSteadyStateInvariantFun N κ g ↔ ∀ x ∈ N.singletonSourceVariety κ, g x = g 0 := by
   constructor
   · intro h x hx
-    have hx' : N.IsMassActionSteadyState κ x := (mem_messiVariety_iff N κ hM x).mp hx
-    have h0 : N.IsMassActionSteadyState κ 0 := N.messi_zero_isSteadyState κ hM
+    have hx' : N.IsMassActionSteadyState κ x := (mem_singletonSourceVariety_iff N κ hM x).mp hx
+    have h0 : N.IsMassActionSteadyState κ 0 := N.singletonSource_zero_isSteadyState κ hM
     have hval := h x 0 hx' h0
     simpa using hval
   · intro h x y hx hy
-    have hx' : x ∈ N.messiVariety κ := (mem_messiVariety_iff N κ hM x).mpr hx
-    have hy' : y ∈ N.messiVariety κ := (mem_messiVariety_iff N κ hM y).mpr hy
+    have hx' : x ∈ N.singletonSourceVariety κ := (mem_singletonSourceVariety_iff N κ hM x).mpr hx
+    have hy' : y ∈ N.singletonSourceVariety κ := (mem_singletonSourceVariety_iff N κ hM y).mpr hy
     rw [h x hx', h y hy']
 
-/-- **The general invariants of a MESSI network are determined by their value at the
+/-- **The general invariants of a SingletonSource network are determined by their value at the
 origin.**  Since the steady-state variety is a linear subspace containing the origin, a
 function constant on it is determined by the single number `g 0`. -/
-theorem messi_generalInvariant_iff_valueAtOrigin (N : Network S) (κ : N.RateConstants)
-    (hM : MESSI N) (g : Concentration S → ℝ) :
+theorem singletonSource_generalInvariant_iff_valueAtOrigin (N : Network S) (κ : N.RateConstants)
+    (hM : SingletonSource N) (g : Concentration S → ℝ) :
     IsSteadyStateInvariantFun N κ g ↔
       ∃ c : ℝ, ∀ x, N.IsMassActionSteadyState κ x → g x = c := by
   constructor
   · intro h
     refine ⟨g 0, ?_⟩
     intro x hx
-    have hx' : x ∈ N.messiVariety κ := (mem_messiVariety_iff N κ hM x).mpr hx
-    have h0 : N.IsMassActionSteadyState κ 0 := N.messi_zero_isSteadyState κ hM
+    have hx' : x ∈ N.singletonSourceVariety κ := (mem_singletonSourceVariety_iff N κ hM x).mpr hx
+    have h0 : N.IsMassActionSteadyState κ 0 := N.singletonSource_zero_isSteadyState κ hM
     have hval := h x 0 hx h0
     simpa using hval
   · rintro ⟨c, hc⟩ x y hx hy
@@ -888,46 +793,46 @@ theorem messi_generalInvariant_iff_valueAtOrigin (N : Network S) (κ : N.RateCon
 basis of the steady-state variety, a function is an invariant if and only if it is
 constant on the linear parametrization of the variety; equivalently, it is determined by
 its value at the origin. -/
-theorem messi_generalInvariant_iff_linearParametrization (N : Network S)
-    (κ : N.RateConstants) (hM : MESSI N)
-    (B : Module.Basis (Fin (Module.finrank ℝ (N.messiVariety κ))) ℝ (N.messiVariety κ))
+theorem singletonSource_generalInvariant_iff_linearParametrization (N : Network S)
+    (κ : N.RateConstants) (hM : SingletonSource N)
+    (B : Module.Basis (Fin (Module.finrank ℝ (N.singletonSourceVariety κ))) ℝ (N.singletonSourceVariety κ))
     (g : Concentration S → ℝ) :
     IsSteadyStateInvariantFun N κ g ↔
-      ∀ u : Fin (Module.finrank ℝ (N.messiVariety κ)) → ℝ,
+      ∀ u : Fin (Module.finrank ℝ (N.singletonSourceVariety κ)) → ℝ,
         g (fun s => ∑ j, u j * (B j : S → ℝ) s) = g 0 := by
-  rw [messi_generalInvariant_iff_constantOnVariety N κ hM g]
+  rw [singletonSource_generalInvariant_iff_constantOnVariety N κ hM g]
   constructor
   · intro h u
-    have hmem : ((∑ j, u j • B j : N.messiVariety κ) : S → ℝ) ∈ N.messiVariety κ := by
+    have hmem : ((∑ j, u j • B j : N.singletonSourceVariety κ) : S → ℝ) ∈ N.singletonSourceVariety κ := by
       rw [Submodule.coe_sum]
       exact Submodule.sum_mem _ fun j _ =>
-        (N.messiVariety κ).smul_mem _ (N.messiVarietyBasis_mem κ B j)
+        (N.singletonSourceVariety κ).smul_mem _ (N.singletonSourceVarietyBasis_mem κ B j)
     have hfun : (fun s => ∑ j, u j * (B j : S → ℝ) s)
-        = ((∑ j, u j • B j : N.messiVariety κ) : S → ℝ) := by
+        = ((∑ j, u j • B j : N.singletonSourceVariety κ) : S → ℝ) := by
       funext s
-      exact (coe_sum_smul (N.messiVariety κ) B u s).symm
+      exact (coe_sum_smul (N.singletonSourceVariety κ) B u s).symm
     rw [hfun]
     exact h _ hmem
   · intro h x hx
-    obtain ⟨u, hu⟩ := (messi_variety_eq_linearParametrization N κ B x).mp hx
+    obtain ⟨u, hu⟩ := (singletonSource_variety_eq_linearParametrization N κ B x).mp hx
     rw [hu]
     exact h u
 
-/-- **The general invariants of the positive steady states of a MESSI network are the
+/-- **The general invariants of the positive steady states of a SingletonSource network are the
 functions constant on the positive part of the steady-state variety.** -/
-theorem messi_positiveInvariant_iff_constantOnPositiveVariety (N : Network S)
-    (κ : N.RateConstants) (hM : MESSI N) (g : Concentration S → ℝ) :
+theorem singletonSource_positiveInvariant_iff_constantOnPositiveVariety (N : Network S)
+    (κ : N.RateConstants) (hM : SingletonSource N) (g : Concentration S → ℝ) :
     IsPositiveSteadyStateInvariant N κ g ↔
-      ∀ x ∈ N.messiVariety κ, ∀ y ∈ N.messiVariety κ,
+      ∀ x ∈ N.singletonSourceVariety κ, ∀ y ∈ N.singletonSourceVariety κ,
         Concentration.Positive x → Concentration.Positive y → g x = g y := by
   constructor
   · intro h x hx y hy hxp hyp
-    have hxx : N.IsMassActionSteadyState κ x := (mem_messiVariety_iff N κ hM x).mp hx
-    have hyy : N.IsMassActionSteadyState κ y := (mem_messiVariety_iff N κ hM y).mp hy
+    have hxx : N.IsMassActionSteadyState κ x := (mem_singletonSourceVariety_iff N κ hM x).mp hx
+    have hyy : N.IsMassActionSteadyState κ y := (mem_singletonSourceVariety_iff N κ hM y).mp hy
     exact h x y hxp hxx hyp hyy
   · intro h x y hxp hxx hyp hyy
-    have hx' : x ∈ N.messiVariety κ := (mem_messiVariety_iff N κ hM x).mpr hxx
-    have hy' : y ∈ N.messiVariety κ := (mem_messiVariety_iff N κ hM y).mpr hyy
+    have hx' : x ∈ N.singletonSourceVariety κ := (mem_singletonSourceVariety_iff N κ hM x).mpr hxx
+    have hy' : y ∈ N.singletonSourceVariety κ := (mem_singletonSourceVariety_iff N κ hM y).mpr hyy
     exact h x hx' y hy' hxp hyp
 
 
@@ -940,38 +845,38 @@ namespace Examples.ToricParametrization
 open CRNT
 
 /-- The two species `X` and `Y` of the reversible pair. -/
-abbrev Species : Type := CRNT.Examples.MESSI.Species
+abbrev Species : Type := CRNT.Examples.SingletonSource.Species
 
 /-- The species `X`. -/
-abbrev X : Species := CRNT.Examples.MESSI.X
+abbrev X : Species := CRNT.Examples.SingletonSource.X
 
 /-- The species `Y`. -/
-abbrev Y : Species := CRNT.Examples.MESSI.Y
+abbrev Y : Species := CRNT.Examples.SingletonSource.Y
 
 /-- The network `X ⇌ Y`. -/
-abbrev N : Network Species := CRNT.Examples.MESSI.N
+abbrev N : Network Species := CRNT.Examples.SingletonSource.N
 
 /-- **The reversible pair `X ⇌ Y` at equal rate constants** `κ₁ = κ₂ = 1`.  At equal
 rates the steady-state equation `κ₁ x_X = κ₂ x_Y` becomes the *homogeneous* binomial
 `x_X = x_Y`, the simplest instance of the toric parametrization. -/
 def rates : Network.RateConstants N :=
-  CRNT.Examples.MESSI.rates 1 1 (by norm_num) (by norm_num)
+  CRNT.Examples.SingletonSource.rates 1 1 (by norm_num) (by norm_num)
 
 /-- The forward rate constant is `1`. -/
-theorem rates_k_fwd : rates.k CRNT.Examples.MESSI.fwd = 1 := by
-  simp [rates, CRNT.Examples.MESSI.rates]
+theorem rates_k_fwd : rates.k CRNT.Examples.SingletonSource.fwd = 1 := by
+  simp [rates, CRNT.Examples.SingletonSource.rates]
 
 /-- The backward rate constant is `1`. -/
-theorem rates_k_bwd : rates.k CRNT.Examples.MESSI.bwd = 1 := by
-  simp [rates, CRNT.Examples.MESSI.rates]
+theorem rates_k_bwd : rates.k CRNT.Examples.SingletonSource.bwd = 1 := by
+  simp [rates, CRNT.Examples.SingletonSource.rates]
 
-/-- **The reversible pair at equal rates is a MESSI network.** -/
-theorem N_messi : N.MESSI := CRNT.Examples.MESSI.N_messi
+/-- **The reversible pair at equal rates is a SingletonSource network.** -/
+theorem N_singletonSource : N.SingletonSource := CRNT.Examples.SingletonSource.N_singletonSource
 
 /-- **The steady states of `X ⇌ Y` at equal rates are the points with `x_X = x_Y`.** -/
 theorem steadyState_iff (x : Concentration Species) :
     N.IsMassActionSteadyState rates x ↔ x X = x Y := by
-  rw [CRNT.Examples.MESSI.steadyState_iff rates x]
+  rw [CRNT.Examples.SingletonSource.steadyState_iff rates x]
   rw [rates_k_fwd, rates_k_bwd]
   constructor
   · intro h
@@ -981,42 +886,42 @@ theorem steadyState_iff (x : Concentration Species) :
 
 /-- The mass-action monomial of the source complex `X` is `x_X`. -/
 theorem massActionMonomial_cX (x : Concentration Species) :
-    CRNT.Examples.MESSI.cX.massActionMonomial x = x X := by
+    CRNT.Examples.SingletonSource.cX.massActionMonomial x = x X := by
   unfold Complex.massActionMonomial
   rw [Finset.prod_eq_single X]
-  · simp [CRNT.Examples.MESSI.cX]
+  · simp [CRNT.Examples.SingletonSource.cX]
   · intro b _ hb
     fin_cases b
     · exact absurd rfl hb
-    · simp [CRNT.Examples.MESSI.cX]
+    · simp [CRNT.Examples.SingletonSource.cX]
   · simp
 
 /-- The mass-action monomial of the target complex `Y` is `x_Y`. -/
 theorem massActionMonomial_cY (x : Concentration Species) :
-    CRNT.Examples.MESSI.cY.massActionMonomial x = x Y := by
+    CRNT.Examples.SingletonSource.cY.massActionMonomial x = x Y := by
   unfold Complex.massActionMonomial
   rw [Finset.prod_eq_single Y]
-  · simp [CRNT.Examples.MESSI.cY]
+  · simp [CRNT.Examples.SingletonSource.cY]
   · intro b _ hb
     fin_cases b
-    · simp [CRNT.Examples.MESSI.cY]
+    · simp [CRNT.Examples.SingletonSource.cY]
     · exact absurd rfl hb
   · simp
 
 /-- The exponent `a` of the homogeneous binomial `x ^ a = x ^ b`: the complex `X`. -/
-def a : Fin 1 → Complex Species := fun _ => CRNT.Examples.MESSI.cX
+def a : Fin 1 → Complex Species := fun _ => CRNT.Examples.SingletonSource.cX
 
 /-- The exponent `b` of the homogeneous binomial `x ^ a = x ^ b`: the complex `Y`. -/
-def b : Fin 1 → Complex Species := fun _ => CRNT.Examples.MESSI.cY
+def b : Fin 1 → Complex Species := fun _ => CRNT.Examples.SingletonSource.cY
 
 /-- The binomial coefficient: `1`, i.e. the binomial is *homogeneous*. -/
 def c : Fin 1 → ℝ := fun _ => 1
 
 /-- The pairing of the exponent differences of the binomial `x_X = x_Y` is `v_X − v_Y`. -/
 theorem expPairing_cX_cY (v : Species → ℝ) :
-    expPairing CRNT.Examples.MESSI.cX CRNT.Examples.MESSI.cY v = v X - v Y := by
+    expPairing CRNT.Examples.SingletonSource.cX CRNT.Examples.SingletonSource.cY v = v X - v Y := by
   unfold expPairing
-  simp [CRNT.Examples.MESSI.cX, CRNT.Examples.MESSI.cY, Fin.sum_univ_two]
+  simp [CRNT.Examples.SingletonSource.cX, CRNT.Examples.SingletonSource.cY, Fin.sum_univ_two]
   ring
 
 /-- **The log-kernel of the binomial `x_X = x_Y`** is the set of log-vectors with
@@ -1067,7 +972,7 @@ theorem xs_isSteadyState : N.IsMassActionSteadyState rates xs := by
   rw [steadyState_iff]
   simp [xs]
 
-/-- **The rational parametrization of the steady-state variety of `X ⇌ Y` at equal
+/-- **The exponential log-kernel parametrization of the steady-state variety of `X ⇌ Y` at equal
 rates.**  The positive steady states are exactly the exponentials of the vectors in the
 kernel of the exponent-difference matrix, i.e. of the vectors with `v_X = v_Y`. -/
 theorem positiveSteadyStates_eq_exp_kernel :
@@ -1148,11 +1053,11 @@ theorem ratio_notSteadyStateInvariantFun :
 nonlinear invariant `x_X / x_Y`. -/
 theorem linearInvariant_isSteadyStateInvariant :
     Network.IsSteadyStateInvariant N rates (fun s => if s = X then (1 : ℝ) else -1) := by
-  rw [Network.messi_linearInvariant_iff N rates N_messi]
+  rw [Network.singletonSource_linearInvariant_iff N rates N_singletonSource]
   intro x hx
   have hX := hx X
   simp only [Fin.sum_univ_two] at hX
-  rw [CRNT.Examples.MESSI.messiCoeff_XX, CRNT.Examples.MESSI.messiCoeff_YX] at hX
+  rw [CRNT.Examples.SingletonSource.singletonSourceCoeff_XX, CRNT.Examples.SingletonSource.singletonSourceCoeff_YX] at hX
   rw [rates_k_fwd, rates_k_bwd] at hX
   simp only [Fin.sum_univ_two]
   simp [X]

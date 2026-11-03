@@ -6,137 +6,15 @@ import CRNT.Stochastic.RecurrenceDichotomy
 import CRNT.Dynamics.StrongEndotacticTier
 
 /-!
-# Positive recurrence of strongly endotactic stochastic mass-action systems
+# Recurrence from an additional count-tier structure
 
-This module transfers the **deterministic tier machinery** of leaf D9 (Anderson–Cappelletti–Kim–Nguyen
-2020, _Persistence and absence of infinite trajectories for strongly endotactic chemical reaction
-networks_) to the **count lattice** `ℕ^S`, and proves the stochastic counterpart of the deterministic
-permanence theorem:
-
-> a stochastic mass-action system whose network carries a count-lattice tier structure is
-> **non-explosive** and **positive recurrent** (geometrically ergodic), and the probability of
-> returning to a count converges to a strictly positive limit.
-
-## The mathematics
-
-### 1. The count-lattice tier object
-
-The deterministic tier theory (`CRNT.Dynamics.TierPersistence`, `CRNT.Dynamics.TierLyapunov`)
-organises the complexes of a network into *tiers* by the linear functional `w ↦ ∑_s w_s y_s`
-evaluated on the complexes `y`; a reaction whose source lies in the **top tier** (the `w`-maximal
-face of the Newton polytope) does not ascend the tier potential, and at least one reaction of the
-top tier descends strictly.  On the count lattice the same functional is read at the count
-`n`; the tier potential of a complex is
-
-`countTierPotential w y = ∑_s w_s y_s`,
-
-the *tier chain* is the total order of the occurring complexes induced by that potential
-(`CountTierChain`), the *top tier* is the `w`-maximal face (`countTierTop`), and the *tier
-descent* is `CountTierDescent`.  The bridge to the repository's strong endotacticity is
-`countTierDescent_of_stronglyEndotacticStd`: for a network that is `StronglyEndotacticStd`, the
-count-lattice tier descent holds in every stoichiometrically active direction, because the
-`w`-maximal sources are exactly the top tier of `w` and strong endotacticity produces a strictly
-inward reaction there.
-
-### 2. The count-lattice Lyapunov function and its drift
-
-The count-lattice Lyapunov function is the extension of the tier weight to the counts,
-
-`CountLyapunov N κ T n = ∑_s T.w s * (n s)`,
-
-i.e. `linearObservable T.w`.  It is nonnegative and has finite sublevel sets.
-
-The drift is computed by the exact generator identity
-`N.observableGenerator κ (linearObservable w) n = ∑_r λ_r(n) · wRate(w, r)`, where `λ_r(n)` is the
-falling-factorial propensity of reaction `r`.  Writing `c_r = wRate(w, r)`:
-
-* the **ascending** reactions (`c_r > 0`) have, by the tier separation hypothesis, the zero
-  source complex; their propensity is the constant `κ_r`, so they contribute a fixed
-  non-negative amount `K₀`;
-* the **descending** reactions (`c_r < 0`) contribute a non-positive amount, and the strictly
-  descending reaction of the top tier that consumes a given species `s` contributes at most
-  `-β_s · (n s)`, with `β_s = κ_{r_s} |c_{r_s}| > 0` — provided it is enabled; when it is not
-  enabled the count `n s` is bounded by the stoichiometry of the reaction, which costs only the
-  bounded amount `K₁`.
-
-Hence
-
-`Q V (n) ≤ -ε · V (n) + (K₀ + K₁)`,  `ε > 0`, `K₀ + K₁ ≥ 0`,
-
-which is the **multiplicative Foster–Lyapunov drift**; it in particular yields the
-Anderson–Cappelletti–Kim–Nguyen-style *constant* negative drift `Q V (n) ≤ -c` outside a finite
-set of counts (`tierDrift_le`, `tierDrift_le_of`).
-
-### 3. Positive recurrence and non-explosion
-
-From the multiplicative drift:
-
-* the minimal transition function is stochastic — `tier_nonExplosion` (the drift
-  `Q V ≤ -ε V + K` is in particular the bounded drift `Q V ≤ K`, the hypothesis of
-  `CRNT.JumpSystem.hasSum_Pmin_one_of_drift_affine`);
-* the chain enters the finite set of exceptional counts with probability one and the expected
-  time of entry is bounded — `tierFoster_hitting_time` (the continuous-time Foster criterion of
-  `CRNT.Stochastic.MinimalSemigroupFoster`, applied to the *constant* negative drift; the
-  embedded-jump-chain version `CRNT.Network.jumpChain_foster_hitting_time` would require a
-  bounded exit rate, which an unbounded count lattice does not provide);
-* the chain is geometrically ergodic (`tier_geometricErgodic`, via
-  `CRNT.JumpSystem.geometric_ergodic`) and has a strictly positive stationary law
-  (`tier_positiveRecurrence`, via `CRNT.JumpSystem.foster_lyapunov_ergodic`, which charges every
-  state of the class); in particular
-
-  `Tendsto (fun t => N.transition κ t a a) atTop (𝓝 (π a))`  with `π a > 0`.
-
-  Note that the strictly positive limit is obtained here *without* the conservativity hypothesis
-  of `CRNT.Network.tendsto_transition_self_pos_of_recurrent`: a tier-structured network is in
-  general not conservative (the tier structure lets the total count grow), and the strictly
-  positive stationary law of `CRNT.JumpSystem.foster_lyapunov_ergodic` replaces it.
-
-### 4. An instance
-
-`CRNT.Examples.EndotacticTrimerDecay` is the one-species network `0 → X`, `X → 0`, `2X → 0`:
-
-* `stronglyEndotacticStd` : the network is `StronglyEndotacticStd`.  For the direction `w` with
-  `w 0 > 0` the top source is the dimer `2X` and `2X → 0` descends strictly; for `w 0 < 0` the
-  top source is the empty complex and `0 → X` descends strictly; `w 0 = 0` is not
-  stoichiometrically active;
-* `countTier` : the count-lattice tier structure, with tier weight `w = 1`.  The top tier is
-  `{2X}` (molecularity two) and the reaction `2X → 0` leaves it strictly downwards; the lower
-  tiers are `X` and `0`.  The only ascending reaction, `0 → X`, has the empty source complex, so
-  its propensity is the constant `κ₀`; the species `X` is consumed by the strictly descending
-  top-tier reaction `2X → 0`;
-* `reachPos` : the embedded jump chain is irreducible;
-* `positiveRecurrence`, `nonExplosion`, `geometricErgodic` : the conclusions of leaf P7 for this
-  network.
-
-### 5. Scope: what is proved and what remains
-
-**Proved here.** The deterministic-to-stochastic transfer *for the count-lattice tier structure*
-`CountTier`: a network carrying such a tier structure is non-explosive and positively recurrent,
-and the transfer is proved from the tier data alone — no Lyapunov function, no drift bound and no
-rate restriction is assumed.  This is strictly more than
-`CRNT.Stochastic.EndotacticPositiveRecurrence`, which assumes the multiplicative drift
-`Q V ≤ -ε V + K` as a hypothesis and uses the embedded-jump-chain Foster theorem; here the drift
-is *derived* from the tier structure and the Foster theorem is the continuous-time one, which is
-the one that applies to a constant negative drift on an unbounded count lattice.
-
-**Not proved here (the remaining gap).** The hypothesis `CountTier` is *stronger* than
-`CRNT.Network.StronglyEndotacticStd`: it demands a **strictly positive** tier weight `w`, the
-**tier separation** of the ascending reactions (every reaction that ascends the tier potential
-must have the zero source complex, so that its propensity is independent of the count), and the
-**per-species coverage** by a strictly descending top-tier reaction supported on that species
-alone.  The general Anderson–Cappelletti–Kim–Nguyen theorem only assumes `StronglyEndotacticStd`.
-Removing the tier separation is exactly the missing step, and it is the hard one: in the
-deterministic theory the lower-tier reactions are dominated by the top-tier ones because the
-*mass-action monomial* `x^y` of a top-tier complex dominates the monomials of the lower tiers; on
-the count lattice the analogue of that domination, `n^{↓y} ≫ n^{↓y'}` for a top-tier `y` and a
-lower-tier `y'`, fails along the escape directions in which some species count stays at zero, and
-the deterministic tier machinery of leaf D9 does not, as it stands, provide this domination on the
-count lattice.  It is not constructed here.
-
-Depends on:
-`CRNT.Stochastic.HarrisTheorem`, `CRNT.Stochastic.MinimalSemigroupNonExplosion`,
-`CRNT.Stochastic.MinimalSemigroupFoster`, `CRNT.Stochastic.MinimalSemigroupErgodicInfinite`,
-`CRNT.Stochastic.RecurrenceDichotomy`, `CRNT.Dynamics.StrongEndotacticTier`.
+The explicit `CountTier` structure provides separation and inward-consumption
+hypotheses from which a multiplicative count-generator drift is derived. Foster
+and Harris results give the stated non-explosion and recurrence consequences,
+with the displayed irreducibility hypotheses. These count-tier data are
+additional restrictions, not consequences of arbitrary strong endotacticity.
+The unrestricted several-species stochastic assertion is false; see
+arXiv:1808.05328, Examples 3.1–3.2.
 -/
 
 open Filter Topology

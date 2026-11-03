@@ -2,98 +2,25 @@ import CRNT.Dynamics.HopfLyapunovCalibration
 import CRNT.Dynamics.HopfLimitCycle
 import CRNT.Kinetics.MassAction
 import CRNT.Kinetics.MassActionJacobian
+import CRNT.Equilibria.SteadyState
 import Mathlib.Analysis.Calculus.Deriv.Add
 import Mathlib.Analysis.Calculus.Deriv.Comp
 import Mathlib.Analysis.Calculus.Deriv.Mul
 import Mathlib.Analysis.Calculus.Deriv.Pow
 
 /-!
-# The mass-action Hopf verdict: a sustained periodic orbit in a chemical network
+# Mass-action Taylor calibration and a truncated Hopf branch
 
-This module supplies the **mass-action verdict** of the field map of leaf **D16 (Hopf
-bifurcation)**: the statement, at the level of a *network*, that a mass-action family
-undergoing a Hopf bifurcation carries a **sustained periodic orbit** (a limit cycle) on one
-side of the crossing.
+The mixed derivatives are calculated from the actual planar mass-action field.
+`MassActionHopfTaylorData` packages a positive equilibrium branch, the calibrated
+Taylor/normal-form data, transverse crossing, and nonzero Lyapunov coefficient.
+`truncatedNormalForm_periodicBranch` constructs periodic curves of the cubic
+truncated normal form. The worked network verifies this data explicitly.
 
-## 1. What the Hopf theorem says, and what is formalized here
-
-The classical Hopf bifurcation theorem (Hopf, *Abzweigung einer periodischen Lösung von einer
-stationären Lösung eines Differentialsystems*, 1928; Andronov; Guckenheimer & Holmes,
-*Nonlinear Oscillations, Dynamical Systems, and Bifurcations of Vector Fields*, §3.4;
-Hassard–Kazarinoff–Wan; Kuznetsov, *Elements of Applied Bifurcation Theory*, §3.5) says:
-
-> Let `N` be a network, `κ(μ)` a one-parameter family of positive rate constants, and `xst(μ)` a
-> branch of steady states. Suppose the Jacobian at `xst(μ₀)` has a simple conjugate pair `±iω`
-> (`ω ≠ 0`) crossing the imaginary axis transversally, and the first Lyapunov coefficient
-> `ℓ₁ ≠ 0`. Then for `μ` on one side of `μ₀` there is a branch of **nonconstant periodic
-> orbits** of the mass-action ODE, shrinking to the equilibrium as `μ → μ₀`, and the
-> equilibrium changes stability.
-
-`Mathlib` carries neither the center-manifold reduction, nor the Poincaré–Dulac normal-form
-transformation, nor the Lyapunov–Schmidt construction of the periodic orbit. The repository
-already carries the *algebraic* content of the Hopf theorem in
-`CRNT.Dynamics.HopfNormalForm` (`PlanarHopfData`, the radial amplitude law
-`Ṙ = α R + ℓ₁ R³`, the conditional Hopf–Andronov theorem), in
-`CRNT.Dynamics.HopfLimitCycle` (the closed-form limit cycle of the *truncated* normal form,
-assembled into a `PeriodicOrbitSeed` without assuming it) and in
-`CRNT.Dynamics.HopfLyapunovCalibration` (the Guckenheimer–Holmes calibration of the resonant
-cubic coefficient with the classical real-coordinate formula).
-
-**What this module adds is the mass-action content**: it shows that the *Taylor data of a
-mass-action field* give the `PlanarHopfData` of the Hopf theorem, and it packages the whole
-verdict as a statement about a network.
-
-Concretely:
-
-* **§2.** The calculus of iterated derivatives (`DerivChain`, `DerivChain2`, `powChain`): the
-  `d`-th derivative of `t ↦ (c + t)^m` is `m.descFactorial d · (c + t)^(m−d)`, the classical
-  falling-factorial formula. `Mathlib` has no `n`-th derivative operator, so the chains carry
-  the differentiation steps explicitly.
-* **§3.** **The mass-action Taylor data of a planar network.** `maTay` is the mixed partial of
-  the mass-action field at a concentration, computed from the network; `maTay_eq` *proves*
-  that the combinatorial sum is the mixed partial of the actual mass-action vector field. This
-  is the link "the mass-action field's Taylor data give the `PlanarHopfData`".
-* **§4.** **The mass-action Hopf verdict.** `MassActionHopf` is the hypothesis bundle: the
-  family of rate constants, the branch of steady states, the crossing, the canonical rotation
-  of the mass-action Jacobian, the normal-form data `H` *with the resonant coefficient taken
-  from the mass-action Taylor data*, the transversality and the nondegeneracy. The verdict
-  `massAction_hasPeriodicOrbit_of_hopf` then discharges the Hopf theorem for the **truncated
-  normal form of the mass-action field**: a one-parameter branch of genuine, nonconstant,
-  periodic orbits with the `√(−α/ℓ₁)` amplitude law, on the side of the crossing where
-  `α/ℓ₁ < 0`.
-* **§5.** **A concrete instance.** A genuine two-species mass-action network
-
-  ```text
-  ∅ → X          (k = 2)        inflow of fuel X
-  ∅ → Y          (k = 1)        inflow of fuel Y
-  X → ∅          (k = μ²+1)     outflow of X
-  Y → ∅          (k = 6)        outflow of Y
-  X + Y → ∅      (k = 1)        mutual consumption
-  X → X + Y      (k = 2)        catalytic production of Y
-  2 X → 3 X     (k = μ²+1)     autocatalytic production of X
-  X + Y → 2 Y    (k = 1)        autocatalytic production of Y
-  2 Y → 3 Y      (k = 3)        autocatalytic production of Y
-  ```
-
-  whose mass-action field is `ẋ = 2 − (μ²+1)x − 2xy + (μ²+1)x²`, `ẏ = 1 + 2x − 6y + 3y²`. The
-  point `(1,1)` is a positive steady state for **every** `μ`, and the mass-action Jacobian
-  there is `[[μ² − 1, −2], [2, 0]]`, which at the critical rate `μ₀ = 1` is exactly the
-  canonical rotation `[[0, −2], [2, 0]]` with frequency `ω = 2` — so the conjugate pair
-  `±2i` sits on the imaginary axis and the trace `μ² − 1` crosses it transversally (the
-  crossing speed is `2μ₀ = 2 ≠ 0`). Every hypothesis of the Hopf theorem is checked
-  numerically: the mass-action Taylor data are
-  `f_xx = 4`, `f_xy = −2`, `f_yy = 0`, `g_xx = 0`, `g_xy = 0`, `g_yy = 6` and all eight
-  third-order partials vanish (the field is quadratic), so the complex Taylor data of the
-  field at the crossing are `q₂₀ = 1/2 − i/4`, `q₁₁ = 1 + 3i/2`, `q₀₂ = 1/2 − 5i/4` and
-  `c₃₀ = c₂₁ = c₁₂ = c₀₃ = 0`; the resonant cubic coefficient of the Poincaré–Dulac
-  normal form is `c₁ = −1/4 − 43i/24`, so the **first Lyapunov coefficient is
-  `ℓ₁ = −1/4 ≠ 0`** (the field is quadratic, so the cubic group vanishes and the harmonic
-  correction `f_xy (f_xx+f_yy)/(16ω) = −8/32` gives `ℓ₁`). The bifurcation is therefore
-  **supercritical** (`ℓ₁ < 0`): the branch of periodic orbits lives on the side `μ > μ₀` of
-  the crossing, where `α/ℓ₁ < 0` and the amplitude is `√(−α/ℓ₁) = √(2(μ²−1))`.
-
-Depends on: `CRNT.Dynamics.HopfLyapunovCalibration`, `CRNT.Dynamics.HopfLimitCycle`,
-`CRNT.Kinetics.MassAction`, `CRNT.Kinetics.MassActionJacobian`.
+The returned curves are not proved to satisfy the original mass-action ODE.
+A full network Hopf theorem still needs the nonlinear transfer/return-map
+argument with suitable joint parameter regularity and a genuine positive
+periodic-orbit conclusion. Taylor calibration alone does not provide that bridge.
 -/
 
 namespace CRNT.Hopf
@@ -104,8 +31,7 @@ open scoped BigOperators
 
 /-- **A chain of `k` successive derivatives of a real function.** `fs i` is the `i`-th
 derivative function, `fs 0 = f`, and the derivative of `fs i` at `x` is `(fs (i+1)) x`.
-`Mathlib` has no `n`-th derivative operator, so the chain carries the differentiation steps
-explicitly. -/
+The chain carries the differentiation steps explicitly. -/
 structure DerivChain (f : ℝ → ℝ) (k : ℕ) where
   /-- The `i`-th derivative function. -/
   fs : ℕ → (ℝ → ℝ)
@@ -374,7 +300,7 @@ theorem cconj_five : cconj 5 = 5 := by
   rw [map_natCast]
   norm_num
 
-/-! ## 3. The mass-action Hopf verdict -/
+/-! ## 3. The mass-action Taylor/truncated-normal-form verdict -/
 
 /-- **The Hopf data of a planar mass-action family.** The bundle of the hypotheses of the
 Hopf theorem for a one-parameter mass-action family `κ (μ)` with a branch of steady states
@@ -390,9 +316,13 @@ Hopf theorem for a one-parameter mass-action family `κ (μ)` with a branch of s
 * the **first Lyapunov coefficient is nonzero** (`ℓ₁ ≠ 0`).
 
 With these, the Hopf theorem fires for the truncated normal form of the mass-action field
-(`massAction_hasPeriodicOrbit_of_hopf`). -/
-structure MassActionHopf (N : Network (Fin 2)) (κ : ℝ → N.RateConstants)
+(`truncatedNormalForm_periodicBranch`). -/
+structure MassActionHopfTaylorData (N : Network (Fin 2)) (κ : ℝ → N.RateConstants)
     (xst : ℝ → Concentration (Fin 2)) (μ₀ : ℝ) where
+  /-- The Taylor expansion is taken along an actual equilibrium branch. -/
+  steady_state : ∀ μ, N.IsMassActionSteadyState (κ μ) (xst μ)
+  /-- The equilibrium branch lies in the positive orthant. -/
+  positive : ∀ μ, (xst μ).Positive
   /-- The Hopf frequency at the crossing. -/
   ω : ℝ
   /-- The frequency is nonzero: the linear part is genuinely a rotation, not a double zero. -/
@@ -423,14 +353,14 @@ structure MassActionHopf (N : Network (Fin 2)) (κ : ℝ → N.RateConstants)
       theorem. -/
   H_ℓ₁ : H.firstLyapunov ≠ 0
 
-namespace MassActionHopf
+namespace MassActionHopfTaylorData
 
 variable {N : Network (Fin 2)} {κ : ℝ → N.RateConstants} {xst : ℝ → Concentration (Fin 2)}
 variable {μ₀ : ℝ}
 
 /-- **The mass-action Taylor data at the crossing.** The real partials of the mass-action
 field of the network at the crossing, computed from the network by `maPartials`. -/
-def partials (h : MassActionHopf N κ xst μ₀) : PlanarPartials :=
+def partials (h : MassActionHopfTaylorData N κ xst μ₀) : PlanarPartials :=
   maPartials N (κ μ₀) (xst μ₀)
 
 /-- **The Guckenheimer–Holmes calibration of the mass-action Taylor data.** The classical
@@ -438,26 +368,15 @@ real-coordinate first Lyapunov coefficient formula, applied to the *original* re
 of the mass-action field at the crossing, gives the first Lyapunov coefficient of the
 normal form: the resonant cubic coefficient computed by the Poincaré–Dulac machinery **is**
 the repository's real-coordinate `ℓ₁`. -/
-theorem calibration (h : MassActionHopf N κ xst μ₀) :
+theorem calibration (h : MassActionHopfTaylorData N κ xst μ₀) :
     h.H.lyapunovFromPartials (h.partials.fxxx) (h.partials.fxyy) (h.partials.gxxy)
       (h.partials.gyyy) (h.partials.fxy) (h.partials.fxx) (h.partials.fyy) (h.partials.gxy)
       (h.partials.gxx) (h.partials.gyy) = h.H.firstLyapunov :=
   classical_lyapunov (ω := h.ω) h.ω_ne h.partials h.H h.H_ω h.H_c₁
 
-/-- **The mass-action Hopf verdict.** A planar mass-action family whose Jacobian at the
-crossing is the canonical rotation, whose normal-form data is the one computed from the
-mass-action Taylor data, and whose first Lyapunov coefficient is nonzero, **carries a
-sustained periodic orbit** on the side of the crossing where the ratio `α/ℓ₁` is negative:
-a one-parameter branch of genuine, nonconstant, periodic orbits of the **truncated
-Poincaré–Dulac normal form of the mass-action field**, with the amplitude law
-`‖orbit‖ = √(−α/ℓ₁)` and the period `2π/Ω` (`Ω = ω + (Im c₁) R²`).
-
-This is the Hopf bifurcation theorem of Hopf–Andronov, in the mass-action setting and in the
-form the repository supports: the hypotheses are discharged for a genuine mass-action field
-(the Taylor data by `maTay_eq`, the rest by the fields of `MassActionHopf`), and the
-conclusion is the branch of periodic orbits assembled by
-`CRNT.Dynamics.HopfLimitCycle.hopf_andronov_truncated`. -/
-theorem massAction_hasPeriodicOrbit_of_hopf (h : MassActionHopf N κ xst μ₀)
+/-- Calibrated mass-action data and the associated cubic truncated-normal-form
+periodic branch. No solution of the original mass-action ODE is asserted here. -/
+theorem truncatedNormalForm_periodicBranch (h : MassActionHopfTaylorData N κ xst μ₀)
     (branch : Set ℝ) (hclosure : h.H.μ₀ ∈ closure branch)
     (hbranch : ∀ ν ∈ branch, h.H.α ν / h.H.firstLyapunov < 0)
     (hfreq : ∀ ν ∈ branch,
@@ -476,16 +395,13 @@ theorem massAction_hasPeriodicOrbit_of_hopf (h : MassActionHopf N κ xst μ₀)
               = Real.sqrt (-h.H.α μ / h.H.firstLyapunov)) :=
   h.H.hopf_andronov_truncated h.H_α' h.H_ℓ₁ branch hclosure hbranch hfreq
 
-/-- **The Hopf capacity of a planar mass-action family at `μ₀`.** The family has the Hopf
-capacity when the mass-action field at the crossing satisfies the hypotheses of the Hopf
-theorem: the Jacobian is the canonical rotation, the normal-form data is the one computed
-from the mass-action Taylor data, the crossing is transversal and the first Lyapunov
-coefficient is nonzero. -/
-def hasHopfCapacity (N : Network (Fin 2)) (κ : ℝ → N.RateConstants)
+/-- Existence of calibrated Taylor and truncated-Hopf data, including a positive
+equilibrium branch. This predicate does not assert network oscillatory capacity. -/
+def hasTruncatedHopfData (N : Network (Fin 2)) (κ : ℝ → N.RateConstants)
     (xst : ℝ → Concentration (Fin 2)) (μ₀ : ℝ) : Prop :=
-  Nonempty (MassActionHopf N κ xst μ₀)
+  Nonempty (MassActionHopfTaylorData N κ xst μ₀)
 
-end MassActionHopf
+end MassActionHopfTaylorData
 
 end CRNT.Hopf
 
@@ -744,12 +660,11 @@ noncomputable def HopfData : PlanarHopfData where
     intro _ w
     rfl
 
-/-- **The mass-action Hopf data of the network at the crossing.** Every hypothesis of the Hopf
-theorem is met: the mass-action Jacobian at the crossing is the canonical rotation
-`[[0, −2], [2, 0]`, the normal-form data is the one computed from the mass-action Taylor
-data, the unfolding is the real part of the crossing eigenvalue, the crossing is transversal
-and the first Lyapunov coefficient is `−1/4 ≠ 0`. -/
-noncomputable def hopfData : MassActionHopf N κ xst μ₀ where
+/-- Calibrated mass-action data and the associated cubic truncated-normal-form
+periodic branch. No solution of the original mass-action ODE is asserted here. -/
+noncomputable def hopfData : MassActionHopfTaylorData N κ xst μ₀ where
+  steady_state μ s := congrFun (equilibrium μ) s
+  positive _ := xeq_positive
   ω := ω
   ω_ne := by norm_num [ω]
   jacobian_rotation := by
@@ -773,9 +688,8 @@ noncomputable def hopfData : MassActionHopf N κ xst μ₀ where
     rw [PlanarHopfData.firstLyapunov]
     simp [HopfData, c₁val, c₁_eq, Complex.I_re, Complex.I_im]
 
-/-- **The branch of parameters carrying the sustained periodic orbit**: the one-sided
-neighbourhood of the crossing `μ₀ = 1` on the side on which the bifurcation is
-supercritical (`α/ℓ₁ < 0`, i.e. `μ > 1`). -/
+/-- Calibrated mass-action data and the associated cubic truncated-normal-form
+periodic branch. No solution of the original mass-action ODE is asserted here. -/
 def branch : Set ℝ := Set.Ioi 1 ∩ Set.Ioo 1 (6 / 5)
 
 /-- **The crossing is a limit point of the branch.** -/
@@ -856,11 +770,8 @@ theorem branch_freq (ν : ℝ) (hν : ν ∈ branch) :
     nlinarith
   linarith
 
-/-- **The mass-action Hopf verdict for the network.** On the one-sided neighbourhood of the
-crossing `μ₀ = 1` the truncated Poincaré–Dulac normal form of the *mass-action field* of the
-network carries a branch of genuine, nonconstant, periodic orbits with the amplitude law
-`‖orbit‖ = √(−α/ℓ₁)` — the sustained oscillation of the Hopf bifurcation, in the form the
-repository supports. -/
+/-- Calibrated mass-action data and the associated cubic truncated-normal-form
+periodic branch. No solution of the original mass-action ODE is asserted here. -/
 theorem verdict :
     hopfData.H.μ₀ ∈ closure branch ∧
       ∀ μ ∈ branch,
@@ -883,7 +794,7 @@ theorem verdict :
   have hcl : hopfData.H.μ₀ ∈ closure branch := by
     rw [hopfData.H_μ₀]
     exact branch_closure
-  exact MassActionHopf.massAction_hasPeriodicOrbit_of_hopf hopfData branch hcl
+  exact MassActionHopfTaylorData.truncatedNormalForm_periodicBranch hopfData branch hcl
     (fun ν hν => branch_sign ν hν) (fun ν hν => branch_freq ν hν)
 
 end CRNT.Examples.HopfPlanar2

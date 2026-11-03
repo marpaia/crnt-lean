@@ -1,5 +1,7 @@
 # Equilibria and deficiency
 
+`SingletonSource` describes homogeneous linear mass-action systems with singleton sources and unrestricted products. It is distinct from published partitioned MESSI systems. Toric parametrizations here are exponential log-kernel parametrizations; the general rational-coordinate bridge remains incomplete. Primitive-matrix Perron–Frobenius coverage is partial, separate from the column-stochastic positive-kernel theorem below.
+
 This document describes the equilibrium theory of the `CRNT` library: what an equilibrium is, when
 it exists and is unique, and the structural quantity, the *deficiency*, that controls these
 questions. It is one of the per-area documents hung off [`architecture.md`](architecture.md); the

@@ -5,116 +5,13 @@ import CRNT.Decision.ComputableDeficiency
 import Mathlib.Basic.Sign.Basic
 
 /-!
-# Shelf flux certificates for multistationarity capacity
+# Semantic shelf flux certificates for multistationarity capacity
 
-The **Advanced Deficiency Algorithm** (ADA) is the higher-deficiency successor of Feinberg's
-Deficiency One Algorithm (DOA, 1995b): for a mass-action network of deficiency `δ ≥ 1` it decides
-the *capacity* for multiple positive steady states by a parameter-independent feasibility test.
-Like the DOA, the test is a finite system of **linear equalities and inequalities** in the unknown
-log-ratio `μ = log y − log x` of the two candidate steady states, together with a **linear
-feasibility problem in the fluxes**.
-
-This module formalizes the semantic shelf-flux certificate `ADAFeasible` and proves that it
-exists **iff** the network has the capacity for multiple steady states. It builds on the
-flux characterization in `CRNT.Multistationarity.DeficiencyOneAlgorithm`. The certificate permits
-one shelf containing every reaction, so the existence equivalence is not a verification of the
-published algorithm's prescribed shelf enumeration or its finite numerical search.
-
-## The data of an ADA run
-
-An ADA run is given by
-
-* a **shelf decomposition** (`ADAShelfDecomposition`) — a *partition* of the reaction set into
-  **shelves**, each of which is a *subnetwork* of `N` (the shelf is the reaction set itself);
-* a **confluence vector** per shelf (`ADAConfluences`) — a flux `λ` on the shelf which is
-  *supported* on the shelf (it vanishes off it), *strictly positive* on it, and satisfies the
-  **lower balance condition** on the shelf,
-  `∑_{r ∈ sh} λ_r (y'_r − y_r) = 0`;
-* the **upper balance condition** on the shelf at the log-ratio `μ`,
-  `∑_{r ∈ sh} λ_r e^{⟨y_r, μ⟩} (y'_r − y_r) = 0`;
-* a **log-ratio** `μ ≠ 0` which is **sign compatible** with the stoichiometric subspace `S(N)`
-  (`N.SignCompatibleWithStoich μ`), i.e. `μ` has the coordinatewise sign pattern of a nonzero
-  stoichiometric vector — the sign pattern of `y − x`.
-
-`N.ADAFeasible` is the statement that such a run exists.  It is the exact analogue of
-`N.DOAFeasible`, with the single DOA flux replaced by a *decomposition* of the flux into one
-confluence vector per shelf.
-
-## The correctness
-
-* `adaFeasible_implies_capacity` — **the algorithmic direction**: a feasible ADA system yields the
-  capacity.  The witness is the *global flux* `α = ∑_sh λ_sh`, the sum of the shelf fluxes; it is
-  strictly positive on every reaction (the shelves cover the reaction set) and it satisfies the
-  two global flux balances, because each shelf balances on its own.
-* `capacity_implies_adaFeasible` — **the converse direction**: a network with the capacity yields a
-  feasible ADA system, namely the *one-shelf* system, in which the single shelf is the whole
-  reaction set and its confluence vector is the flux of the witnessing steady states.  This is
-  the `DOAFeasible` flux certificate. Multi-shelf certificates carry additional decomposition data;
-  the permitted one-shelf choice makes their existence equivalent to the original flux criterion.
-* `hasMultistationarityCapacity_iff_adaFeasible` — the two together: capacity is equivalent to
-  the existence of a shelf-flux certificate.
-* `adaFeasible_implies_doaFeasible` — **the ADA refines the DOA**: an ADA-feasible network is
-  DOA-feasible, the global flux being the DOA witness.
-* `doaFeasible_implies_adaFeasible` — the converse refinement, on the one-shelf system.
-
-## The connection with the existing leaf-M8 declaration
-
-`CRNT.Deficiency.AdvancedDeficiencyAlgorithm` already contains the *combinatorial* ADA
-(`ADAData`, `ADAData.imposes`, `ADAAffirmsCapacity`) and the non-vacuity theorem
-`stoichSubspace_ne_bot_of_adaAffirmsCapacity`.  This module connects the two:
-
-* `adaFeasible_implies_adaAffirmsCapacity` — a feasible ADA system implies the existing verdict
-  `N.ADAAffirmsCapacity`, so the **existing leaf-M8 declaration
-  `stoichSubspace_ne_bot_of_adaAffirmsCapacity` is a consequence of the new work**;
-* `adaFeasible_implies_stoichSubspace_ne_bot` — the same conclusion directly;
-* `adaAffirmsCapacity_iff_exists_signCompatible` — a *faithfulness note* about the existing
-  verdict: because the per-class values `Mᵢ` and the shelving may always be chosen with `M ≡ 0`,
-  `ADAAffirmsCapacity` is equivalent to the existence of a nonzero sign-compatible `μ`.
-
-## A concrete instance
-
-`CRNT.Network.ADAExample` is a network on the four species `{A, B, C, D}` with six reactions,
-built as **two independent deficiency-one modules** `0 → X`, `0 → Y`, `X + Y → 0` (on `{A, B}` and
-on `{C, D}`).  It is *not* weakly reversible (`not_weaklyReversible`) and it has deficiency two
-(`deficiency_eq_two`: `n = 7` complexes, `ℓ = 1` linkage class, `s = 4` stoichiometric rank).
-
-Its **shelf decomposition** is the pair of modules, and each shelf carries the **unit flux** as its
-confluence vector.  The log-ratio is `μ = (1, −1, 1, −1)`, whose sign pattern is that of the
-stoichiometric vector `σ = μ = v_{r₁} − v_{r₂} + v_{r₄} − v_{r₅}` (`mem_stoichSubspace`).  Every
-source of a reaction of a shelf pairs with `μ` at `0`, so the upper balance on each shelf is its
-lower balance, and each shelf balances because the three reaction vectors of a module add up to
-zero.  The verdict is therefore
-
-* `adaFeasible` — the example is ADA feasible;
-* `hasCapacity` — the Advanced Deficiency Algorithm **affirms the capacity** of the example.
-
-## Faithfulness notes
-
-* The **shelf decomposition** here is a *partition* of the reaction set into shelves.  Ellison's
-  shelves are additionally required to be *endotactic* (or *strongly endotactic*) subnetworks; the
-  endotacticity of a shelf is recorded here as the predicate `N.EndotacticShelf` (and its strong
-  version `N.StronglyEndotacticShelf`, and the decomposition-level hypotheses
-  `N.ADAShelfDecomposition.EndotacticShelves` /
-  `N.ADAShelfDecomposition.StronglyEndotacticShelves`), but it is deliberately **not** folded
-  into `N.ADAFeasible`.  The reason is mathematical: the two balance conditions of a shelf say
-  that the shelf's own mass-action system has the two steady states `1` and `e^{μ}`, while an
-  endotactic network has at most one steady state per compatibility class in the strongly
-  endotactic case (Gopalkrishnan–Miller–Shiu), so the two requirements are incompatible except in
-  the degenerate case `μ = 0`.  Keeping the structural hypothesis separate makes the feasibility
-  test non-vacuous and mirrors the treatment of the DOA, where the combinatorial shelf/confluence
-  enumeration is likewise kept separate from the semantic feasibility condition.
-* The **converse** in the *general* (multi-shelf) form — that a network with the capacity always
-  admits a *genuine* multi-shelf decomposition whose shelf-wise fluxes satisfy the two balance
-  conditions — is **not** proved here: it is the hard, genuinely algorithm-specific part of
-  Ellison's ADA (the decomposition of a capacity flux into shelf-wise confluence vectors).  What
-  is proved is the *one-shelf* converse (`capacity_implies_adaFeasible`), which is exactly the
-  Deficiency One Algorithm's system.
-* The **numerical** version of the ADA (the reduction of the flux feasibility problem to a linear
-  program over the sign patterns of the fluxes) is not formalized here.
-
-Depends on: `CRNT.Multistationarity.DeficiencyOneAlgorithm`,
-`CRNT.Deficiency.AdvancedDeficiencyAlgorithm`, `CRNT.Geometry.Endotactic`,
-`CRNT.Decision.ComputableDeficiency`.
+`ADAFeasible` is a real feasibility predicate with exponential balance
+equations. Its equivalence with capacity uses an allowed one-shelf certificate.
+It is not a finite implementation of the published Advanced Deficiency
+Algorithm. General multi-shelf converse and prescribed shelf-enumeration
+correctness remain incomplete.
 -/
 
 namespace CRNT

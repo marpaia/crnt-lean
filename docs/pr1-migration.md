@@ -90,3 +90,30 @@ correspondence with the mathematical literature.
 The Banaji–Craciun SR criterion requires `ReactantProductSeparated`, `FlowsAreSingletons`, and
 `TrueSRStrongCriterion`. Its conclusion concerns strong concordance of the fully open extension.
 Those hypotheses and the extension must be retained when describing or applying the theorem.
+
+## Mathematical API corrections
+
+The correspondence audit identified names introduced in PR #1 whose definitions were narrower than their mathematical names. These unreleased names have been replaced throughout imports, examples, and tests. The original release compatibility entry points described above remain available.
+
+| Previous PR module | Current module |
+|---|---|
+| `CRNT.Equilibria.MESSI` | `CRNT.Equilibria.SingletonSource` |
+| `CRNT.Computation.Semilinear` | `CRNT.Computation.PiecewiseNatAffine` |
+| `CRNT.Computation.SemilinearMax` | `CRNT.Computation.PiecewiseNatAffineMax` |
+| `CRNT.Computation.SemilinearRealization` | `CRNT.Computation.PiecewiseNatAffineRealization` |
+| `CRNT.Dynamics.HirschConvergence` | `CRNT.Dynamics.LaSalleConvergence` |
+| `CRNT.Dynamics.MassActionHopf` | `CRNT.Dynamics.MassActionHopfTaylorData` |
+| `CRNT.Oscillation.NoChaos` | `CRNT.Oscillation.MinimalSetClassification` |
+| `CRNT.Algebra.SiphonIdeal` | `CRNT.Algebra.SiphonSupport` |
+
+The corresponding predicate/theorem families use `SingletonSource`, `singletonSource...`, `PiecewiseNatAffine`, and `piecewiseNatAffine...`. Metric strong monotonicity uses `StronglyMonotoneOperator`; the combined order-preserving predicate uses `OrderPreservingStronglyMonotoneOperator`. The convergence verdicts use `converges_of_lasalle_of_stronglyMonotoneOperator...`. The old all-time one-operator regraph contract was removed; use `FlowGraphTransformFamily.op t` and prove the section is fixed at every time for all-time invariance. The abstract contraction verdict is `graphTransform_discrete_invariant_and_dist_le`.
+
+`MassActionHopfTaylorData` constructors now require `steady_state` and `positive` for the equilibrium branch. Its `truncatedNormalForm_periodicBranch` theorem concerns the cubic truncation. The support APIs use `ComplexUsesSpeciesSet`, `SupportBackwardClosed`, `SupportForwardClosed`, and `IsNonemptySiphonSupport`. Planar classification uses `IsNonregularMinimalSet` and `HasNonregularMinimalSubset`, conditional on the displayed kernel bundle.
+
+Linear Lyapunov verdicts use `nonExplosion_of_linearLyapunovData`, `positiveRecurrence_of_linearLyapunovData`, `foster_hitting_time_of_linearLyapunovData`, and the related explicit-data names. They do not require strong endotacticity or imply a universal theorem for that class.
+
+`IsAbsorbingCount` now means every enabled firing leaves the state unchanged. Use `IsDeadlockedCount` for the former no-enabled-channel property. The event-rate statements are `exitRate_eq_zero_of_deadlocked` and `deadlocked_of_exitRate_eq_zero`; the old origin equivalence is `zero_deadlocked_iff_no_zero_source`. For absorption use `zero_absorbing_iff_zeroSource_target_zero`, and pass a nonzero target to `zero_not_absorbing_of_zeroSourceReaction`. Under `∀ r, (N.reaction r).Nontrivial`, the two state predicates are equivalent.
+
+`Kinetics.Injective` retains its positive-class meaning. Use `Kinetics.BoundaryInjective` and `concordant_iff_all_weaklyMonotonic_boundaryInjective` for compatible nonnegative pairs with at least one positive composition. All these results retain the other admissibility fields of `Kinetics`.
+
+The [fix record](semantic-audit-fixes.md) lists each finding and its remaining mathematical obligations. Run `lake env lean docs/semantic-audit/CorrespondenceChecks.lean` to reproduce the regression proofs, or use `lake test`, which includes them automatically.

@@ -444,7 +444,7 @@ end PlanarHopfData
 
 /-- **The two multipliers of the canonical-rotation centre are conjugate and unimodular.**  The
 mass-action Jacobian at a Hopf crossing is the canonical rotation `![0, -ω; ω, 0]`
-(`CRNT.Hopf.MassActionHopf.jacobian_rotation`); the multipliers of the linear centre dynamics
+(`CRNT.Hopf.MassActionHopfTaylorData.jacobian_rotation`); the multipliers of the linear centre dynamics
 over a period `T` are `exp (iωT)` and `exp (-iωT)`, both of modulus exactly `1`.  This is the
 classical statement that the Hopf crossing is a *purely imaginary* crossing. -/
 theorem linearCentre_multiplier_norm (ω T : ℝ) :

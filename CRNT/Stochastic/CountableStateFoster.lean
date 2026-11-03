@@ -1,84 +1,13 @@
 import CRNT.Stochastic.MinimalSemigroupKrylovBogoliubov
 
 /-!
-# The countable-state Foster--Lyapunov criterion with a constant drift
+# Countable-state Foster criteria under explicit drift hypotheses
 
-This module supplies the **countable-state Foster–Lyapunov criterion with a constant negative
-drift**, the reusable ingredient of the Anderson–Cappelletti–Kim–Nguyen (ACK 2020) conclusion
-that a strongly endotactic stochastic mass-action system is positively recurrent.
-
-## The two drift conditions
-
-For a continuous-time chain on a countable state space `α` with generator
-
-`Q V (a) = ∑ᵢ rateᵢ(a) (V (nextᵢ a) − V a)`   (`CRNT.JumpSystem.drift`)
-
-one distinguishes
-
-* the **multiplicative** drift `Q V ≤ −ε V + K` (`ε > 0`, `K ≥ 0`), which is what the
-  repository's `CRNT.JumpSystem.foster_lyapunov_ergodic` consumes: the *reward function* `f` that
-  appears there must have finite sublevel sets, and a multiplicative drift provides it
-  (`f = ε V`);
-* the **constant** drift `Q V ≤ −c` (`c > 0`) outside a *finite* exceptional set `C`, which is the
-  drift condition of Foster (1951) and of Meyn–Tweedie (*Markov Chains and Stochastic Stability*,
-  Chapter 11, Theorem 11.3.4) for continuous time, and the one used by ACK.
-
-The two conditions are not interchangeable: the repository's ergodic theorem cannot be applied to a
-certificate of the second kind, because the reward function `f = c·1_{Cᶜ}` that the constant drift
-suggests does **not** have finite sublevel sets (`{a | f a ≤ R}` contains all of `α` for `R ≥ c`),
-and the Krylov–Bogoliubov argument behind `CRNT.JumpSystem.exists_invariant_of_drift` uses exactly
-that finiteness.  This module therefore develops the constant-drift criterion *from scratch*:
-
-* `CRNT.CountableFosterDrift`: the drift certificate (a Lyapunov function with nonnegative values
-  and finite sublevel sets, and a constant decrement `c` at every enabled jump outside a finite
-  exceptional set `C`);
-* `CRNT.CountableFosterDrift.drift_le_mul_q`, `CRNT.CountableFosterDrift.drift_le`: the
-  *generator-level* constant drift `Q V ≤ −c` read off the certificate (the ACK condition);
-* `CRNT.foster_hitting_time_of_constant_drift`: the **hitting-time estimate** under a constant
-  drift: the expected time of reaching `C` is at most `V a / c`, and `C` is reached with
-  probability one;
-* `CRNT.CountableFosterDrift.drift_sq_le_mul_q`, `CRNT.CountableFosterDrift.drift_sq_le`: the
-  **squaring step**, which turns the constant drift into a *multiplicative* drift for the squared
-  Lyapunov function `V²` (`Q V² ≤ −c V` off `C`), the drift condition of
-  `CRNT.JumpSystem.foster_lyapunov_ergodic`;
-* `CRNT.exists_invariant_of_constant_drift` and
-  `CRNT.foster_lyapunov_ergodic_of_constant_drift`: the **existence of an invariant probability**
-  and the **positive-recurrence conclusion** (invariance, strict positivity on the class,
-  convergence in total variation, uniqueness);
-* `CRNT.CountableFosterDrift.reachable_finite`: the reachable class of a certificate is finite,
-  which is the price paid for the squaring step (see below).
-
-## What remains open
-
-This module is *reusable infrastructure* for the multispecies ACK theorem, which is still open in
-this repository for two independent reasons.
-
-1. The **deterministic tier-weight construction** is missing: the ACK theorem needs, on the count
-   lattice, a Lyapunov function whose drift is a *negative constant* outside a finite set of
-   counts.  The repository has the deterministic tier machinery of leaf D9 (`CRNT.Dynamics`) and its
-   count-lattice reading (`CRNT.Network.CountTier`), but the count-lattice tier *separation* and
-   *coverage* properties needed to obtain the constant drift for an arbitrary strongly endotactic
-   network are not available; the naive route — dominating the lower-tier mass-action monomials by
-   the top-tier ones — is **refuted by counterexample**
-   (`CRNT.Examples.EndotacticCounterexample.topTier_does_not_dominate`).
-2. The **constant drift used here is the per-jump one** (`V (nextᵢ a) − V a ≤ −c` at every enabled
-   jump outside `C`), which is *stronger* than the ACK condition `Q V ≤ −c`: under it the Lyapunov
-   function decreases strictly at every jump outside the finite exceptional set, so by
-   `CRNT.CountableFosterDrift.reachable_finite` the set of states reachable from a given state is
-   finite, and the positive-recurrence theorem below is therefore non-vacuous for *finite* classes
-   only.  The aggregate ACK condition `Q V ≤ −c` yields the hitting-time estimate
-   (`CRNT.foster_hitting_time_of_constant_drift`) but *not* the squaring step, because `Q V²` is
-   not controlled by `Q V`: the identity
-   `Q V² (a) = 2 V (a) · Q V (a) + ∑ᵢ rateᵢ(a) (V (nextᵢ a) − V a)²`
-   leaves an uncontrolled variance term.  Closing that gap for the aggregate condition — e.g. by a
-   second-moment bound on the jumps — is the remaining mathematical obligation for the multispecies
-   ACK theorem.
-
-The rate hypothesis `1 ≤ J.q a` (the total exit rate is at least `1` outside the exceptional set)
-that appears in the theorems below converts the per-jump decrement into the generator-level
-constant drift `Q V ≤ −c`; it is a normalization (any uniform positive lower bound `qmin` on
-`J.q` gives the same conclusions with `c` replaced by `c · qmin`, and the rates may be rescaled to
-make `qmin = 1`).
+Finite-sublevel Lyapunov functions and supplied negative drift bounds yield the
+stated hitting-time and recurrence conclusions. Constructing these data is a
+separate task. Universal stochastic recurrence/non-explosion from several-species
+strong endotacticity is false; restricted count-tier and Lyapunov classes are
+handled elsewhere.
 -/
 
 open MeasureTheory intervalIntegral Set Filter

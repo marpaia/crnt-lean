@@ -8,125 +8,14 @@ import Mathlib.Tactic
 import Mathlib.Analysis.SpecialFunctions.Sqrt
 
 /-!
-# The Foster drift condition for a general output-controllable unimolecular plant
+# Conditional general-plant quadratic drift and Foster transfers
 
-This file supplies the piece that was missing from leaf **C3** of the field map
-(`CRNT.Design.GeneralPlant`): the *construction* of the Foster–Lyapunov drift condition
-(hypothesis (H)) for the stochastic antithetic closed loop of an **arbitrary
-output-controllable unimolecular plant**.
-
-The deterministic part of leaf C3 is `CRNT.Design.GeneralPlantRPA`: it formalizes the
-general linear plant
-
-```text
-ẋ = A x + B u,      y = C x,      u̇ = μ − θ (C x),
-```
-
-proves the general-plant robust-perfect-adaptation setpoint `C x = μ / θ` at every
-equilibrium (`antitheticLoop_setpoint`), packages the linear-quadratic Lyapunov certificate
-(`LyapunovCertificate`, `antitheticLieDeriv_neg`), and provides the *general* Foster–Lyapunov
-transfer theorem `ergodic_of_fosterDrift` / `geometric_ergodic_of_fosterDrift`, discharging the
-drift condition only for the concrete production–degradation plant.
-
-The present file closes the gap in four steps.
-
-## 1. The quadratic Lyapunov function on the count lattice
-
-A **unimolecular** (first-order) plant is a network whose reactions have at most one reactant
-molecule; in the counting (birth–death) setting every propensity is then either constant
-(zeroth order) or linear in a single count coordinate.  The natural Lyapunov function for the
-closed loop is the *quadratic* one inherited from the linear-quadratic certificate,
-
-```text
-V (n) = (n − n*)ᵀ P (n − n*),
-```
-
-where `P` is the shape matrix of the certificate and `n*` the reference count vector.  On the
-count lattice `V` is a genuine Lyapunov function: it is nonnegative (`quadObservable_nonneg`),
-and, since `P` is positive definite, its sublevel sets are finite
-(`quadObservable_finite`).
-
-## 2. The exact drift identity
-
-The generator drift of a quadratic observable splits into a *linear* part (the deterministic
-Lyapunov decay, governed by the closed-loop matrix through the Lyapunov equation) and a
-*remainder* (the discrete second-order correction `Δᵀ P Δ`):
-
-```text
-Q V (n) = 2 (n − n*)ᵀ P (∑_r λ_r(n) Δ_r)  +  ∑_r λ_r(n) (Δ_rᵀ P Δ_r).
-```
-
-This is `observableGenerator_quadObservable`, and it is exact for *every* network.
-
-## 3. The Foster drift condition
-
-For a unimolecular network the deterministic drift `∑_r λ_r(n) Δ_r` is **affine** in `n`
-(`countDrift_eq_affine`: `= b + A n`, with `A` the *first-order drift matrix* of the network and
-`b` its constant drift), and the remainder `∑_r λ_r(n) (Δ_rᵀ P Δ_r)` is at most **linear** in
-`n` (`quadRemainder_le`).  Consequently the drift of the quadratic Lyapunov function is
-
-```text
-Q V (n) = (quadratic part, ≤ −‖n − n*‖² by the Lyapunov equation) + (linear part) + (constant),
-```
-
-and the linear part is absorbed by the elementary Young inequality (`abs_mul_le`).  This is
-`fosterDrift_of_certificate`: the **Foster drift condition (H)** for the closed loop,
-
-```text
-Q V (n) ≤ − f (n) + K,     f (n) = (3/8) ‖n − n*‖²,     K ≥ 0,
-```
-
-with `f` norm-like (finite sublevel sets, `fosterNormLike_finite`).  The certificate
-`QuadraticLyapunovCertificate` is stated in the *normalized* Lyapunov form
-`Aᵀ P + P A ⪯ −I`; any other Lyapunov constant is recovered by rescaling `P`.
-
-`fosterDrift_neg_outside` is the classical equivalent form: a *constant* negative drift outside
-the finite set `{n | f n ≤ K + 1}`.  `fosterDrift_data` packages the condition as a
-`FosterDrift` datum, and `ergodic_of_certificate` / `geometricErgodic_of_certificate` transfer
-it to positive recurrence and (geometric) ergodicity of the closed-loop chain.  Irreducibility
-is an *explicit hypothesis*, as the Briat–Gupta–Khammash theorem requires, and non-explosion
-is *derived* from the drift condition.
-
-## 4. The general plant
-
-`LinearPlant.closedLoopMatrix` is the closed-loop matrix of the antithetic internal model,
-`[[A, B], [−θ Cᵀ, 0]]`, and `LinearPlant.closedLoopField` is the closed-loop vector field
-`(A x + B u, μ − θ (C x))`, which is the antithetic loop `antitheticLoop` of
-`CRNT.Design.GeneralPlantRPA`.  `plant_lyapunov_equation` identifies the Lyapunov equation of
-the certificate with the Lyapunov equation of the plant's closed-loop matrix, and
-`fosterDrift_of_plant` is the **general-plant Foster drift condition**: a counting realization
-of the closed loop whose first-order drift matrix is the plant's closed-loop matrix, together
-with a quadratic Lyapunov certificate for that matrix, satisfies hypothesis (H).
-
-The setpoint `μ/θ` is the deterministic theorem `antitheticLoop_setpoint`; in the stochastic
-setting the same value is produced by the *internal-model* (charge) identity
-`mean_output_eq_setpoint`, which is the stochastic counterpart of the Briat–Gupta–Khammash
-conclusion.
-
-## 5. A concrete instance
-
-`BirthDeathInstance` is the one-species birth–death network `∅ → X` (rate `μ`), `X → ∅`
-(rate `γ`): the counting version of the production–degradation plant.  Its first-order drift
-matrix is `−γ` (`driftMatrix`), the Lyapunov certificate is `P = (1)` with the Lyapunov
-equation `2 γ ≥ 1` (`cert`), and the Foster drift condition
-`Q V (n) ≤ −(3/8) n² + K` is proved in `fosterDrift`.
-
-## 6. What remains
-
-The counting realization of the *molecular* antithetic controller contains one bimolecular
-reaction, the annihilation `Z₁ + Z₂ → ∅`.  Its propensity is quadratic in the counts, so its
-contribution to the drift of a quadratic Lyapunov function is *cubic*; it is controlled in the
-scalar production–degradation instance by the explicit `z₁ z₂` cross-term of
-`CRNT.Antithetic.lyap` (`CRNT.Design.AntitheticErgodic.drift_lyap_le`).  The present file
-treats the *unimolecular* case, in which the drift is exactly affine and the remainder exactly
-linear; extending the cubic control to a general plant (a matrix `P` with a `z₁ z₂` block and
-the corresponding sign conditions on `P Δ_r`) is the remaining part of the
-Briat–Gupta–Khammash closed-loop ergodicity theorem, and is stated precisely in
-`annihilation_cubic_remainder`.
-
-Depends on: `CRNT.Design.GeneralPlantRPA`, `CRNT.Stochastic.FirstOrderFoster`,
-`CRNT.Stochastic.FosterLyapunov`, `CRNT.Stochastic.FosterRecurrence`,
-`CRNT.Stochastic.MinimalSemigroupNetwork`, `CRNT.Stochastic.HarrisTheorem`.
+Quadratic generator identities and drift estimates are developed from supplied
+shape matrices, decay, growth, and compatibility hypotheses. These yield Foster
+certificates when the displayed assumptions hold. They do not construct an
+antithetic closed-loop ergodicity certificate for every output-controllable
+unimolecular plant. Concrete plant instances and obstruction results retain
+their separate scope.
 -/
 
 open Filter

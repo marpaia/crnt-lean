@@ -6,87 +6,14 @@ import CRNT.Deficiency.Definition
 import Mathlib.Basic.Sign.Basic
 
 /-!
-# Flux feasibility and multistationarity capacity
+# Semantic flux feasibility for multistationarity capacity
 
-Feinberg's Deficiency One Algorithm (1995b) decides the capacity of a deficiency-one mass-action
-network for multiple positive steady states by a **parameter-independent feasibility test**: one
-solves, for the unknown log-ratio `μ = log y − log x` of the two candidate steady states, a finite
-system of **linear inequalities** in `μ`, together with a **linear feasibility problem** in the
-fluxes.  The algorithm affirms the capacity iff that system is feasible.
-
-This module formalizes the semantic flux certificate `DOAFeasible` and proves that it exists
-**iff** the network has the capacity for multiple steady states. Both directions hold for every
-network, without a deficiency-one hypothesis. The certificate quantifies over real log-ratios
-and fluxes and contains exponential balance equations. This existence characterization does not
-provide the finite linear search of the published algorithm; the shelf/confluence and numerical
-obligations are described below.
-
-## The system
-
-The unknown is the log-ratio `μ ∈ ℝ^𝒮` of the two candidate steady states.  The system asks for
-
-* a **positive flux** `α ∈ ℝ^ᴿ` (the fluxes of the individual reactions at the lower state);
-* the **flux balance at the lower state**, `∑_r α_r (y'_r − y_r) = 0`;
-* the **flux balance at the upper state**, `∑_r α_r e^{⟨y_r, μ⟩} (y'_r − y_r) = 0`, the factor
-  `e^{⟨y_r, μ⟩}` being the ratio of the reaction rates at the two states;
-* the **sign compatibility** of `μ` with the stoichiometric subspace `S(N)`: `μ` must have the
-  coordinatewise sign pattern of a nonzero stoichiometric vector, the sign pattern of `y − x`.
-
-`DOACandidate` packages this data and `DOAFeasible` says that such a candidate exists.
-
-## The correctness
-
-* `doaFeasible_implies_capacity` — **the algorithmic direction**: a feasible system yields the
-  capacity.  The witness is the flux certificate `(α, μ, σ)` of
-  `CRNT.Network.hasMultistationarityCapacity_iff_flux_sign`, with `σ` the stoichiometric vector
-  realizing the sign pattern of `μ`.
-* `capacity_implies_doaFeasible` — **the converse direction**: a network with the capacity yields a
-  feasible system; the log-ratio of the two witnessing steady states is the solution.
-* `hasMultistationarityCapacity_iff_doaFeasible` — the two together: capacity is equivalent to
-  the existence of a semantic flux certificate.
-* `doa_feasible_implies_capacity` — the same statement in the classical deficiency-one setting
-  (deficiency one, stoichiometric rank one, one-dimensional stoichiometric subspace), the shape in
-  which Feinberg's theorem is usually stated.
-
-## The rank-one case: the algorithm's linear inequality system
-
-For a network whose stoichiometric subspace is a single line (`S(N) = span {v}`, `v ≠ 0`) the
-algorithm's system collapses to a strikingly simple shape, which this module also formalizes:
-
-* every reaction vector is `c_r • v` for a unique **reduced coefficient** `c_r`
-  (`reducedCoefficient`), and the two flux balances become the **two scalar equations**
-  `∑_r α_r c_r = 0` and `∑_r α_r e^{⟨y_r, μ⟩} c_r = 0`
-  (`rankOne_lowerBalance_iff`, `rankOne_upperBalance_iff`);
-* the pairing difference of a reaction is `c_r ⟨v, μ⟩` (`rankOne_pairingDifference`), so the
-  algorithm's **linear inequality system** — the pairing order `⟨y'_r, μ⟩ ≷ ⟨y_r, μ⟩` prescribed
-  by the sign of `c_r` — reduces to the **single linear inequality** `⟨v, μ⟩ ≠ 0`
-  (`rankOne_pairingOrder_iff`), which in turn is implied by the sign compatibility
-  (`rankOne_pairingOrder_of_sameSign`, via `classPairing_pos_of_sameSign`);
-* consequently `RankOneDOASystem` is a single linear feasibility problem in `α`, and
-  `rankOne_doaFeasible_iff` and `rankOne_hasMultistationarityCapacity_iff` are the algorithm's
-  correctness in rank one.
-
-## A family where the test is decided
-
-`oneRxn_doaFeasible_iff` settles the algorithm on the fully open network with a single non-flow
-reaction `a → b`: the test is feasible **iff** `∑_{b_i > a_i} a_i > 1` (Joshi 2013, Theorem 4.1),
-so the algorithm is correct on that family.
-
-## What is *not* formalized here
-
-* The **shelf/confluence** presentation of the algorithm (`CRNT.Deficiency.DeficiencyOneAlgorithm`,
-  `CRNT.Deficiency.Shelf`): the enumeration of shelf partitions and the confluence vectors that
-  Feinberg's numerical version searches over, and the deduction of the linear inequality system
-  from the network's combinatorial data.  The system formalized here is the *semantic* content of
-  the algorithm — the conditions on `μ` and `α` whose feasibility the algorithm decides — and it
-  is the correctness of that test which is proved.  In rank one, `RankOnePairingOrder` is the
-  rank-one content of the shelf constraints: the pairing order prescribed by the sign of the
-  reduced coefficient.
-* The **numerical** version of the algorithm (Feinberg 1995b; Conradi–Feliu–Mincheva–Wiuf 2017):
-  the reduction of the flux feasibility problem to a linear program over the sign patterns of the
-  fluxes, and the decision procedure.
-* The **Advanced Deficiency Algorithm** (leaf M8), whose verdict `CRNT.Network.ADAAffirmsCapacity`
-  is a shelf partition over colinearity classes; its correctness is not proved here either.
+`DOAFeasible` quantifies over real fluxes and log-ratios with exponential
+balance equations. It is equivalent to capacity, with rank-one and other
+restricted consequences. This semantic equivalence does not implement a finite
+linear search or establish correctness/completeness of the separately defined
+published shelf/confluence algorithm. Additional shelf-flux and placement
+bridges remain explicit assumptions.
 -/
 
 namespace CRNT

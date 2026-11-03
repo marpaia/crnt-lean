@@ -1,98 +1,14 @@
 import CRNT.Multistationarity.ParityOfSteadyStates
 
 /-!
-# The parity theorem in a general form
+# Conditional degree/parity consequences and restricted total-degree examples
 
-This module states the **parity theorem of Šošić–Sibuya** in its general form, and adds the
-leaf **S19** ("the parity theorem: the number of positive steady states is odd") of
-`docs/field-map.md` to the field map in the *general* version that does not go through the
-total-degree theorem.
-
-## The parity theorem and the Brouwer degree
-
-Šošić & Sibuya, *The number of steady states of a chemical network is odd*, Proc. Amer. Math.
-Soc. **134** (2006), 1835–1844, prove that a *fully open* network has an odd number of positive
-steady states.  Their argument is a parity argument on the **Brouwer degree** of the steady-state
-map: the degree of the map on a compatibility class is the *signed count* of its zeros, and the
-number of zeros and the degree differ by an even number, so that the parity of the number of
-zeros is the parity of the degree.  The total degree `(-1)^s` of Conradi–Feliu–Mincheva–Wiuf is
-odd, whence the conclusion.
-
-The repository's degree machinery (`CRNT.Multistationarity.DegreeExistence`,
-`CRNT.Multistationarity.DegreeStructural`) provides:
-
-* the **class degree** `Network.nonnegativeClassDegree`: the relative Brouwer degree of the
-  steady-state map on the nonnegative part of the compatibility class, i.e. the signed count
-  `∑ y, sign (det (D (steadyStateMap) y))` over the zeros of the reduced field in the class;
-* the **local degree** at a zero: `sign (det (D (steadyStateMap) y))`, which by
-  `Network.det_fderiv_steadyStateMap_eq_reducedJacobian_det` is the sign of the reduced Jacobian
-  determinant `Network.reducedJacobian` (Conradi–Feliu–Mincheva–Wiuf's *local degree*);
-* the identity `Network.classDegree_eq_card_sub_two_mul_negCount`: under the nondegeneracy
-  hypothesis, the class degree is the number of positive steady states minus twice the number of
-  those at which the reduced Jacobian determinant is negative.
-
-Consequently the number of positive steady states and the class degree differ by an even number,
-and the *parity* of the number of positive steady states is the parity of the class degree.
-
-## What this module adds
-
-* `Network.card_positiveSteadyStates_odd_iff_classDegree_odd` — the **converse** parity
-  relation: the parity of the count is the parity of the class degree.  This is the general form
-  of the parity theorem; it does *not* require the class degree to be `(-1)^s`, only the relation
-  `degree = count − 2 · (number of negative local degrees)`.
-* `Network.card_positiveSteadyStates_even_iff_classDegree_even` — the even case.
-* `Network.weightedCount_eq_classDegree` — the **"counted with multiplicity" reading**: the
-  *weighted count* of the positive steady states of a class (the sum of the local degrees over
-  them) is the class degree, *exactly*, and this holds **without** the nondegeneracy hypothesis.
-  Consequently the parity theorem survives without the nondegeneracy hypothesis in the form
-  `Network.card_nondegenerate_positiveSteadyStates_odd_iff_classDegree_odd`: the parity of the
-  number of *nondegenerate* positive steady states is the parity of the class degree.  (The
-  *total* number of positive steady states need not have the parity of the class degree when
-  degenerate zeros are present: a degenerate zero contributes `0` to the class degree but `1` to
-  the count.)
-* `Network.classDegree_eq_sum_erase_two_opposite_signs` — the two opposite local degrees `+1` and
-  `−1` *cancel* in the class degree;
-* `Network.card_positiveSteadyStates_odd_of_two_opposite_signs_of_odd_classDegree` — the parity
-  refinement of the Conradi–Feliu–Mincheva–Wiuf "exceptional local degree" criterion: an odd
-  class degree together with two positive steady states of opposite local degrees gives an
-  **odd** number of positive steady states, at least three;
-* `Network.card_positiveSteadyStates_even_of_two_opposite_signs_of_even_classDegree` and
-  `Network.card_positiveSteadyStates_even_of_exactly_two_opposite_signs` — the even cases that
-  *do* follow from two opposite signs (see the counterexample below).
-
-## What is *false*: "two opposite signs ⇒ an even number of positive steady states"
-
-The reading of the parity theorem that says "*a class with two positive steady states of opposite
-reduced-Jacobian signs carries an **even** number of positive steady states*" is **false**.  The
-two opposite local degrees cancel in the class degree, but the class degree is the signed count
-of the local degrees of the *remaining* zeros, and its parity — not evenness — is what the
-parity theorem relates to the count.  The namespace `CRNT.Network.OppositeSignsCounterexample`
-of this module records the ingredients of an explicit counterexample: the one-species network
-`∅ → A`, `A → ∅`, `2A → 3A`, `3A → 2A` (rates `6`, `11`, `6`, `1`), whose field is
-`6 − 11 x + 6 x² − x³ = −(x − 1)(x − 2)(x − 3)` with the three positive zeros `1`, `2`, `3`;
-the class of the origin is the whole concentration space (the stoichiometric subspace is the
-whole space and the rank is one), so the class carries **three** positive steady states, while
-the reduced Jacobian determinants at them are `−2`, `+1`, `−2` — two of them of opposite signs.
-Three is odd, so the "even count" conclusion fails, while the class degree is `−1 + 1 − 1 = −1`,
-odd as well, in agreement with the parity theorem of this module.
-
-## What is *not* proved here: the total-degree theorem
-
-The **total-degree theorem** of Conradi–Feliu–Mincheva–Wiuf — that the class degree of a
-dissipative network is `(-1)^s` — is **false in general**, and the failure is proved in the
-repository: `CRNT.Network.Counterexample.classDegree_ne_pow_neg_one` (in
-`CRNT.Multistationarity.TotalDegree`) exhibits a one-species network with the autocatalytic
-reaction `A → 2A` whose fully open extension has the constant field `1`, hence class degree `0`
-instead of `(-1)^1 = −1`.  The total-degree theorem is available only under extra hypotheses: in
-the affine (dissipative) case, `CRNT.Network.fullyOpen_classDegree`.  This module therefore does
-*not* remove the `hdeg` hypothesis of `Network.card_positiveSteadyStates_odd`; it states the
-parity relation in the form that does not need it.
-
-## Dependencies
-
-`CRNT.Multistationarity.ParityOfSteadyStates` (the class degree, the signed count, the parity
-theorem), `CRNT.Multistationarity.DegreeStructural` (the local degree at a regular preimage),
-`CRNT.Multistationarity.DegreeExistence` (the class degree).
+The finite signed-count arguments use the displayed boundary, regularity,
+finiteness and total-degree inputs. Explicit affine/rank-restricted computations
+are available where stated. Full openness alone does not force odd parity; the
+general total-degree theorem under dissipativity and boundary conditions remains
+incomplete. See `ParityOfSteadyStates` and `test.SemanticCorrespondence`.
+An earlier parity attribution with no verifiable source has been removed.
 -/
 
 set_option maxHeartbeats 800000
@@ -727,9 +643,7 @@ theorem weightedCount_eq_classDegree :
       = N.nonnegativeClassDegree rates 0 hfinN :=
   N.weightedCount_eq_classDegree rates 0 hfinN hfinP boundary_ne_zero
 
-/-- **The two-species fully open network has an odd number of positive steady states, and its
-class degree is odd.**  This is the parity theorem of Šošić–Sibuya in the general form of this
-module, on a concrete instance. -/
+/-- Conditional degree/parity consequence under the hypotheses displayed below. -/
 theorem card_positiveSteadyStates_is_odd :
     Odd (N.card_positiveSteadyStates_in_class rates 0 hfinP : ℤ) :=
   (card_positiveSteadyStates_odd_iff_classDegree_odd).mpr (by

@@ -1,48 +1,12 @@
 import CRNT.Dynamics.FenichelPersistenceConcrete
 
 /-!
-# A non-degenerate Fenichel persistence instance with a genuinely contracting fast fibre
+# A contracting fibre flow and its invariant graph
 
-This module builds a `CoupledFlowGraphTransform` whose fast fibre genuinely *contracts* — the
-transverse direction is attracted to a target at exponential rate `rate > 0` — and feeds it through
-`CRNT.Dynamics.FenichelPersistence`'s `fenichel_persistence` to obtain a persistence instance whose
-persisted manifold `M_ε` is the genuine attracting fibre `z = c`, not the degenerate zero section of
-the constant-drift instance `CRNT.Dynamics.FenichelPersistenceConcrete`.
-
-The field is the contracting fast fibre over a frozen slow base `ẏ = 0`,
-`ż = -rate · (z - c)` on the product `Y × E`: the slow base is frozen and the fast fibre is pulled
-toward the constant target `c` at rate `rate`. Its forward semiflow is the closed-form exponential
-contraction `(y, z) ↦ (y, c + e^{-rate·t} · (z - c))` (`contractingFlow`). Because the contraction
-keeps every fibre globally well-defined for all forward time, the semiflow is built *directly* as a
-`Flow ℝ≥0 (Y × E)` from this closed form — its continuity, identity at time `0`, and semigroup law
-follow from `e^{-rate·(s+t)} = e^{-rate·s} · e^{-rate·t}` — with no boundedness cutoff needed: the
-exponential pull is a global self-map at every time even though the field `-rate·(z - c)` is
-unbounded in `z`. The time-`τ` map carries the graph of a section `σ` to the graph of the regraphed
-section `contractRegraph rate c τ σ = c + e^{-rate·τ} · (σ - c)` (`contracting_allTimeRegraph`),
-discharging `flow_mapsTo` as a theorem about the explicit flow.
-
-The graph-transform contraction is realized on the complete space `Y →ᵇ E` of bounded sections by the
-*same* affine map `op σ = const c + e^{-rate·τ} · (σ - const c)` (`contractGapData`): an exact
-contraction in the supremum metric with factor `q = e^{-rate·τ} < 1` whenever `rate > 0` and the
-horizon `τ > 0`. Its unique Banach fixed point is the constant section `c` — the genuine attracting
-fibre, a *moving* / non-trivial manifold (the fibre honestly contracts onto it, unlike the
-constant-drift instance whose fixed point is forced to the zero section by the vanishing drift). The
-plain-section flow operator and the bounded-section data operator agree on this constant section, so
-the fixed-point hypothesis of `fenichel_persistence` is discharged, yielding the two halves of
-Fenichel persistence for the genuinely contracting field
-(`fenichel_persistence_contracting`): forward invariance of the graph of the attracting fibre under
-the iterate coupled semiflow, and its supremum-metric closeness to the base section.
-
-Defined by Fenichel, "Geometric singular perturbation theory for ordinary differential equations": a
-normally attracting invariant manifold of the unperturbed layer system persists, for small `ε`, as a
-nearby invariant manifold realized as the graph of the fixed-point section of the flow-then-regraph
-graph transform. Here the fast fibre is *normally attracting* — it contracts transversally at rate
-`rate` — so the persisted manifold is the genuine attracting fibre and the graph transform is an
-honest contraction with factor `e^{-rate·τ}`, the non-degenerate companion to the constant-drift
-instance of `CRNT.Dynamics.FenichelPersistenceConcrete`.
-
-Depends on:
-`CRNT.Dynamics.FenichelPersistenceConcrete`.
+The base coordinate is frozen and the fibre relaxes exponentially to a supplied
+centre. The explicit time-indexed regraph operators satisfy the graph-mapping
+law and have a common fixed graph, proving all-time invariance. The example
+illustrates the graph-transform API; it is not a general Fenichel theorem.
 -/
 
 open Function Set
@@ -140,6 +104,21 @@ theorem contracting_allTimeRegraph (rate : ℝ) (c : E) (t : ℝ≥0) (σ : Y �
   intro p hp
   rw [mem_graphSet] at hp
   rw [contractingFlow_toFun, mem_graphSet, contractingMap, contractRegraph, hp]
+
+/-- The genuine contracting flow realizes an elapsed-time family of regraph operators. -/
+noncomputable def contractingGraphTransformFamily (rate : ℝ) (c : E) :
+    FlowGraphTransformFamily Y E where
+  flow := contractingFlow rate c
+  op := contractRegraph rate c
+  flow_mapsTo := contracting_allTimeRegraph rate c
+
+/-- The target section is fixed at every time, so its graph is continuously invariant. -/
+theorem contracting_graph_invariant_allTime (rate : ℝ) (c : E) :
+    IsInvariant (contractingFlow (Y := Y) rate c).toFun (graphSet (fun _ : Y => c)) := by
+  apply (contractingGraphTransformFamily (Y := Y) rate c).graphSet_isInvariant_of_commonFixedPoint
+  intro t
+  funext y
+  simp [contractingGraphTransformFamily, contractRegraph]
 
 /-- **The concrete contracting fast-fibre coupled-flow graph transform.** Assembled from the genuine
 closed-form contracting flow, with the graph-transform operator at horizon `τ` proved — not assumed —
@@ -242,21 +221,16 @@ theorem contractGapData_manifold (rate : ℝ) (c : E) (τ : ℝ≥0) (hrate : 0 
   rw [contractOp_apply, BoundedContinuousFunction.const_apply', sub_self, smul_zero, add_zero]
 
 omit [NormedSpace ℝ Y] [CompleteSpace Y] in
-/-- **End-to-end Fenichel persistence for the genuinely contracting fast-fibre field.** Combining the
-concrete operator-from-flow bridge `contractingCoupled` (whose `flow_mapsTo` is proved from the
-closed-form contracting flow) with the genuine contraction `contractGapData` (whose Banach fixed point
-`M_ε = c` is the attracting fibre — a non-trivial moving manifold). The conclusion is the two halves
-of Fenichel persistence with **every hypothesis discharged**: the graph of the attracting fibre is
-forward-invariant under the iterate coupled semiflow of the explicit contracting field, and `M_ε`
-sits within `defect / (1 - factor)` of the base section in the supremum metric. -/
-theorem fenichel_persistence_contracting (rate : ℝ) (c : E) (τ : ℝ≥0) (hrate : 0 < rate)
+/-- Graph invariance and/or a distance estimate for the displayed explicit flow
+and supplied contraction data. This does not assert general perturbed NHIM persistence. -/
+theorem graphTransform_discrete_invariant_and_dist_le_contracting (rate : ℝ) (c : E) (τ : ℝ≥0) (hrate : 0 < rate)
     (hτ : 0 < (τ : ℝ)) :
     let G := contractGapData (Y := Y) (E := E) rate c τ hrate hτ
     let F := contractingCoupled (Y := Y) (E := E) rate c τ
     IsInvariant (fun n : ℕ => F.flow.toFun (n • F.τ)) (graphSet (G.manifold : Y → E)) ∧
       dist G.base G.manifold ≤ G.defect / (1 - G.factor) := by
   intro G F
-  refine fenichel_persistence G F ?_
+  refine graphTransform_discrete_invariant_and_dist_le G F ?_
   -- The bounded-section fixed point is the constant section `c`; the flow operator fixes it too,
   -- because the contraction holds the fibre on its own target.
   show F.op (G.manifold : Y → E) = (G.manifold : Y → E)

@@ -172,14 +172,14 @@ of them must be able to *fail*.  The entries below give a network on which each 
 fails, so a predicate that silently became `True` would break this file. -/
 
 /-- The toy network `2A → B`: the source complex has total molecularity two, so the network is
-**not** a MESSI network. -/
-def messiCounter : Network (Fin 2) :=
+**not** a SingletonSource network. -/
+def singletonSourceCounter : Network (Fin 2) :=
   { R := Unit, decEqR := inferInstance, fintypeR := inferInstance,
     reaction := fun _ => { source := ![2, 0], target := ![0, 1] } }
 
-/-- **The MESSI predicate can fail.**  A network with a bimolecular source is not MESSI, so the
-linear steady-state machinery of `CRNT/Equilibria/MESSI.lean` is conditional. -/
-example : ¬ messiCounter.MESSI := by
+/-- **The SingletonSource predicate can fail.**  A network with a bimolecular source is not SingletonSource, so the
+linear steady-state machinery of `CRNT/Equilibria/SingletonSource.lean` is conditional. -/
+example : ¬ singletonSourceCounter.SingletonSource := by
   intro hM
   obtain ⟨i, hi⟩ := hM ()
   have h1 : (![2, 0] : Complex (Fin 2)) i = 1 := hi.1

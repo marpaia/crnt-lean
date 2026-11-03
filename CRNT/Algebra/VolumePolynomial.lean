@@ -3,93 +3,13 @@ import Mathlib.Data.List.GetD
 import Mathlib.Data.List.FinRange
 
 /-!
-# The volume polynomial of a zonotope (leaf A3)
+# An algebraic determinant polynomial for zonotope generators
 
-Leaf **A3** of the field map ("real root bounds and mixed volumes") is concerned with the
-**mixed volume** of convex bodies and with the **Bernstein–Kushnirenko–Khovanskii (BKK) bound**
-on the number of solutions of a sparse polynomial system.
-
-## 1. The theory
-
-For convex bodies `K₁, …, Kₙ ⊆ ℝⁿ` the **volume polynomial**
-
-```
-Vol(t₁ K₁ + ⋯ + tₙ Kₙ) = ∑_{|I| = n} c_I t^I
-```
-
-is a polynomial of degree `n` in the parameters `t₁, …, tₙ` (the classical *volume polynomial
-theorem* of Shephard 1960, in the formulation used by BKK 1981).  Its coefficients `c_I` are the
-**mixed volumes** `V(K_{i₁}, …, K_{iₙ})`; in the Bernstein–Kushnirenko–Khovanskii normalization
-`MV(K₁, …, Kₙ) = n! V(K₁, …, Kₙ)` one has `MV(K, …, K) = n! Vol K`.  The BKK theorem then states
-that the number of isolated solutions of a system of `n` polynomials in `n` variables with Newton
-polytopes `K₁, …, Kₙ` is at most `MV(K₁, …, Kₙ)`; see Bihan–Dickenstein–Giaroli 2020, *The
-Bernstein–Kushnirenko–Khovanskii bound for positive solutions of a sparse system*.
-
-For **zonotopes** (Minkowski sums of segments) the mixed volume is given by the classical
-determinant formula of Shephard: for segments `[0, z₁], …, [0, zₙ] ⊆ ℝⁿ`,
-
-```
-MV([0, z₁], …, [0, zₙ]) = |det (z₁ … zₙ)|.
-```
-
-## 2. What the repository already contains
-
-`CRNT.Algebra.MixedVolume` introduces the zonotope `CRNT.MixedVolume.Zonotope`, the mixed volume
-`CRNT.MixedVolume.mixedVolume` (in the BKK normalization, defined by the determinant formula
-above) and proves its two defining properties: **Minkowski additivity** (`mixedVolume_add`) and
-**homogeneity** (`mixedVolume_smul`).  It also introduces the Newton polytope of a univariate
-polynomial, computes its mixed volume exactly as its length (`mixedVolume_newtonPolytope`), and
-deduces the **sharp one-variable BKK bound** (`card_pos_roots_le_mixedVolume`), the Bézout bound
-for two univariate polynomials (`card_common_pos_roots_le_mixedVolume`) and the BKK bound for
-systems in separated variables (`card_solutions_le_mixedVolume`).
-
-## 3. What this module adds
-
-This module adds the **polynomial packaging** of the mixed volume for zonotopes.
-
-* `zonotopeVolumePolynomial` is the volume polynomial
-  `V(t) = ∑_{|S| = n} (∏_{j ∈ S} t j) · |det (z_{j₁} … z_{jₙ})|` of the zonotope with
-  generators `z₀, …, z_{m-1}`; for non-negative `t` it is the volume of the Minkowski sum
-  `t₀ [0, z₀] + ⋯ + t_{m-1} [0, z_{m-1}]` (Shephard's formula for the volume of a zonotope);
-* `zonotopeVolumePolynomial_linear` proves that `V` is **linear in each scaling parameter**
-  (the multilinearity of the volume polynomial), and `zonotopeVolumePolynomial_add` its
-  additive form with the usual "zero convention";
-* `zonotopeVolumePolynomial_smul` proves that `V` is **homogeneous of degree `n`**;
-* `zonotopeVolumePolynomial_coeff_eq_mixedVolume` and `zonotopeVolumePolynomial_eq_sum` prove
-  that **the coefficient of the monomial `∏_{j ∈ S} t j` is the mixed volume** of the `n`
-  singleton zonotopes spanned by the generators indexed by `S` — the link to
-  `CRNT.MixedVolume.mixedVolume`;
-* `zonotopeVolumePolynomialIn` packages the volume polynomial as a univariate polynomial in one
-  scaling parameter (`zonotopeVolumePolynomialIn_eval`, `zonotopeVolumePolynomialIn_eval_at`,
-  `zonotopeVolumePolynomialIn_deg_le_one`);
-* `zonotopeVolumePolynomial_newtonAxis` and `card_solutions_le_volumePolynomial` give the
-  **BKK bound for systems in separated variables in the volume-polynomial form**: the number of
-  positive solutions is at most the volume polynomial, evaluated at `t = 1`, of the zonotope
-  spanned by the Newton polytopes of the equations.
-
-### A remark on the additive form
-
-The additive form of the multilinearity carries a term at `t = 0`:
-
-```
-V(t|_{i = μ + ν}) = V(t|_{i = μ}) + V(t|_{i = ν}) − V(t|_{i = 0}),
-```
-
-because the monomials of `V` which do not involve `t i` are unaffected by the value of `t i`.
-The statement without the last term is false: for `n = 1`, `m = 2`, generators `z₀ = z₁ = 1` and
-`t = (t, s)` with `s ≠ 0` the two sides read `2 + s` and `2 + 2s`.
-
-## 4. What is *not* formalized
-
-* the **volume polynomial theorem for arbitrary convex bodies** (and hence the mixed volume of
-  arbitrary polytopes given by their vertices): this is the classical Brunn–Minkowski theory and
-  it is **not** re-proved here;
-* the **mixed volume of arbitrary convex bodies**: as in `CRNT.Algebra.MixedVolume`, the
-  definition is restricted to zonotopes, where the determinant formula *is* the definition;
-* the **general BKK bound** for `n` Newton polytopes in `ℝⁿ` and general sparse systems: only the
-  univariate and the separated-variables instances are available;
-* the **multivariate Bézout bound** `deg P · deg Q` for two polynomials in several variables.
-
+A polynomial is constructed from absolute determinants of generator subsets.
+The module proves its parameter linearity, homogeneity, coefficient identities,
+and applications to separated-variable root bounds. These are algebraic
+identities. A general equality with Lebesgue volume of a Minkowski sum and the
+full convex-body volume-polynomial/BKK theorems remain separate obligations.
 -/
 
 open scoped BigOperators
@@ -110,9 +30,8 @@ def finsetSorted (S : Finset (Fin m)) : List (Fin m) := S.sort
 /-- The **absolute determinant** of the `n × n` matrix whose columns are the generators `z j`,
 `j ∈ S` (in increasing order of the indices).  It is `0` unless `S` has exactly `n` elements.
 
-This is the classical Shephard formula for the volume of a zonotope: the volume of the Minkowski
-sum of the segments `[0, z j]`, `j ∈ S`, is the sum of the absolute determinants of the `n`-element
-subsets of the generators. -/
+This is one algebraic determinant term. Its use below does not require a general
+Lebesgue-volume identity. -/
 def absDetFinset (z : Fin m → Fin n → ℝ) (S : Finset (Fin m)) : ℝ :=
   absDet ((finsetSorted S).map z)
 
@@ -131,8 +50,8 @@ V(t) = ∑_{|S| = n} (∏_{j ∈ S} t j) · |det (z j₁, …, z jₙ)|
 ```
 
 where the sum runs over the `n`-element subsets `S` of `{0, …, m-1}` and `j₁ < ⋯ < jₙ` are the
-elements of `S`.  For non-negative `t` this is the volume of the Minkowski sum
-`t 0 [0, z 0] + ⋯ + t (m-1) [0, z (m-1)]`; it is a homogeneous polynomial of degree `n` in `t`,
+elements of `S`. The expression is defined algebraically; identifying it with
+Lebesgue volume remains separate. It is a homogeneous polynomial of degree `n` in `t`,
 linear in each `t j` separately, and the coefficient of the monomial `∏_{j ∈ S} t j` is the mixed
 volume of the `n` singleton zonotopes spanned by the generators indexed by `S`
 (`zonotopeVolumePolynomial_coeff_eq_mixedVolume`). -/

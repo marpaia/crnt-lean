@@ -244,9 +244,9 @@ The `(whitespace := lax)` mode makes the comparison insensitive to how long name
 /-- info: 'CRNT.Examples.ConservationClassRegion.conservationClass_cmeRegionVec_tendsto' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
 #print axioms CRNT.Examples.ConservationClassRegion.conservationClass_cmeRegionVec_tendsto
-/-- info: 'ODE.fenichel_persistence_contracting' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+/-- info: 'ODE.graphTransform_discrete_invariant_and_dist_le_contracting' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
-#print axioms ODE.fenichel_persistence_contracting
+#print axioms ODE.graphTransform_discrete_invariant_and_dist_le_contracting
 
 /-- info: 'ODE.slowManifold_reduction_conjugacy' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
@@ -921,25 +921,25 @@ extra `import` line is needed here.
 #guard_msgs (whitespace := lax) in
 #print axioms CRNT.Hopf.cubicCombination_eq
 
-/-! ### `CRNT/Dynamics/HirschConvergence.lean` -/
+/-! ### `CRNT/Dynamics/LaSalleConvergence.lean` -/
 
-/-- info: 'CRNT.hirsch_generic_convergence' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+/-- info: 'CRNT.converges_of_lasalle_of_stronglyMonotoneOperator' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
-#print axioms CRNT.hirsch_generic_convergence
+#print axioms CRNT.converges_of_lasalle_of_stronglyMonotoneOperator
 
-/-- info: 'CRNT.massAction_hirsch_convergence' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+/-- info: 'CRNT.massAction_converges_of_lasalle_of_stronglyMonotoneOperator' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
-#print axioms CRNT.massAction_hirsch_convergence
+#print axioms CRNT.massAction_converges_of_lasalle_of_stronglyMonotoneOperator
 
 /-! ### `CRNT/Dynamics/OmegaLimitOrderConvex.lean` -/
 
-/-- info: 'CRNT.omegaLimit_orderConvex_of_stronglyMonotone' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+/-- info: 'CRNT.omegaLimit_orderConvex_of_stronglyMonotoneOperator' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
-#print axioms CRNT.omegaLimit_orderConvex_of_stronglyMonotone
+#print axioms CRNT.omegaLimit_orderConvex_of_stronglyMonotoneOperator
 
-/-- info: 'CRNT.hirsch_generic_convergence_of_monotone' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+/-- info: 'CRNT.converges_of_lasalle_of_stronglyMonotoneOperator_of_monotone' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
-#print axioms CRNT.hirsch_generic_convergence_of_monotone
+#print axioms CRNT.converges_of_lasalle_of_stronglyMonotoneOperator_of_monotone
 
 /-! ### `CRNT/Dynamics/EscapeDirection.lean` -/
 
@@ -985,13 +985,13 @@ extra `import` line is needed here.
 
 /-! ### `CRNT/Stochastic/EndotacticPositiveRecurrence.lean` -/
 
-/-- info: 'CRNT.Network.positiveRecurrence_of_endotactic' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+/-- info: 'CRNT.Network.positiveRecurrence_of_linearLyapunovData' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
-#print axioms CRNT.Network.positiveRecurrence_of_endotactic
+#print axioms CRNT.Network.positiveRecurrence_of_linearLyapunovData
 
-/-- info: 'CRNT.Network.foster_hitting_time_of_endotactic' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+/-- info: 'CRNT.Network.foster_hitting_time_of_linearLyapunovData' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
-#print axioms CRNT.Network.foster_hitting_time_of_endotactic
+#print axioms CRNT.Network.foster_hitting_time_of_linearLyapunovData
 
 /-! ### `CRNT/Stochastic/EndotacticTierPositiveRecurrence.lean` -/
 
@@ -1089,19 +1089,19 @@ extra `import` line is needed here.
 #guard_msgs (whitespace := lax) in
 #print axioms CRNT.Network.isOpen_multistationarityRegion
 
-/-! ### `CRNT/Equilibria/MESSI.lean` -/
+/-! ### `CRNT/Equilibria/SingletonSource.lean` -/
 
-/-- info: 'CRNT.Network.messi_steadyState_iff_linear' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+/-- info: 'CRNT.Network.singletonSource_steadyState_iff_linear' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
-#print axioms CRNT.Network.messi_steadyState_iff_linear
+#print axioms CRNT.Network.singletonSource_steadyState_iff_linear
 
-/-- info: 'CRNT.Network.messi_no_exactly_two' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+/-- info: 'CRNT.Network.singletonSource_no_exactly_two' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
-#print axioms CRNT.Network.messi_no_exactly_two
+#print axioms CRNT.Network.singletonSource_no_exactly_two
 
-/-- info: 'CRNT.Network.messi_linearInvariant_iff_rowSpace' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+/-- info: 'CRNT.Network.singletonSource_linearInvariant_iff_rowSpace' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
-#print axioms CRNT.Network.messi_linearInvariant_iff_rowSpace
+#print axioms CRNT.Network.singletonSource_linearInvariant_iff_rowSpace
 
 /-! ### `CRNT/Equilibria/ToricParametrization.lean` -/
 
@@ -1169,11 +1169,11 @@ extra `import` line is needed here.
 #guard_msgs (whitespace := lax) in
 #print axioms CRNT.Oscillation.lotka_hasPositivePeriodicOrbit_of_trappingRegion
 
-/-! ### `CRNT/Oscillation/NoChaos.lean` -/
+/-! ### `CRNT/Oscillation/MinimalSetClassification.lean` -/
 
-/-- info: 'CRNT.Planar.omegaSet_not_chaotic' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+/-- info: 'CRNT.Planar.omegaSet_no_nonregular_minimal_subset' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
-#print axioms CRNT.Planar.omegaSet_not_chaotic
+#print axioms CRNT.Planar.omegaSet_no_nonregular_minimal_subset
 
 /-! ### `CRNT/Algebra/CircuitDescartes.lean` -/
 
@@ -1195,11 +1195,11 @@ extra `import` line is needed here.
 #guard_msgs (whitespace := lax) in
 #print axioms CRNT.Network.leadingSystem_eq_reduced_of_equilibration
 
-/-! ### `CRNT/Computation/Semilinear.lean` -/
+/-! ### `CRNT/Computation/PiecewiseNatAffine.lean` -/
 
-/-- info: 'CRNT.Computation.not_semilinear_pow2' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+/-- info: 'CRNT.Computation.not_piecewiseNatAffine_pow2' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in
-#print axioms CRNT.Computation.not_semilinear_pow2
+#print axioms CRNT.Computation.not_piecewiseNatAffine_pow2
 
 /-- info: 'CRNT.Computation.affineCRN_stablyComputes' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs (whitespace := lax) in

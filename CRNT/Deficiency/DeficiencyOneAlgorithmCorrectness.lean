@@ -6,119 +6,13 @@ import Mathlib.Combinatorics.SimpleGraph.Connectivity.Finite
 import CRNT.Decision.ComputableDeficiency
 
 /-!
-# The Deficiency One Algorithm: the shelf/confluence enumeration and the feasibility test
+# Conditional bridges from DOA shelf/run data to semantic feasibility
 
-This module connects the two halves of the Deficiency One Algorithm (DOA) that the repository
-formalizes separately:
-
-* the **presentation** — the *enumeration* of shelf partitions and confluence vectors carried
-  out by `CRNT.Deficiency.DeficiencyOneAlgorithm` (`N.DOAAffirmsCapacity`), together with the
-  shelf machinery of `CRNT.Deficiency.Shelf` and `CRNT.Deficiency.Confluence`;
-* the **semantics** — the *feasibility test* `N.DOAFeasible` of
-  `CRNT.Multistationarity.DeficiencyOneAlgorithm`, whose correctness
-  (`N.hasMultistationarityCapacity_iff_doaFeasible`) is already proved.
-
-Feinberg's DOA (1995b) decides the capacity of a deficiency-one mass-action network for multiple
-positive steady states.  The algorithm enumerates the *shelves* of the network, computes the
-*confluence vectors* on them, and reads off a system of linear constraints on the log-ratio
-`μ = log y − log x` of the two candidate steady states; the network is declared to have capacity
-exactly when some enumerated system is a **signature** — it has a nonzero solution `μ` which is
-sign-compatible with the stoichiometric subspace.  The *semantic* content of that signature is the
-feasibility of the DOA's system: a log-ratio `μ` and a strictly positive flux `α` satisfying the
-two flux balances
-`∑_r α_r (y'_r − y_r) = 0` and `∑_r α_r e^{⟨y_r, μ⟩} (y'_r − y_r) = 0`.
-
-## What is proved here
-
-### The presentation
-
-* `DOARun` — the discrete data of a run of the *presented* algorithm: a nonzero confluence
-  vector, a shelf partition, and the log-ratio meeting the placement rules;
-  `doaAffirmsCapacity_iff_nonempty_run` identifies it with the repository's verdict
-  `N.DOAAffirmsCapacity`.
-* **The analysis of the placement rules** (`DOARun.pairing_eq_of_middle`,
-  `DOARun.pairing_lt_of_higher`, `DOARun.source_pairing_eq_of_middle`,
-  `DOARun.source_pairing_const_of_middle`): the middle shelf is a level set of the log-ratio,
-  the shelves are ordered by the log-ratio, and the reactions whose source lies on the middle
-  shelf have sources pairing equally with `μ`.  This is the *quantitative* content of the shelf
-  enumeration, and it is what the upper balance equation of the algorithm needs.
-
-### The shelf-wise confluence vectors
-
-* `DOAShelfFluxes` — the **shelf-wise confluence vectors**: a partition of the reaction set into
-  shelves, each carrying a flux which is supported on the shelf, strictly positive on it, and
-  balances the shelf at the lower state,
-  `∑_{r ∈ sh} λ_r (y'_r − y_r) = 0`.  These are the *shelf* part of Feinberg's algorithm: a
-  shelf is a *dependent* set of reactions and its confluence vector is the positive dependence
-  of its reaction vectors.  This is the datum which the verdict `N.DOAAffirmsCapacity` does
-  *not* record, and it is what makes the enumeration a decision procedure.
-* `DOAShelfFluxes.globalFlux`, `DOAShelfFluxes.globalFlux_pos`,
-  `DOAShelfFluxes.globalFlux_lower_balance`: the sum of the shelf fluxes is a strictly positive
-  flux balancing the whole network;
-  `DOAShelfFluxes.shelf_upper_balance`, `DOAShelfFluxes.globalFlux_upper_balance`: a shelf
-  whose sources pair equally with `μ` also balances at the upper state, because the
-  exponential factor `e^{⟨y_r, μ⟩}` is constant on the shelf.
-
-### The bridge: the correctness of the presented algorithm
-
-* `doaRun_doaFeasible` — **the algorithmic direction**: a run of the presented algorithm,
-  together with the shelf-wise confluence vectors, *is* a feasible system of the algorithm;
-* `doaRun_doaFeasible_of_middle` — the same, when the sources of the reactions of each shelf
-  lie on the middle shelf of the run's shelf partition: the placement rules then supply the
-  pairing condition that the upper balance needs;
-* `doaRun_hasMultistationarityCapacity` — **the correctness of the presented Deficiency One
-  Algorithm**: such a run yields the capacity for multiple positive steady states;
-* `doaRun_implies_affirmsCapacity` — the run of the presented algorithm is exactly the data of
-  the repository's verdict `N.DOAAffirmsCapacity`.
-
-### The converse
-
-* `capacity_implies_doaShelfFluxes`, `doaFeasible_implies_doaShelfFluxes` — **the converse in
-  the one-shelf form**: a feasible system of the algorithm is *presented* by the shelf-wise
-  confluence vectors, the whole reaction set being a single shelf whose confluence vector is the
-  flux of the two witnessing steady states.
-
-  The *multi-shelf* converse — that a capacity flux always decomposes into a genuine shelf
-  decomposition whose shelf-wise fluxes satisfy the two balance conditions — is the hard,
-  genuinely algorithm-specific part of Feinberg's algorithm and is **not** proved here.  It is
-  also the part which the *hard* direction of the theorem (the direction which produces the
-  shelf decomposition from a capacity flux) needs.
-
-### A concrete instance
-
-The namespace `DOAExample` develops the deficiency-one network `0 → X`, `0 → Y`, `X + Y → 0` on
-the species `{A, B}`:
-
-* `DOAExample.affirmsCapacity` — the **enumeration** of the algorithm affirms the capacity: the
-  shelf partition places `A` on the upper shelf, `B` on the lower shelf and the two nonterminal
-  complexes `0` and `A + B` on the middle shelf, the confluence vector is the cut-space vector
-  `e_A + e_B − 2 e_0`, and the log-ratio `μ = (1, −1)` meets the placement rules;
-* `DOAExample.doaFeasible` — the **feasibility test** of the algorithm is feasible: the
-  log-ratio `μ = (1, −1)` and the unit flux satisfy the two balance equations;
-* `DOAExample.hasCapacity` — the network has the capacity for multiple positive steady states;
-* `DOAExample.agreesWithFeasibilityTest` — the two verdicts agree;
-* `DOAExample.deficiency_one` — the example is of deficiency one.
-
-## Relation to leaf M7
-
-Leaf M7 of the field map records the correctness of the Deficiency One Algorithm.  The
-*feasibility test* is proved correct in `CRNT.Multistationarity.DeficiencyOneAlgorithm`; this
-module supplies the *presentation*: the shelf/confluence enumeration of
-`CRNT.Deficiency.DeficiencyOneAlgorithm`, the identification of its data with the test's data,
-and the correctness of the presented algorithm in the algorithmic direction.
-
-## A note on the limits of the bridge
-
-The bridge theorems above are stated with the shelf-wise confluence vectors as *hypotheses*:
-they are the datum which the presented algorithm computes from the network and which the
-repository's verdict `N.DOAAffirmsCapacity` does not record.  The verdict yields a nonzero
-log-ratio which is sign-compatible with the stoichiometric subspace
-(`doaAffirmsCapacity_exists_mu`); the flux — and hence the capacity — is obtained from the
-shelf-wise confluence vectors (`doaRun_doaFeasible`, `doaRun_hasMultistationarityCapacity`).
-
-Depends on: `CRNT.Deficiency.DeficiencyOneAlgorithm`,
-`CRNT.Multistationarity.DeficiencyOneAlgorithm`, `CRNT.Deficiency.Confluence`,
-`CRNT.Decision.ComputableDeficiency`.
+A supplied run together with shelf-wise positive confluence fluxes and the
+displayed placement/equal-pairing conditions yields semantic feasibility and
+multistationarity capacity. These auxiliary data are substantial hypotheses.
+The file does not compute them from every run, give a finite decision procedure,
+or prove full published Deficiency One Algorithm correctness/completeness.
 -/
 
 namespace CRNT
@@ -418,11 +312,8 @@ theorem doaRun_doaFeasible_of_middle (run : DOARun N) (d : DOAShelfFluxes N)
   intro sh hsh r hr r' hr'
   exact run.source_pairing_eq_of_middle (hsrc sh hsh r hr) (hsrc sh hsh r' hr')
 
-/-- **The correctness of the presented Deficiency One Algorithm.**  A run of the algorithm,
-together with the shelf-wise confluence vectors, yields the capacity for multiple steady
-states.  This is the algorithmic direction of Feinberg's theorem for the *presented* algorithm:
-the shelf/confluence enumeration, completed by the shelf-wise confluence vectors, decides the
-capacity. -/
+/-- A supplied run, shelf fluxes, and middle-shelf placement imply capacity.
+This is a conditional bridge; it does not compute the auxiliary data or decide capacity. -/
 theorem doaRun_hasMultistationarityCapacity (run : DOARun N) (d : DOAShelfFluxes N)
     (hsrc : ∀ sh ∈ d.shelves, ∀ r ∈ sh, run.sp.shelf (N.sourceIdx r) = Shelf.middle) :
     N.HasMultistationarityCapacity :=

@@ -1946,7 +1946,7 @@ example {Y E : Type*} [TopologicalSpace Y] [NormedAddCommGroup E] [CompleteSpace
     (hfix : F.op (G.manifold : Y → E) = (G.manifold : Y → E)) :
     IsInvariant (fun n : ℕ => F.flow.toFun (n • F.τ)) (ODE.graphSet (G.manifold : Y → E)) ∧
       dist G.base G.manifold ≤ G.defect / (1 - G.factor) :=
-  ODE.fenichel_persistence G F hfix
+  ODE.graphTransform_discrete_invariant_and_dist_le G F hfix
 
 -- Local center manifold (Lyapunov–Perron): when the spectral gap K·δ < α between center and
 -- hyperbolic directions dominates the nonlinearity's Lipschitz constant, the center-manifold operator
@@ -3970,7 +3970,7 @@ example (τ : NNReal) :
     let F := ODE.constDriftCoupled (Y := ℝ) (E := ℝ) 0 τ
     IsInvariant (fun n : ℕ => F.flow.toFun (n • F.τ)) (ODE.graphSet (G.manifold : ℝ → ℝ)) ∧
       dist G.base G.manifold ≤ G.defect / (1 - G.factor) :=
-  ODE.fenichel_persistence_constDrift 2 1 (by norm_num) (by norm_num) (by norm_num) τ
+  ODE.graphTransform_discrete_invariant_and_dist_le_constDrift 2 1 (by norm_num) (by norm_num) (by norm_num) τ
 
 -- End-to-end Fenichel ε-persistence for the genuinely contracting fast-fibre field on `ℝ × ℝ`
 -- (`ż = -rate·(z - c)`), with the operator-from-flow `flow_mapsTo` proved from the closed-form
@@ -3983,7 +3983,7 @@ example :
     let F := ODE.contractingCoupled (Y := ℝ) (E := ℝ) 3 (7 : ℝ) (1 : NNReal)
     IsInvariant (fun n : ℕ => F.flow.toFun (n • F.τ)) (ODE.graphSet (G.manifold : ℝ → ℝ)) ∧
       dist G.base G.manifold ≤ G.defect / (1 - G.factor) :=
-  ODE.fenichel_persistence_contracting 3 (7 : ℝ) (1 : NNReal) (by norm_num) (by norm_num)
+  ODE.graphTransform_discrete_invariant_and_dist_le_contracting 3 (7 : ℝ) (1 : NNReal) (by norm_num) (by norm_num)
 -- End-to-end Fenichel ε-persistence over a GENUINELY DRIFTING slow base on `ℝ × ℝ`
 -- (`ẏ = ε·b`, `ż = -rate·(z - c)`): the base coordinate honestly moves under the closed-form coupled
 -- flow `(y, z) ↦ (y + (ε·t)·b, c + e^{-rate·t}·(z - c))`, removing the frozen-base idealization. The
@@ -3995,7 +3995,7 @@ example :
     let F := ODE.coupledDriftCoupled (Y := ℝ) (E := ℝ) (5 : ℝ) (2 : ℝ) 3 (7 : ℝ) (1 : NNReal)
     IsInvariant (fun n : ℕ => F.flow.toFun (n • F.τ)) (ODE.graphSet (G.manifold : ℝ → ℝ)) ∧
       dist G.base G.manifold ≤ G.defect / (1 - G.factor) :=
-  ODE.fenichel_persistence_coupledDrift (5 : ℝ) (2 : ℝ) 3 (7 : ℝ) (1 : NNReal)
+  ODE.graphTransform_discrete_invariant_and_dist_le_coupledDrift (5 : ℝ) (2 : ℝ) 3 (7 : ℝ) (1 : NNReal)
     (by norm_num) (by norm_num)
 -- End-to-end Fenichel ε-persistence over a GENERAL NONLINEAR slow base flow on `ℝ × ℝ`: the base
 -- evolves by the genuine `exists_flow` semiflow of the bounded Lipschitz nonlinear field `ε·sin y`
@@ -4010,7 +4010,7 @@ example :
         (fun n : ℕ => (ODE.productContractFlow (ODE.logisticDriftFlow (5 : ℝ)) 3 (7 : ℝ)).toFun
           (n • (1 : NNReal))) (ODE.graphSet (G.manifold : ℝ → ℝ)) ∧
       dist G.base G.manifold ≤ G.defect / (1 - G.factor) :=
-  ODE.fenichel_persistence_logisticDrift (5 : ℝ) 3 (7 : ℝ) (1 : NNReal) (by norm_num) (by norm_num)
+  ODE.graphTransform_discrete_invariant_and_dist_le_logisticDrift (5 : ℝ) 3 (7 : ℝ) (1 : NNReal) (by norm_num) (by norm_num)
 -- End-to-end Fenichel ε-persistence of a MOVING slow manifold over a genuinely moving base on
 -- `ℝ × ℝ`: the non-constant fibre `h(y)` is regraphed through the base back-map `slowInv` (the
 -- moving-target machinery is exercised on every candidate section by `movingFlow_mapsTo`), here over
@@ -4025,7 +4025,7 @@ example :
         (fun n : ℕ => (ODE.productContractFlow (ODE.affineBaseFlow (5 : ℝ)) 3 (7 : ℝ)).toFun
           (n • (1 : NNReal))) (ODE.graphSet (G.manifold : ℝ → ℝ)) ∧
       dist G.base G.manifold ≤ G.defect / (1 - G.factor) :=
-  ODE.fenichel_persistence_affineBase (5 : ℝ) 3 (7 : ℝ) (1 : NNReal) (by norm_num) (by norm_num)
+  ODE.graphTransform_discrete_invariant_and_dist_le_affineBase (5 : ℝ) 3 (7 : ℝ) (1 : NNReal) (by norm_num) (by norm_num)
 -- End-to-end Fenichel ε-persistence of a MOVING slow manifold over the genuinely CURVED logistic base
 -- `ẏ = ε·sin y` on `ℝ × ℝ`, with NO explicit inverse supplied: the time-τ base map's left-inverse
 -- comes from injectivity alone (`logisticDriftFlow_injective`, via integral-curve uniqueness), bundled
@@ -4038,7 +4038,7 @@ example :
     let F := ODE.movingCoupled (ODE.logisticInjectiveBase (5 : ℝ) (1 : NNReal)) 3 (7 : ℝ)
     IsInvariant (fun n : ℕ => F.flow.toFun (n • F.τ)) (ODE.graphSet (G.manifold : ℝ → ℝ)) ∧
       dist G.base G.manifold ≤ G.defect / (1 - G.factor) :=
-  ODE.fenichel_persistence_logisticMovingBase (5 : ℝ) 3 (7 : ℝ) (1 : NNReal)
+  ODE.graphTransform_discrete_invariant_and_dist_le_logisticMovingBase (5 : ℝ) 3 (7 : ℝ) (1 : NNReal)
     (by norm_num) (by norm_num)
 -- Strict boundary support for the GENUINE toric mass-action field, discharged from the dynamics:
 -- the fan cone geometry gives only `0 ≤ ⟪n, v⟫`; an enabled strictly-inward reaction per active
@@ -4677,7 +4677,7 @@ example {S : Type} [DecidableEq S] [Fintype S]
     (habs : ∃ v ∈ Filter.atTop, closure (Set.image2 ϕ.toFun v {x₀}) ⊆ K)
     (hmonoV : ∀ (s t : ℝ≥0), s ≤ t → V (ϕ.toFun t x₀) ≤ V (ϕ.toFun s x₀))
     (hVcrit : ∀ y ∈ K, (∀ (t : ℝ≥0), V (ϕ.toFun t y) = V y) → f y = 0)
-    (hc : ℝ) (hsm : CRNT.StronglyMonotone f hc) (hcpos : 0 < hc)
+    (hc : ℝ) (hsm : CRNT.OrderPreservingStronglyMonotoneOperator f hc) (hcpos : 0 < hc)
     (hωoc : ∀ (a b z : Concentration S),
       a ∈ omegaLimit Filter.atTop ϕ.toFun {x₀} →
         b ∈ omegaLimit Filter.atTop ϕ.toFun {x₀} → a ≤ z → z ≤ b →
@@ -4685,12 +4685,12 @@ example {S : Type} [DecidableEq S] [Fintype S]
     (hmonFlow : CRNT.Monotone.IsMonotoneFlow ϕ) :
     ∃ xstar, f xstar = 0 ∧
       Filter.Tendsto (fun t => ϕ.toFun t x₀) Filter.atTop (nhds xstar) :=
-  CRNT.hirsch_generic_convergence ϕ f V hV x₀ K hK habs hmonoV hVcrit hc hsm hcpos hωoc hmonFlow
+  CRNT.converges_of_lasalle_of_stronglyMonotoneOperator ϕ f V hV x₀ K hK habs hmonoV hVcrit hc hsm hcpos hωoc hmonFlow
 
 -- The mass-action instance of the Hirsch theorem.
 open Filter in
 example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
-    {c : ℝ} (hc : 0 < c) (hsm : CRNT.StronglyMonotone (N.massActionVectorField κ) c)
+    {c : ℝ} (hc : 0 < c) (hsm : CRNT.OrderPreservingStronglyMonotoneOperator (N.massActionVectorField κ) c)
     (ϕ : Flow ℝ≥0 (Concentration S)) (f : Concentration S → Concentration S)
     (V : Concentration S → ℝ) (hV : Continuous V) (x₀ : Concentration S)
     (K : Set (Concentration S)) (hK : IsCompact K)
@@ -4704,13 +4704,13 @@ example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConst
     (hmonFlow : CRNT.Monotone.IsMonotoneFlow ϕ) (hf : f = N.massActionVectorField κ) :
     ∃ xstar, N.massActionVectorField κ xstar = 0 ∧
       Filter.Tendsto (fun t => ϕ.toFun t x₀) Filter.atTop (nhds xstar) :=
-  CRNT.massAction_hirsch_convergence N κ hc hsm ϕ f V hV x₀ K hK habs hmonoV hVcrit hωoc hmonFlow hf
+  CRNT.massAction_converges_of_lasalle_of_stronglyMonotoneOperator N κ hc hsm ϕ f V hV x₀ K hK habs hmonoV hVcrit hωoc hmonFlow hf
 
 -- Order convexity of the ω-limit set of a strongly monotone flow.
 open Filter in
 example {S : Type} [DecidableEq S] [Fintype S]
     (f : Concentration S → Concentration S) (ϕ : Flow ℝ≥0 (Concentration S)) (hc : ℝ)
-    (hsm : CRNT.StronglyMonotone f hc) (hcpos : 0 < hc) (x₀ : Concentration S)
+    (hsm : CRNT.OrderPreservingStronglyMonotoneOperator f hc) (hcpos : 0 < hc) (x₀ : Concentration S)
     (K : Set (Concentration S)) (hK : IsCompact K)
     (habs : ∃ v ∈ Filter.atTop, closure (Set.image2 ϕ.toFun v {x₀}) ⊆ K)
     (hΩE : ∀ y ∈ omegaLimit Filter.atTop ϕ.toFun {x₀}, f y = 0)
@@ -4718,7 +4718,7 @@ example {S : Type} [DecidableEq S] [Fintype S]
     p ∈ omegaLimit Filter.atTop ϕ.toFun {x₀} →
       q ∈ omegaLimit Filter.atTop ϕ.toFun {x₀} → p ≤ z → z ≤ q →
       z ∈ omegaLimit Filter.atTop ϕ.toFun {x₀} :=
-  CRNT.omegaLimit_orderConvex_of_stronglyMonotone f ϕ hc hsm hcpos x₀ K hK habs hΩE p q z
+  CRNT.omegaLimit_orderConvex_of_stronglyMonotoneOperator f ϕ hc hsm hcpos x₀ K hK habs hΩE p q z
 
 -- Escape direction: a trajectory stays in the orthogonal complement of the conservation laws.
 example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
@@ -4758,7 +4758,7 @@ example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConst
             ∑' (b : S → ℕ),
               |(N.jumpSystem κ).Pmin t a b - π b| * (1 + β * CRNT.Network.linearObservable d.w b) ≤
                 C₀ * (1 + CRNT.Network.linearObservable d.w a) * ρ ^ ⌊t⌋₊ :=
-  CRNT.Network.positiveRecurrence_of_endotactic N κ d hirr
+  CRNT.Network.positiveRecurrence_of_linearLyapunovData N κ d hirr
 
 -- The Foster hitting-time estimate that feeds the recurrence statement.
 example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
@@ -4766,7 +4766,7 @@ example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConst
     (∀ m, ∑ k ∈ Finset.range m, (N.jumpChain κ).survival d.C k x ≤
         1 + (N.jumpChain κ).expect (CRNT.Network.linearObservable d.w) x / d.εJ) ∧
       Filter.Tendsto (fun m => (N.jumpChain κ).survival d.C m x) Filter.atTop (nhds 0) :=
-  CRNT.Network.foster_hitting_time_of_endotactic N κ d x
+  CRNT.Network.foster_hitting_time_of_linearLyapunovData N κ d x
 
 -- Tier-wise positive recurrence: a tier balance gives a stationary law with full support.
 example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
@@ -4946,27 +4946,27 @@ example {S : Type} [DecidableEq S] [Fintype S] {E₁ E₂ : Type} [Fintype E₁]
     IsOpen (N.MultistationarityRegion Z L) :=
   CRNT.Network.isOpen_multistationarityRegion N Z L hZ hL hcard
 
--- MESSI networks: the steady-state condition is a linear one.
+-- SingletonSource networks: the steady-state condition is a linear one.
 example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
-    (hM : N.MESSI) (x : Concentration S) :
-    N.IsMassActionSteadyState κ x ↔ ∀ s : S, ∑ i, N.messiCoeff κ i s * x i = 0 :=
-  CRNT.Network.messi_steadyState_iff_linear N κ hM x
+    (hM : N.SingletonSource) (x : Concentration S) :
+    N.IsMassActionSteadyState κ x ↔ ∀ s : S, ∑ i, N.singletonSourceCoeff κ i s * x i = 0 :=
+  CRNT.Network.singletonSource_steadyState_iff_linear N κ hM x
 
--- MESSI networks: there is no pair of distinct positive steady states in a class.
+-- SingletonSource networks: there is no pair of distinct positive steady states in a class.
 example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
-    (hM : N.MESSI) {c x y : Concentration S} (hx : x ∈ N.PositiveSteadyStatesInClass κ c)
+    (hM : N.SingletonSource) {c x y : Concentration S} (hx : x ∈ N.PositiveSteadyStatesInClass κ c)
     (hy : y ∈ N.PositiveSteadyStatesInClass κ c) (hxy : x ≠ y) :
     x ∈ N.PositiveSteadyStatesInClass κ c ∧
       y ∈ N.PositiveSteadyStatesInClass κ c ∧
         (fun s => (x s + y s) / 2) ∈ N.PositiveSteadyStatesInClass κ c ∧
           x ≠ (fun s => (x s + y s) / 2) ∧ (fun s => (x s + y s) / 2) ≠ y :=
-  CRNT.Network.messi_no_exactly_two N κ hM hx hy hxy
+  CRNT.Network.singletonSource_no_exactly_two N κ hM hx hy hxy
 
--- MESSI networks: the steady-state invariants are the row space of the coefficient matrix.
+-- SingletonSource networks: the steady-state invariants are the row space of the coefficient matrix.
 example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
-    (hM : N.MESSI) (w : S → ℝ) :
-    N.IsSteadyStateInvariant κ w ↔ ∃ c : S → ℝ, ∀ i : S, w i = ∑ s, c s * N.messiCoeff κ i s :=
-  CRNT.Network.messi_linearInvariant_iff_rowSpace N κ hM w
+    (hM : N.SingletonSource) (w : S → ℝ) :
+    N.IsSteadyStateInvariant κ w ↔ ∃ c : S → ℝ, ∀ i : S, w i = ∑ s, c s * N.singletonSourceCoeff κ i s :=
+  CRNT.Network.singletonSource_linearInvariant_iff_rowSpace N κ hM w
 
 -- Toric parametrization: the positive steady states are the parametrized kernel.
 example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (κ : N.RateConstants)
@@ -5083,8 +5083,8 @@ example (K : CRNT.Planar.PoincareBendixsonKernelBundle)
 -- No chaos: a planar trapping-region ω-set is not chaotic.
 example (K : CRNT.Planar.PoincareBendixsonKernelBundle) {field : CRNT.Phase2 → CRNT.Phase2}
     (D : CRNT.Planar.FlowTrappingData field) (hsmooth : ContDiff ℝ 1 field) :
-    ¬ CRNT.Planar.IsChaoticOmegaSet field D.flow D.omegaSet :=
-  CRNT.Planar.omegaSet_not_chaotic K D hsmooth
+    ¬ CRNT.Planar.HasNonregularMinimalSubset field D.flow D.omegaSet :=
+  CRNT.Planar.omegaSet_no_nonregular_minimal_subset K D hsmooth
 
 -- Descartes' rule of signs for exponential sums.
 example {n : ℕ} (w : Fin (n + 1) → ℝ) (hw : StrictMono w) (c : Fin (n + 1) → ℝ)
@@ -5118,11 +5118,11 @@ example {S : Type} [DecidableEq S] [Fintype S] (N : Network S) (a : N.R → ℝ)
       N.tropicalLeadingSystem a w :=
   CRNT.Network.leadingSystem_eq_reduced_of_equilibration N a w _h
 
--- Semilinear computation: `2 ^ v` is not semilinear.
-example : ¬ CRNT.Computation.Semilinear fun v : Fin 1 → ℕ => 2 ^ v 0 :=
-  CRNT.Computation.not_semilinear_pow2
+-- PiecewiseNatAffine computation: `2 ^ v` is not piecewiseNatAffine.
+example : ¬ CRNT.Computation.PiecewiseNatAffine fun v : Fin 1 → ℕ => 2 ^ v 0 :=
+  CRNT.Computation.not_piecewiseNatAffine_pow2
 
--- Semilinear computation: the affine chemical reaction network stably computes its update map.
+-- PiecewiseNatAffine computation: the affine chemical reaction network stably computes its update map.
 example (k a : ℕ) (m : Fin k → ℕ) :
     CRNT.Computation.StablyComputes (CRNT.Computation.affineCRN k a m) (CRNT.Computation.affineInit k)
       (Sum.inr (0 : Fin 2)) (fun x => a + ∑ j, m j * x j) :=

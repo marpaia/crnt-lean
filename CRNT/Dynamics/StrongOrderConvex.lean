@@ -1,139 +1,19 @@
 import CRNT.Dynamics.OmegaLimitOrderConvex
 import CRNT.Dynamics.Monotone
 import CRNT.Dynamics.LaSalle
-import CRNT.Dynamics.HirschConvergence
+import CRNT.Dynamics.LaSalleConvergence
 import Mathlib.Dynamics.OmegaLimit
 import Mathlib.Dynamics.Flow
 import Mathlib.Topology.Order.Lattice
 import Mathlib.Topology.Separation.Hausdorff
 
 /-!
-# The strong order `≪` and the incomparable-orbit case of the order-convexity of the ω-limit set
+# Strong-order separation and conditional omega-limit convexity
 
-This module is the third part of leaf **D14** (monotone systems and contraction for reaction
-networks).  The first part (`CRNT/Dynamics/HirschConvergence.lean`) proved Hirsch's generic
-convergence; the second (`CRNT/Dynamics/OmegaLimitOrderConvex.lean`) *derived* the order-convexity
-of the ω-limit set for a strongly monotone field (the ω-limit set is then a singleton) and for a
-merely order-preserving field **under the explicit hypothesis that the forward orbit is
-order-comparable with the point under test**.
-
-What was left open is the **incomparable-orbit case**: the situation in which the forward orbit
-`x(t)` is *never* comparable with the test point `z`, i.e.
-
-```text
-¬ ∃ t, x(t) ≤ z        and        ¬ ∃ t, z ≤ x(t).
-```
-
-The classical reference is Hirsch–Smith, *Monotone Dynamical Systems*, Handbook of Differential
-Equations vol. 2 (2002), and Smith (2017) on the *non-ordering of limit sets*: for a monotone
-(order-preserving) flow the ω-limit set of a bounded orbit need not be order convex in general, but
-the strong order `≪` singles out the case in which the ω-limit set and the test point *cannot* be
-strictly separated.  This module makes that content precise and proves it.
-
-## The strong order
-
-For `x, y : Concentration S` (i.e. `S → ℝ`, ordered pointwise) the **strong order** of Hirsch–Smith
-is
-
-```text
-x ≪ y   ⟺   x ≤ y  and  x s < y s  for every species s.
-```
-
-(The notation `≪` is scoped: `open scoped CRNT` makes it available; it is scoped so that it does
-not clash with the `≪` of `MeasureTheory`, which denotes absolute continuity.)
-
-That is: `x` lies in the *interior* of the down-set `↓ y = {w | w ≤ y}`; the gap `y − x` is
-strictly positive in every coordinate.  Two refinements are recorded:
-
-* `x ≤ y` and `x ≠ y` (the *strict* comparison; for the pointwise order this is the usual `<`);
-* `x ≪ y` with a **uniform** gap, `∃ δ > 0, ∀ s, x s + δ ≤ y s` (`StronglyBelowGap`).  For a
-  finite nonempty species set the two versions coincide (`stronglyBelow_iff_gap`): the uniform
-  margin is exactly the statement that the orbit "cannot approach the boundary" of the down-set,
-  which is the sense in which `≪` is used in the monotone-systems literature.
-
-## The monotone separating functionals
-
-Hirsch–Smith's separation device is a *monotone* (order-increasing) continuous functional which
-separates a point `z` from the points that are not below `z`.  Two such functionals are defined
-here (`CRNT.sepAbove`, `CRNT.sepBelow`):
-
-```text
-sepAbove z y = max_s (y s − z s)      sepBelow z y = max_s (z s − y s).
-```
-
-`sepAbove` is continuous and order-monotone, `sepAbove z z = 0`, and `0 < sepAbove z y` exactly
-when `y` is *not* below `z`; `sepBelow` is the dual (order-antimonotone) functional, `0 < sepBelow
-z y` exactly when `y` is *not* above `z`.  The predicate `IsMonotoneSeparator z φ` isolates the
-properties of a functional that the classical proof uses.
-
-## The non-ordering argument
-
-The heart of the module is the following pair of *one-sided separation* statements for the
-ω-limit set (`omegaLimit_exists_ge_of_incomparable_below`,
-`omegaLimit_exists_le_of_incomparable_above`):
-
-> If the forward orbit never goes below `z` (`¬ ∃ t, x(t) ≤ z`), then **every** ω-limit point `y`
-> has a coordinate `s` with `y s ≥ z s`; symmetrically, if the orbit never goes above `z`, then
-> every ω-limit point has a coordinate `s` with `z s ≥ y s`.
-
-(In the proof: the orbit is contained in the closed set `{w | ∃ s, w s ≥ z s}`, a finite union of
-closed half-spaces, and the ω-limit set is contained in the closure of every tail of the orbit.)
-
-Two consequences are the classical content of the strong order:
-
-* `omegaLimit_not_stronglyBelow_of_incomparable_below` and
-  `omegaLimit_not_stronglyAbove_of_incomparable_above`: **in the incomparable-orbit case the
-  strong order is excluded**: no ω-limit point is strongly below `z`, and none is strongly above
-  `z`.  Equivalently, the ω-limit set *straddles* `z`: it cannot be strictly separated from `z` by
-  the order.
-* `comparable_orbit_of_stronglyBelow` (and its dual): **the strong order forces comparability.**
-  If `p ∈ Ω` and `p ≪ z`, the orbit *is* comparable with `z`.  This is the contrapositive of the
-  preceding statement, and it is the form in which the classical theorem is usually quoted.
-
-Moreover the inequalities are then *equalities in one coordinate*
-(`omegaLimit_touch_of_le_of_incomparable_below`,
-`omegaLimit_touch_of_ge_of_incomparable_above`): in the incomparable case a ω-limit point below `z`
-touches `z` in some coordinate, and a ω-limit point above `z` touches `z` in some coordinate.  The
-ω-limit set therefore meets the boundary of the down-set `↓ z` (and of the up-set `↑ z`) rather
-than staying uniformly inside or outside it.
-
-## What is proved about the order-convexity
-
-* `omegaLimit_orderConvex_of_monotone_flow_of_comparable_orbit`: for a monotone flow whose
-  ω-limit set consists of equilibria and whose equilibrium set is order-convex, a point `z`
-  lying between two ω-limit points belongs to the ω-limit set **as soon as the orbit is comparable
-  with `z`** — the comparability hypothesis of `CRNT.omegaLimit_orderConvex_of_monotone_flow` is
-  only needed for the point under test, not globally.  (The absorbing compact set of the hypotheses
-  of the earlier theorem is not needed here: the sandwich argument only uses the fact that the
-  ω-limit set is closed.)
-* `omegaLimit_orderConvex_of_monotone_flow_of_strongOrder`: the same conclusion **without any
-  comparability hypothesis** when one of the two inequalities is a strong one (`p ≪ z` or
-  `z ≪ q`); this is the strong-order version of the order-convexity.
-* `omegaLimit_orderConvex_of_monotone_flow_general`: the two statements combined — for `p, q ∈ Ω`
-  with `p ≤ z ≤ q` one has `z ∈ Ω`, **unless** the orbit is incomparable with `z` *and* the strong
-  order is excluded in both directions (`¬ (p ≪ z)` and `¬ (z ≪ q)`), in which case the orbit
-  merely *touches* `z`.
-* `omegaLimit_mem_of_separating_functional`: the classical sufficient condition of the field map:
-  a monotone separating functional `φ` with `φ p < φ z < φ q` for `p, q ∈ Ω` forces `z ∈ Ω`.
-  `omegaLimit_mem_of_separating_functional_of_incomparable` is the version with the additional
-  hypothesis that the orbit is not comparable with `z` (which makes the hypotheses contradictory:
-  the strong order forced by `φ p < φ z` contradicts the incomparability).
-* `massAction_omegaLimit_orderConvex_of_monotone_field_general` and
-  `massAction_omegaLimit_orderConvex_of_monotone_field_of_strongOrder`: the mass-action
-  specializations for an order-preserving mass-action field.
-
-## What remains
-
-The remaining gap is *sharp*: the incomparable-orbit case can occur with a ω-limit point that is
-merely *below* (or above) `z` without touching it in every coordinate, so the order-convexity
-`z ∈ Ω` cannot be concluded in full generality from the hypotheses formalized here.  The
-hypotheses that would close it (a monotone separating functional strict in the strong order, or
-the existence of a *uniform* gap between the ω-limit set and `z$) are exactly the ones isolated
-above, so the remaining case is isolated in a single place: the orbit is incomparable with `z`,
-the two inequalities `p ≤ z ≤ q` are non-strict, and `p` (resp. `q`) touches `z` in one
-coordinate.
-
-Everything below is proved; there is no `sorry` and no additional axiom.
+Strong-order and separator arguments complement the monotone comparison
+results. Displayed comparability/separation hypotheses remain inputs.
+The LaSalle/unique-equilibrium wrappers in `LaSalleConvergence` and
+`OmegaLimitOrderConvex` do not establish Hirsch generic convergence.
 -/
 
 open Set Filter Topology

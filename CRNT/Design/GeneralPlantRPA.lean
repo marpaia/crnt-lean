@@ -7,125 +7,14 @@ import Mathlib.Analysis.Calculus.Deriv.Basic
 import Mathlib.LinearAlgebra.Matrix.PosDef
 
 /-!
-# Robust perfect adaptation for a general linear plant
+# General-plant setpoints and conditional stability/ergodicity certificates
 
-This file develops a general-plant version of antithetic integral feedback, complementing the
-production–degradation instance of `CRNT.Design.Antithetic`, `CRNT.Design.AntitheticErgodic` and
-`CRNT.Design.AntitheticMeanOutput`.
-
-## The plant
-
-A linear, unimolecular open loop is a system
-
-```text
-ẋ = A x + B u,      y = C x,
-```
-
-with state `x : ℝⁿ`, scalar input `u : ℝ` and scalar output `y : ℝ`.  The pair `(B, C)` is the
-actuation/sensing interface; `A` is the open-loop plant matrix.  The data is packaged as
-`LinearPlant n`.
-
-## Two controller models
-
-Briat–Gupta–Khammash's antithetic integral controller consists of two controller species whose
-difference `q = z₁ − z₂` obeys the internal-model equation `q̇ = μ − θ y`.  Around a steady state
-this is a pure integrator driven by the sensed output, and the *setpoint* is the absolute value
-`y = μ/θ`, independent of the plant.  We formalize this as `LinearPlant.antitheticLoop`:
-
-```text
-ẋ = A x + B u,      u̇ = μ − θ (C x).
-```
-
-We also formalize the *linear leaky integral loop* explicitly requested by the general-plant
-framework, `LinearPlant.linearLoop`:
-
-```text
-ẋ = A x + B u,      u̇ = −ε (u − C x).
-```
-
-Its equilibrium condition is `u = C x`: the controller state tracks the sensed output.  The
-difference between the two models is important and is discussed below.
-
-## The setpoint
-
-For `antitheticLoop`, every equilibrium satisfies `A x + B u = 0` and `θ (C x) = μ`, hence
-`C x = μ/θ` (`antitheticLoop_equilibrium`, `antitheticLoop_setpoint`,
-`antitheticLoop_output_eq_of_two_equilibria`).  This is the general-plant RPA theorem: the output
-is pinned by the controller reference and sensing rates alone, with no hypothesis on `A` or `B`.
-
-For `linearLoop`, every equilibrium satisfies `A x + B u = 0` and `u = C x`
-(`linearLoop_equilibrium`, `linearLoop_output_eq_controller`); eliminating `u` gives the closed-loop
-algebraic equation `A x + (C x) • B = 0`.
-
-Both statements are purely algebraic and hold for arbitrary real matrices, with no stability or
-positivity assumption.  For the scalar production–degradation plant they reduce to the familiar
-`x = μ/θ` setpoint, matching `CRNT.Antithetic.closedLoop_deterministic_setpoint`.
-
-## Lyapunov functions
-
-For the closed-loop linearization we use the standard linear-quadratic (LQ) Lyapunov function
-
-```text
-V(e, v) = eᵀ P e + v²,
-```
-
-where `e = x − x*`, `v = u − u*` are deviations from the equilibrium.  The matrices `P` and `Q`
-satisfy the (weak, quadratic-form) Lyapunov equation
-
-```text
-eᵀ(AᵀP + PA)e = − eᵀQe,
-```
-
-and the actuation/sensing matching condition `(P e)ᵀB = gain · (C e)`.  Under these hypotheses:
-
-* for the leaky loop, the Lie derivative is bounded by `−ε v²`
-  (`linearLieDeriv_le`);
-* for the antithetic loop, when `gain = θ`, the Lie derivative is `−eᵀQe ≤ 0`
-  (`antitheticLieDeriv_nonpos` and `antitheticLieDeriv_neg`).
-
-The existence of `P` for a strictly stable plant is *not* proved here; it is packaged as the
-hypothesis `LyapunovEquation` / `LyapunovCertificate`.  This is the standard Lyapunov-equation
-existence theorem for stable linear systems, and we state it as a hypothesis exactly as the task
-allows.  For scalar plants the certificate is constructed explicitly
-(`scalarCertificate`), and the concrete instance checks every field by `norm_num`.
-
-The Lie-derivative theorems are algebraic.  The section “Deterministic trajectories and Lyapunov
-decrease” connects them to honest ODE solutions: `antithetic_trajectory` and `leaky_trajectory`
-compute `d/dt (p e² + v²)` for curves satisfying the scalar closed-loop equations in deviation
-coordinates, `leaky_trajectory_decay` adds the Young inequality, and
-`antithetic_plant_trajectory` / `leaky_plant_trajectory` restate the result in the original state
-variables `(x, u)`.
-
-## Stochastic closed-loop ergodicity
-
-The stochastic counterpart of the antithetic motif is a continuous-time Markov chain on counts.
-The general transfer theorem `ergodic_of_fosterDrift` says: a countable jump system with a
-Foster–Lyapunov function `V`, a norm-like function `f`, drift `QV ≤ −f + K`, non-explosion
-(`HasSum (Pmin t x) 1`) and irreducibility is positive recurrent and converges in total variation
-to its unique stationary law.  `geometric_ergodic_of_fosterDrift` is the corresponding
-geometric-ergodicity statement, obtained from `CRNT.JumpSystem.geometric_ergodic_of_drift_on`.
-
-The drift condition (H) for an *arbitrary* unimolecular open loop is **not** constructed here.
-That construction is precisely the missing Briat–Gupta–Khammash closed-loop ergodicity theorem for
-an arbitrary ergodic, output-controllable unimolecular open loop.  What is formalized is:
-(a) the general Foster transfer principle, (b) the algebraic LQ certificate, and (c) the fact that
-for the concrete production–degradation network the hypothesis (H) is discharged by the existing
-`CRNT.Antithetic.drift_lyap_le`, yielding the existing `closedLoop_ergodic` and
-`closedLoop_mean_output_tendsto` as specializations (`closedLoop_ergodic_via_general`,
-`closedLoop_mean_output_tendsto_via_general`).
-
-## Concrete instance
-
-`productionDegradation γ k` is the scalar plant `ẋ = −γ x + k u`, `y = x`.  The file contains an
-explicit numerical instance in `ConcreteInstance` (plant rates `γ = 10`, `k = 1`, reference
-`muRef = 2`, sensing `thetaSense = 1`) for which the setpoint is `2`, the antithetic equilibrium is
-`(x, u) = (2, 20)`, and the LQ certificate `P = 1`, `Q = 20`, `gain = 1` satisfies every
-hypothesis (`antithetic_equilibrium`, `output_eq_two`, `plant_balance`, `cert_gain`,
-`cert_leaky_condition`, `leaky_drift`, `antithetic_drift`, `antithetic_drift_strict`).  The leaky
-loop with `ε = 1` is checked as well (`leaky_equilibrium`).
-
-Depends on: `CRNT.Design.AntitheticMeanOutput`, `CRNT.Stochastic.HarrisTheorem`,
-`CRNT.Stochastic.FosterRecurrence`, `CRNT.Stochastic.NetworkFosterErgodic`.
+A linear plant and its integral/leaky feedback models yield equilibrium setpoint
+identities. Lyapunov and Foster certificate transfers require the displayed
+matrix, drift, nonnegativity and integrability data. This does not establish
+stochastic ergodicity for an arbitrary plant solely from its interface. The
+concrete production/degradation and molecular antithetic instances are separate
+results.
 -/
 
 open Filter

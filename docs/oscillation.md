@@ -1,5 +1,7 @@
 # Oscillation and recurrent dynamics
 
+The explicit Lotka periodic-orbit and non-oscillation results are separate from conditional planar classification. `MinimalSetClassification` takes a `PoincareBendixsonKernelBundle`, trapping data, and equilibrium exclusion. Its nonregular-minimal-set predicate does not define a standard notion of chaos. `MassActionHopfTaylorData` constructs periodic curves of a cubic normal form, without proving they solve the original mass-action ODE.
+
 `CRNT/Oscillation` is the deterministic oscillation layer of `crnt-lean`.  Its contract is
 proof-carrying and deliberately incomplete in the logical sense: for an arbitrary finite CRN the
 library may prove oscillation, prove non-oscillation, or return `unknown`.  Failure of a sufficient

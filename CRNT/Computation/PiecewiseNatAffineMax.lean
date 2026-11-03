@@ -1,4 +1,4 @@
-import CRNT.Computation.Semilinear
+import CRNT.Computation.PiecewiseNatAffine
 import Mathlib.Algebra.BigOperators.Fin
 import Mathlib.Algebra.BigOperators.Ring.Finset
 import Mathlib.Algebra.BigOperators.Group.Finset.Lemmas
@@ -7,114 +7,21 @@ import Mathlib.Tactic.Ring
 import Mathlib.Tactic.FinCases
 
 /-!
-# Closure of the semilinear class under `max`, and the realization of the maximum of two
-affine maps
+# Maximum closure and natural-affine chemical examples
 
-This file adds to the treatment of leaf **C2** (chemical computation) of the field map
-`docs/field-map.md`: the closure of the semilinear class under the pointwise **maximum**,
-and the realization of that maximum by an explicit chemical reaction network.  (The full
-Chen–Doty–Soloveichik theorem is *not* proved here; see the last section.)
-
-## The framework
-
-The classical reference is the *semilinear characterization of stably computable
-functions* of B. Chen, N. Doty and M. Soloveichik (*The semilinear characterization of
-stably computable functions*, 2019; see also M. Chugg, E. Condon, M. Hashemi, 2018):
-a function `f : ℕ^k → ℕ` is **semilinear** if its graph is Presburger-definable, and a
-function is **stably computable** by a chemical reaction network if and only if it is
-semilinear.
-
-The repository uses a *precisely stated, weaker* notion of semilinearity, the "piecewise
-affine over linear regions" variant of `CRNT.Computation.Semilinear`:
-
-* a **region** on `ℕ^d` is a `LinFormula d`, a Boolean combination of the linear
-  inequalities `a · x ≤ b` with integer coefficients;
-* an **affine map** is `Affine d`, a map `x ↦ c + ∑ i, e i * x i` with `c, e i ∈ ℕ`;
-* `f` is **semilinear** if `ℕ^d` is covered by finitely many regions on each of which `f`
-  is a fixed affine map.
-
-Everything below is stated for that definition, which is *strictly weaker* than
-Presburger semilinearity: it admits no congruences (so `n ↦ n mod 2` is **not**
-semilinear here) and no quantified conditions.  The full Chen–Doty–Soloveichik theorem
-(presburger-semilinear ⇔ stably computable, for arbitrary networks) therefore **remains
-open**; what is open is stated again at the end of this docstring.
-
-## What was known before this file
-
-In `CRNT.Computation.Semilinear` the class of semilinear functions was already shown to be
-
-* closed under pointwise `+` (`Semilinear.add`), pointwise `min` (`Semilinear.min`) and
-  scalar multiplication `k ·` (`Semilinear.smul`);
-* containing all affine maps (`semilinear_of_affine`).
-
-The closure under `min` is the model for what is done here: on the intersection of the
-regions of `f` and of `g` the comparison `f ≤ g` is a *linear* condition
-(`Affine.eval_diff_iff`), so the region splits into two polyhedral pieces on each of
-which the minimum is one of the two affine maps.
-
-## What this file adds
-
-* **The closure under `max`.**  `Semilinear.max`: the class of semilinear functions is
-  closed under the pointwise maximum.  The proof is exactly the region-splitting
-  argument: on each pair of pieces the region is split by the hyperplane `f = g`, and on
-  each of the two parts the maximum is one of the two affine maps.  The linear form of
-  the comparison is recorded in `Affine.diffFormula`, and the splitting lemma itself is
-  `CRNT.Computation.region_split` (together with `max_eq_of_diff`, which says that the
-  maximum is affine on each of the two parts).
-* **The combination with the other closures.**  `semilinear_max_add` shows that the
-  class is closed under `+`, `min`, `max` and `k ·` simultaneously: it is a semiring with
-  `max`.
-* **The realization.**  `MaxAffine.maxAffineCRN_stablyComputes`: the maximum of two
-  affine maps is computed by an explicit reaction network.  This closes the loop with
-  `CRNT.Computation.maxCRN_stablyComputes` (the maximum of two *numbers* is computed) and
-  `CRNT.Computation.MinAffine.minAffineCRN_stablyComputes` (the minimum of a list of
-  affine maps is computed): the network below reads every input molecule once, produces
-  the molecules of the two pieces, and then pairs them up, discarding the surplus.
-
-## The network for the maximum of two affine maps
-
-Write `A x = a + ∑ i, m i * x i` and `B x = b + ∑ i, n i * x i`.  The species are the
-input species `X_i`, the two piece streams `P₁`, `P₂`, the output species `Y` and the
-auxiliary species `Z₁`, `Z₂`, `K`.  The reactions are
-
-* **conversion** `X_i → m i · P₁ + n i · P₂` (one reaction per input species): it reads
-  the input once and produces the molecules of both pieces;
-* `P₁ → Z₁ + Y` and `P₂ → Z₂ + Y`: they turn the two piece totals into molecules of the
-  output;
-* `Z₁ + Z₂ → K`: it pairs the two pieces up;
-* `K + Y → ∅`: it discards the surplus.
-
-The proof has the same two parts as the other realizations of the repository:
-
-* **Termination.**  The potential `MaxAffine.maxAffinePotential` (the number of molecules
-  still to be processed, counted with their multiplicity) decreases by one at every
-  reaction (`MaxAffine.wsum_delta_pot`).
-* **Correctness.**  Two linear invariants are preserved by every reaction
-  (`MaxAffine.wsum_delta_w1_conv`, `MaxAffine.wsum_delta_w1_aux`,
-  `MaxAffine.wsum_delta_w2_conv`, `MaxAffine.wsum_delta_w2_aux`): the difference of the
-  two piece totals, and the balance of the output species.  At a terminal configuration
-  one of the two accumulators is empty, so the two pieces have been paired up as far as
-  possible, and the output species holds exactly `max (A x) (B x)` molecules.
-
-## What remains open
-
-The full Chen–Doty–Soloveichik theorem remains open: the notion of semilinearity used
-here is weaker than Presburger semilinearity (no congruences, no quantifiers), and the
-sufficiency direction is only realized for the classes of affine maps, of minima of
-affine maps (see `CRNT.Computation.MinAffine`) and, by this file, of maxima of two
-affine maps.  Realizing an *arbitrary* piecewise-affine function — which requires
-realizing the *choice* of a region inside a reaction network — is not formalized here.
+Closure and construction results for `PiecewiseNatAffine`. The predicate uses
+natural affine coefficients and is narrower than classical semilinearity.
 -/
 namespace CRNT
 namespace Computation
 
-namespace Semilinear
+namespace PiecewiseNatAffine
 
-/-- **Semilinear functions are closed under `max`.**  On the intersection of the regions of
+/-- **PiecewiseNatAffine functions are closed under `max`.**  On the intersection of the regions of
 `f` and `g` the function `max (f x) (g x)` is affine on each of the two subregions
 `f x ≤ g x` and `g x ≤ f x`, both of which are linear conditions. -/
-theorem max {d : ℕ} {f g : (Fin d → ℕ) → ℕ} (hf : Semilinear f) (hg : Semilinear g) :
-    Semilinear (fun x => Nat.max (f x) (g x)) := by
+theorem max {d : ℕ} {f g : (Fin d → ℕ) → ℕ} (hf : PiecewiseNatAffine f) (hg : PiecewiseNatAffine g) :
+    PiecewiseNatAffine (fun x => Nat.max (f x) (g x)) := by
   obtain ⟨pf, hpf⟩ := hf
   obtain ⟨pg, hpg⟩ := hg
   refine ⟨pf.flatMap fun p => pg.flatMap fun q =>
@@ -145,7 +52,7 @@ theorem max {d : ℕ} {f g : (Fin d → ℕ) → ℕ} (hf : Semilinear f) (hg : 
       rw [hpv, hqv]
       exact Nat.max_eq_left (by omega)
 
-end Semilinear
+end PiecewiseNatAffine
 
 /-! ## The region-splitting lemma -/
 
@@ -201,22 +108,22 @@ theorem region_split_union {d : ℕ} (φ : LinFormula d) (A B : Affine d) :
     · exact Or.inl h'
     · exact Or.inr h'
 
-/-- **The maximum of two affine maps is semilinear.** -/
-theorem max_of_affine_semilinear {d : ℕ} (c₁ c₂ : ℕ) (e₁ e₂ : Fin d → ℕ) :
-    Semilinear (fun x => Nat.max (c₁ + ∑ i, e₁ i * x i) (c₂ + ∑ i, e₂ i * x i)) :=
-  Semilinear.max (semilinear_of_affine c₁ e₁) (semilinear_of_affine c₂ e₂)
+/-- **The maximum of two affine maps is piecewiseNatAffine.** -/
+theorem max_of_affine_piecewiseNatAffine {d : ℕ} (c₁ c₂ : ℕ) (e₁ e₂ : Fin d → ℕ) :
+    PiecewiseNatAffine (fun x => Nat.max (c₁ + ∑ i, e₁ i * x i) (c₂ + ∑ i, e₂ i * x i)) :=
+  PiecewiseNatAffine.max (piecewiseNatAffine_of_affine c₁ e₁) (piecewiseNatAffine_of_affine c₂ e₂)
 
 
-/-- **The semilinear class is a semiring with `max`.**  It is closed under `+`, `min`,
+/-- **The piecewiseNatAffine class is a semiring with `max`.**  It is closed under `+`, `min`,
 `max`, `k ·` and contains the affine maps. -/
-theorem semilinear_max_add {d : ℕ} {f g h : (Fin d → ℕ) → ℕ}
-    (hf : Semilinear f) (hg : Semilinear g) (hh : Semilinear h) (k : ℕ) :
-    Semilinear (fun x => k * Nat.max (f x + h x) (Nat.min (g x) (h x))) := by
-  have h1 : Semilinear (fun x => f x + h x) := Semilinear.add hf hh
-  have h2 : Semilinear (fun x => Nat.min (g x) (h x)) := Semilinear.min hg hh
-  have h3 : Semilinear (fun x => Nat.max (f x + h x) (Nat.min (g x) (h x))) :=
-    Semilinear.max h1 h2
-  exact Semilinear.smul h3 k
+theorem piecewiseNatAffine_max_add {d : ℕ} {f g h : (Fin d → ℕ) → ℕ}
+    (hf : PiecewiseNatAffine f) (hg : PiecewiseNatAffine g) (hh : PiecewiseNatAffine h) (k : ℕ) :
+    PiecewiseNatAffine (fun x => k * Nat.max (f x + h x) (Nat.min (g x) (h x))) := by
+  have h1 : PiecewiseNatAffine (fun x => f x + h x) := PiecewiseNatAffine.add hf hh
+  have h2 : PiecewiseNatAffine (fun x => Nat.min (g x) (h x)) := PiecewiseNatAffine.min hg hh
+  have h3 : PiecewiseNatAffine (fun x => Nat.max (f x + h x) (Nat.min (g x) (h x))) :=
+    PiecewiseNatAffine.max h1 h2
+  exact PiecewiseNatAffine.smul h3 k
 
 
 namespace MaxAffine
@@ -825,29 +732,29 @@ theorem maxAffineCRN_stablyComputes {d : ℕ} (A B : Affine d) :
     exact hY
 
 
-/-- **The maximum of two affine maps is semilinear.**  The two regions on which the
+/-- **The maximum of two affine maps is piecewiseNatAffine.**  The two regions on which the
 maximum is one of the two affine maps are described by `Affine.diffFormula`. -/
-theorem max_of_affine_semilinear {d : ℕ} (c₁ c₂ : ℕ) (e₁ e₂ : Fin d → ℕ) :
-    Semilinear (fun x => Nat.max (c₁ + ∑ i, e₁ i * x i) (c₂ + ∑ i, e₂ i * x i)) :=
-  Semilinear.max (semilinear_of_affine c₁ e₁) (semilinear_of_affine c₂ e₂)
+theorem max_of_affine_piecewiseNatAffine {d : ℕ} (c₁ c₂ : ℕ) (e₁ e₂ : Fin d → ℕ) :
+    PiecewiseNatAffine (fun x => Nat.max (c₁ + ∑ i, e₁ i * x i) (c₂ + ∑ i, e₂ i * x i)) :=
+  PiecewiseNatAffine.max (piecewiseNatAffine_of_affine c₁ e₁) (piecewiseNatAffine_of_affine c₂ e₂)
 
-/-- **The function `max (x 0) (x 1)` is semilinear.** -/
-theorem max_semilinear : Semilinear (fun x : Fin 2 → ℕ => Nat.max (x 0) (x 1)) := by
-  have h := max_of_affine_semilinear 0 0 (fun i : Fin 2 => if i = 0 then 1 else 0)
+/-- **The function `max (x 0) (x 1)` is piecewiseNatAffine.** -/
+theorem max_piecewiseNatAffine : PiecewiseNatAffine (fun x : Fin 2 → ℕ => Nat.max (x 0) (x 1)) := by
+  have h := max_of_affine_piecewiseNatAffine 0 0 (fun i : Fin 2 => if i = 0 then 1 else 0)
     (fun i : Fin 2 => if i = 1 then 1 else 0)
   convert h using 1
   funext x
   simp
 
-/-! ### The maximum of two affine maps is semilinear and stably computed -/
+/-! ### The maximum of two affine maps is piecewiseNatAffine and stably computed -/
 
-/-- **The maximum of two affine maps is semilinear.**  This is the instance of
-`Semilinear.max` for affine maps; the two regions are the ones of
+/-- **The maximum of two affine maps is piecewiseNatAffine.**  This is the instance of
+`PiecewiseNatAffine.max` for affine maps; the two regions are the ones of
 `Affine.diffFormula`. -/
-theorem maxAffine_semilinear {d : ℕ} (A B : Affine d) :
-    Semilinear (fun x => Nat.max (A.eval x) (B.eval x)) := by
-  have h := Semilinear.max (semilinear_of_affine A.const A.coeff)
-    (semilinear_of_affine B.const B.coeff)
+theorem maxAffine_piecewiseNatAffine {d : ℕ} (A B : Affine d) :
+    PiecewiseNatAffine (fun x => Nat.max (A.eval x) (B.eval x)) := by
+  have h := PiecewiseNatAffine.max (piecewiseNatAffine_of_affine A.const A.coeff)
+    (piecewiseNatAffine_of_affine B.const B.coeff)
   convert h using 1
   funext x
   simp [Affine.eval]
@@ -867,14 +774,14 @@ end MaxAffine
 
 /-! ### The principal declarations -/
 
-#print axioms CRNT.Computation.Semilinear.max
+#print axioms CRNT.Computation.PiecewiseNatAffine.max
 #print axioms CRNT.Computation.Affine.diffFormula_satisfied
 #print axioms CRNT.Computation.region_split
 #print axioms CRNT.Computation.region_split_union
-#print axioms CRNT.Computation.max_of_affine_semilinear
-#print axioms CRNT.Computation.semilinear_max_add
+#print axioms CRNT.Computation.max_of_affine_piecewiseNatAffine
+#print axioms CRNT.Computation.piecewiseNatAffine_max_add
 #print axioms CRNT.Computation.MaxAffine.maxAffineCRN_stablyComputes
-#print axioms CRNT.Computation.MaxAffine.maxAffine_semilinear
+#print axioms CRNT.Computation.MaxAffine.maxAffine_piecewiseNatAffine
 #print axioms CRNT.Computation.MaxAffine.max_two_affines_example
 
 end Computation

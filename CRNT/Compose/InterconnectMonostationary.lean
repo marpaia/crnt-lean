@@ -2,21 +2,12 @@ import CRNT.Compose.InterconnectKinetics
 import CRNT.Multistationarity.Injectivity
 
 /-!
-# Monostationarity of an interconnection
+# Monostationarity under injectivity of the combined field
 
-The stoichiometric subspace of an interconnection is the join of the components', so each
-component's positive stoichiometric compatibility class embeds into the interconnection's:
-a displacement that keeps a concentration within a component's subspace keeps it within
-the larger interconnection subspace.
-
-The monostationarity payoff lifts to the composed kinetics. When the combined vector field
-`(K₁.sum K₂).vectorField` is injective on a positive compatibility class of the
-interconnection, any two steady states of the combined kinetics lying in that class
-coincide: at most one positive steady state of the interconnection per class. This is the
-component-level injectivity-implies-monostationarity argument applied to the interconnection.
-
-Depends on:
-`CRNT.Compose.InterconnectKinetics`, `CRNT.Multistationarity.Injectivity`.
+Component compatibility classes embed into the interconnection class. Assuming
+class injectivity of the combined kinetics, its steady states in that class are
+unique. Injectivity of the separate component fields is not a sufficient
+hypothesis: injective fields can cancel when summed.
 -/
 
 namespace CRNT

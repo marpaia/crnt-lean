@@ -1,54 +1,14 @@
 import CRNT.Dynamics.FenichelLogisticInstance
 
 /-!
-# Continuous-time moving-target Fenichel persistence over a general nonlinear base
+# Explicit base/fibre graph-transform examples
 
-`CRNT.Dynamics.FenichelMovingGeneralDrift` proves the moving-target graph transform only at the fixed
-horizon `τ`: its `movingRegraph` reads the base back-map `slowInv` of the time-`τ` map, and the
-resulting non-constant invariance statement is therefore sampled at multiples of `τ`. This module
-removes the `τ`-restriction: it carries the moving-target back-map across the *whole* continuous
-forward semiflow, giving a genuinely non-constant `MapsTo` at **every** time `t ≥ 0`.
-
-## A base flow injective at every time
-
-`AllTimeInjectiveBaseFlow` bundles a forward semiflow `slowFlow : Flow ℝ≥0 Y` together with a
-`t`-indexed left-inverse family `slowInvAt : ℝ≥0 → Y → Y` satisfying
-`slowInvAt t (slowFlow.toFun t y) = y` for *every* `t`. The companion constructor `ofInjective` builds
-the family as `fun t => Function.invFun (slowFlow.toFun t)` from a proof that the time-`t` map is
-injective for every `t` — exactly the strengthening that `CRNT.Dynamics.FenichelMovingGeneralDrift`'s
-`flow_toFun_injective` already supplies, since it proves injectivity of the time-`t` map at every `t`,
-not only at `τ`.
-
-## The time-indexed moving regraph
-
-`movingRegraphAt rate c t h y = c + e^{-rate·t}·(h (slowInvAt t y) - c)` is the time-`t` back-map: the
-fibre contracts by the running factor `e^{-rate·t}` and the section is read at the time-`t` pre-image
-of the base point. `movingFlowAt_mapsTo` proves the time-`t` product semiflow carries `graphSet h`
-into `graphSet (movingRegraphAt rate c t h)` for *every* `t` and *every* section `h`: the genuinely
-non-constant, all-time mapping property, with the `τ`-restriction removed.
-
-## All-time invariance of the persisted manifold
-
-Over the constant attracting fibre `c` the time-`t` back-map reads a value already equal to `c`, so
-the running contraction holds it: `movingRegraphAt_const` shows the moving regraph fixes the constant
-section at every `t`. Hence the slow manifold `{(y, c)}` — the Banach fixed point of the fibre
-contraction — is invariant under the full continuous product semiflow for every `t ≥ 0`
-(`fenichel_continuousMovingTarget_isInvariant`), the continuous-time non-constant moving-target
-machinery exercised on every candidate section through `movingFlowAt_mapsTo` and collapsing to
-constant-fibre invariance on the persisted manifold.
-
-`affineAllTimeBase` instantiates the base with the constant-velocity translation flow `ẏ = v`, whose
-time-`t` map `y ↦ y + t·v` has the explicit running inverse `y ↦ y - t·v`; `logisticAllTimeBase`
-instantiates it with the genuinely curved `ẏ = ε·sin y` base, whose time-`t` injectivity comes from
-integral-curve uniqueness with no closed-form inverse supplied.
-
-Defined by Fenichel, "Geometric singular perturbation theory for ordinary differential equations": a
-normally attracting invariant manifold of the unperturbed layer system persists, for small `ε`, as a
-nearby invariant manifold. Here the moving-target back-map is honest at every continuous time, so the
-non-constant moving-target invariance holds along the whole forward semiflow rather than only at
-multiples of the horizon.
-
-Depends on: `CRNT.Dynamics.FenichelLogisticInstance`.
+The displayed base and fibre flows supply graph-transform data and yield their
+stated graph-invariance and fixed-point distance estimates. Michaelis–Menten
+sections use a contracting comparison flow with frozen substrate where defined.
+The hypotheses and actual flow in each theorem determine its scope. These
+examples do not establish general normally hyperbolic manifold persistence or
+transfer invariance to an unrelated coupled mass-action field.
 -/
 
 open Function Set

@@ -11,6 +11,7 @@ on:
       - 'lean-toolchain'
       - 'scripts/**'
       - 'test/**'
+      - 'docs/field-map.md'
       - '.github/workflows/ci.yml'
   pull_request:
     paths:
@@ -20,6 +21,7 @@ on:
       - 'lean-toolchain'
       - 'scripts/**'
       - 'test/**'
+      - 'docs/field-map.md'
       - '.github/workflows/ci.yml'
 
 jobs:
@@ -93,3 +95,9 @@ jobs:
 
       - name: Compiled analyzer smoke tests
         run: python3 -m unittest discover -s test -p '*_cli.py' -v
+
+      - name: Advertised declaration types and axiom coverage
+        run: |
+          python3 scripts/audit_advertised_statements.py \
+            --output "$RUNNER_TEMP/crnt-advertised-types.txt" \
+            --metadata "$RUNNER_TEMP/crnt-advertised-validation.json"

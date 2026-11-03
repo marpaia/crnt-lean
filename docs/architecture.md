@@ -1,5 +1,7 @@
 # Mathematical architecture
 
+Coverage is stated in the [field map](field-map.md). In particular the LaSalle, truncated Hopf, abstract graph-transform, algebraic determinant-volume, semantic DOA/ADA, and fixed-time stochastic limit components have restricted or conditional scope; they do not establish their full named classical theories.
+
 This document describes how the `CRNT` library is organized as mathematics: the two layers it is
 built in, the core abstractions each introduces, and how the major theorems depend on one another.
 It is the hub for the per-area documents, each of which states one area's definitions and proven

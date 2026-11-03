@@ -5,125 +5,14 @@ import CRNT.Multistationarity.ParityOfSteadyStates
 import CRNT.Open.Augmentation
 
 /-!
-# The total-degree theorem
+# Conditional degree/parity consequences and restricted total-degree examples
 
-This module proves the **total-degree theorem** for fully open networks, i.e. the ingredient that
-the field map lists as *missing* for the leaves **M9** (Brouwer degree and steady-state
-existence), **M13** (parameter regions for multistationarity) and **S19** (the parity of the
-number of positive steady states).  In all three leaves the repository carries the class degree
-`(-1)^s` as an explicit hypothesis (`hdeg`); here it is *computed*.
-
-## The mathematical statement
-
-For a **fully open** network `N⁺` (the network `N` together with the inflow pseudo-reaction
-`0 → s` and the outflow pseudo-reaction `s → 0` for every species `s`), the stoichiometric
-subspace is the whole species space (`Network.stoichSubspace_fullyOpen_eq_top`), so the
-compatibility class of a concentration `c` is the whole space and its dimension is `s = card S`.
-The mass-action field of `N⁺` reads
-
-```
-f(x)_s = inflow_s + Σ_r κ_r x^{y_r} (y'_r - y_r)_s - λ_s x_s ,
-```
-
-with `λ_s > 0` the outflow rate of `s`.  The *linear part at infinity* of the field is the
-diagonal operator `-D`, `D = diag(λ_s)`, whose determinant is `(-1)^s ∏_s λ_s`; the sign of the
-determinant of the linear part at infinity is therefore `(-1)^s`.  Since the class of a fully
-open network is the whole space, the degree of the class map is the degree at infinity, and the
-class degree is `(-1)^s`: this is the Conradi–Feliu–Mincheva–Wiuf total-degree theorem (their
-supporting information, *A characterization of multistationarity in chemical reaction networks*,
-Theorem 1), in the form in which the repository uses it.
-
-The present module proves this in the case in which the field at infinity is *exactly* the
-diagonal outflow operator, i.e. in which the field of the fully open extension is **affine**:
-
-```
-f(x) = source - outflow • x ,     source_s > 0 ,  outflow_s > 0 .
-```
-
-Under that hypothesis the field has a unique zero, the strictly positive concentration
-`x*_s = source_s / outflow_s`, and the reduced field has a unique zero, the chart coordinate of
-`x*`.  The class degree is then the local degree at that zero, namely the sign of the determinant
-of the derivative of the reduced field there; the derivative is the conjugate of the diagonal
-operator `-outflow •` by the chart, and the conjugation preserves the determinant (the chart and
-its dual projection are inverse isomorphisms of the class space and the species space).  Hence
-
-```
-class degree = sign ( ∏_s -outflow_s ) = (-1)^{card S} .
-```
-
-## What is in this module
-
-* `Network.AffineField` — the hypothesis: a network whose field is `source - outflow • x` with
-  `source` and `outflow` strictly positive.
-* `Network.outflowLinearMap`, `Network.hasFDerivAt_massActionVectorField_affine` — the derivative
-  of such a field is the constant diagonal operator `-outflow •`.
-* `Network.affineFieldZero`, `Network.massActionVectorField_eq_zero_iff` — the unique zero of
-  such a field, and its positivity.
-* `Network.fullyOpenSpeciesEquiv`, `Network.fullyOpenTransportFwdLM`,
-  `Network.fullyOpenTransportInvLM` — the transport of the species space to the class coordinate
-  space of the fully open extension; it is what makes the conjugation by the chart a composition
-  of endomorphisms of one space, so that the determinant can be split.
-* `Network.det_fderiv_steadyStateMap_affine` — the determinant of the linear part of the reduced
-  field, `∏_s -outflow_s`.
-* `Network.fullyOpen_classDegree` — **the total-degree theorem**: the class degree of a fully
-  open network with an affine field is `(-1)^{card S}`.
-* `Network.fullyOpen_classDegree_of_source_zero` — the theorem for the fully open extension of a
-  network whose reactions all have an *empty source complex* (a structural hypothesis on the
-  network, not on its field): such reactions contribute a constant production term, and the
-  outflow pseudo-reactions contribute the diagonal linear part.
-* `Network.fullyOpen_hfin_affine`, `Network.fullyOpen_steadyStateMap_zero_eq_singleton` — the
-  finiteness hypothesis of the degree is *automatic* in this case: the reduced field has exactly
-  one zero in the nonnegative part of the class.
-* `Network.fullyOpen_exists_positiveSteadyState_affine` — the Conradi–Feliu–Mincheva–Wiuf
-  existence step (leaf **M9**) with the total degree discharged.
-* `Network.fullyOpen_card_positiveSteadyStates_odd_affine` — the Šošić–Sibuya parity theorem
-  (leaf **S19**) with the total degree discharged: the number of positive steady states is odd.
-* `Network.fullyOpen_exists_two_positiveSteadyStates_affine` — the multistationarity conclusion
-  of leaf **M13**: a steady state of the exceptional local degree `(-1)^{s+1}` makes the class
-  multistationary, because the class degree is `(-1)^s`.
-
-## What remains, and why the hypothesis is necessary
-
-The total-degree theorem is **false for a general fully open network**, and the failure is
-*not* a matter of proof technology: it is proved in this module, in the namespace
-`Counterexample`.  Consider the one-species network with the reaction `A → 2A` and the fully open
-extension with all rate constants equal to one.  Its field is
-
-```
-f(x) = 1 - x + x = 1 ,
-```
-
-a nonzero constant: the inflow and the autocatalytic reaction cancel the outflow exactly, the
-field never vanishes, and the class degree is `0`, not the total degree `(-1)^1 = -1`
-(`Counterexample.classDegree_ne_pow_neg_one`).  Equivalently, the number of positive steady
-states of a fully open network need not be odd (the example has none), so the parity theorem of
-leaf **S19** needs a hypothesis on the field at infinity.
-
-The mechanism behind the failure is that the reaction terms of a mass-action field contribute to
-the field at infinity: a reaction with `|y_r| = 1` contributes a *linear* term, which can cancel
-the outflow (as in the example above), and a reaction with `|y_r| ≥ 2` contributes a term of
-higher degree, which *dominates* the outflow at infinity, so that the field at infinity is not
-linear at all.  The "linear part at infinity" of the field is therefore the outflow operator
-only under a hypothesis, and the hypothesis proved here (an affine field with a diagonal
-negative-definite linear part) is the natural one.  It is discharged for the fully open extension
-of every network whose reactions have an empty source complex
-(`fullyOpen_classDegree_of_source_zero`), and hence in particular for the purely linear flow
-network (`emptyNet_fullyOpen_classDegree`).
-
-The genuinely open part of the total-degree theorem is therefore the case of a fully open network
-with *higher-order* reaction terms: one has to compute the degree at infinity of the field (the
-sign of the determinant of its leading homogeneous part, together with the proof that the degree
-at infinity equals the relative degree on the nonnegative class), which is the mixed-volume /
-Bernstein count of the BKK theory.  That is the "index computation of the paper" that the
-repository's field map lists as missing, and it is not attempted here.
-
-## Dependencies
-
-`CRNT.Multistationarity.DegreeExistence` (the relative class degree and its existence
-principle), `CRNT.Multistationarity.DegreeStructural` (the local degree at a unique zero),
-`CRNT.Multistationarity.DegreeMultistationarity` (the perturbation argument),
-`CRNT.Multistationarity.ParityOfSteadyStates` (the parity theorem and the fully open
-boundary non-vanishing), `CRNT.Open.Augmentation` (the fully open extension).
+The finite signed-count arguments use the displayed boundary, regularity,
+finiteness and total-degree inputs. Explicit affine/rank-restricted computations
+are available where stated. Full openness alone does not force odd parity; the
+general total-degree theorem under dissipativity and boundary conditions remains
+incomplete. See `ParityOfSteadyStates` and `test.SemanticCorrespondence`.
+An earlier parity attribution with no verifiable source has been removed.
 -/
 
 set_option maxHeartbeats 800000
@@ -641,10 +530,7 @@ theorem fullyOpen_exists_positiveSteadyState_affine (N : Network S) (κ : N.full
   · intro y hy
     exact N.fullyOpen_steadyStateMap_ne_zero_on_classBoundary κ c y hy
 
-/-- **The parity theorem for a fully open network in dissipative affine form.**  The number of
-positive steady states in the class of `c` is odd: the total degree `(-1)^s` is odd, and the
-"no boundary steady states" hypothesis of Šošić–Sibuya is automatic for fully open networks.
-This is leaf **S19** with the total-degree hypothesis discharged. -/
+/-- Conditional degree/parity consequence under the hypotheses displayed below. -/
 theorem fullyOpen_card_positiveSteadyStates_odd_affine (N : Network S)
     (κ : N.fullyOpen.RateConstants) (c : Concentration S) (h : AffineField N.fullyOpen κ)
     (hfinN : (N.fullyOpen.steadyStateMap κ c ⁻¹' {0} ∩

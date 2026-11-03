@@ -1,62 +1,14 @@
 import CRNT.Dynamics.FenichelPersistenceContracting
 
 /-!
-# Fenichel persistence over a general nonlinear slow base flow
+# Explicit base/fibre graph-transform examples
 
-`CRNT.Dynamics.FenichelCoupledBase` lets the slow base coordinate drift, but only by the affine
-translation `ẏ = ε·b`: the base motion is a constant slow velocity, so the time-`t` base map is the
-invertible shift `y ↦ y + (ε·t)·b`. This module removes that linearity: the slow base evolves under a
-**general** forward semiflow `slowFlow : Flow ℝ≥0 Y` — the honest `exists_flow` output for a bounded
-Lipschitz slow field `ε·g`, a genuinely nonlinear drift — while the fast fibre contracts onto the
-constant target `c` at exponential rate `rate`.
-
-The coupled field is `ẏ = ε·g(y)`, `ż = -rate·(z - c)` on the product `Y × E`: the slow base flows by
-the general field `ε·g` and the fast fibre is pulled toward `c` at rate `rate`. Its forward semiflow is
-the product `(y, z) ↦ (slowFlow t y, c + e^{-rate·t}·(z - c))` (`productContractFlow`), assembled from
-the base semiflow `slowFlow` in the base coordinate and the closed-form exponential contraction
-`CRNT.Dynamics.FenichelPersistenceContracting`'s `contractingMap` in the fibre. Joint continuity comes
-from `slowFlow.cont'` and the elementary continuity of the fibre contraction; the identity at time `0`
-and the semigroup law come coordinatewise from `slowFlow` and `e^{-rate·(s+t)} = e^{-rate·s}·e^{-rate·t}`.
-
-## Constant-fibre invariance needs no base invertibility
-
-The slow manifold `{(y, c)} = graphSet (fun _ => c)` is invariant under the product semiflow
-**regardless of base motion**: a point `(y, c)` is carried to `(slowFlow t y, c + e^{-rate·t}·(c - c))
-= (slowFlow t y, c)`, still on the manifold, because the fibre contraction holds a fibre already at its
-own target `c` whatever the base does (`productContract_const_mapsTo`). No back-translation, hence no
-base invertibility, is required — the affine-base regraph of `CRNT.Dynamics.FenichelCoupledBase` is
-not needed for the constant fibre. This is `generalDrift_graphSet_isInvariant_allTime`: the slow
-manifold is invariant under the full continuous nonlinear-base semiflow `Φ t` for every `t ≥ 0`, the
-substrate flowing along it under its genuine drift.
-
-## End-to-end persistence
-
-`fenichel_persistence_generalDrift` assembles the two halves of Fenichel persistence over the general
-drifting base with every hypothesis discharged via the contracting-manifold machinery. The invariance
-half is `generalDrift_graphSet_isInvariant_allTime` sampled at multiples of the horizon: the graph of
-the attracting fibre `M_ε = c` is forward-invariant under the iterate coupled semiflow whose base
-flows by the genuine nonlinear field. The closeness half is
-`CRNT.Dynamics.FenichelPersistenceContracting`'s `contractGapData.manifold_dist_base_le`: `M_ε` sits
-within `defect / (1 - factor)` of the base section in the supremum metric. The persisted manifold
-`M_ε = c` is the Banach fixed point of the genuine fibre contraction `contractGapData`, and the
-nonlinear base flow is honest data, not a translation.
-
-## A concrete nonlinear base flow
-
-`logisticDriftFlow` instantiates `slowFlow` with the genuine semiflow of a bounded Lipschitz nonlinear
-1-D slow field — the saturating logistic-type drift `ε·g(y) = ε·sin y`, bounded by `|ε|` and Lipschitz
-with constant `|ε|` — obtained from `CRNT.Dynamics.FlowConstruction`'s `exists_flow`. Feeding it
-through `fenichel_persistence_generalDrift` (`fenichel_persistence_logisticDrift`) yields persistence
-over a base that flows by a genuinely nonlinear drift, not a translation.
-
-Defined by Fenichel, "Geometric singular perturbation theory for ordinary differential equations": a
-normally attracting invariant manifold of the unperturbed layer system persists, for small `ε`, as a
-nearby invariant manifold. Here the slow base evolves under a general nonlinear flow — `ẏ = ε·g(y)`,
-not the translation `ẏ = ε·b` — so the persisted manifold is invariant over a genuinely curved moving
-base, the honest completion of the coupled slow–fast coupling.
-
-Depends on:
-`CRNT.Dynamics.FenichelPersistenceContracting`.
+The displayed base and fibre flows supply graph-transform data and yield their
+stated graph-invariance and fixed-point distance estimates. Michaelis–Menten
+sections use a contracting comparison flow with frozen substrate where defined.
+The hypotheses and actual flow in each theorem determine its scope. These
+examples do not establish general normally hyperbolic manifold persistence or
+transfer invariance to an unrelated coupled mass-action field.
 -/
 
 open Function Set
@@ -126,13 +78,8 @@ theorem productContract_const_mapsTo (slowFlow : Flow ℝ≥0 Y) (rate : ℝ) (c
   simp [hp]
 
 omit [NormedSpace ℝ Y] [CompleteSpace Y] [CompleteSpace E] in
-/-- **All-time forward-invariance of the slow manifold over the general nonlinear base.** The graph of
-the constant attracting fibre `{(y, c)}` is invariant under the *full continuous* product semiflow
-`Φ t` for every `t ≥ 0`, with the base evolving by the genuine — possibly nonlinear — slow flow
-`slowFlow`. This needs **no base invertibility**: the fibre stays pinned at `c` whatever the base does,
-so a trajectory started on the slow manifold tracks the moving base along it for all forward time. The
-genuinely coupled continuous-time invariance half of Fenichel persistence, with the affine-base
-restriction removed. -/
+/-- Graph invariance and/or a distance estimate for the displayed explicit flow
+and supplied contraction data. This does not assert general perturbed NHIM persistence. -/
 theorem generalDrift_graphSet_isInvariant_allTime (slowFlow : Flow ℝ≥0 Y) (rate : ℝ) (c : E) :
     IsInvariant (productContractFlow slowFlow rate c).toFun (graphSet (fun _ : Y => c)) :=
   fun t => productContract_const_mapsTo slowFlow rate c t
@@ -154,16 +101,9 @@ theorem generalDrift_graphSet_isInvariant_iterate (slowFlow : Flow ℝ≥0 Y) (r
   fun n => generalDrift_graphSet_isInvariant_allTime slowFlow rate c (n • τ)
 
 omit [NormedSpace ℝ Y] [CompleteSpace Y] in
-/-- **End-to-end Fenichel persistence over a general nonlinear slow base.** Combining the genuine
-product semiflow `productContractFlow` — whose base evolves by the general (possibly nonlinear) slow
-flow `slowFlow` and whose fibre contracts onto `c` — with the genuine fibre contraction
-`CRNT.Dynamics.FenichelPersistenceContracting`'s `contractGapData` (whose Banach fixed point
-`M_ε = c` is the attracting fibre). The conclusion is the two halves of Fenichel persistence with
-**every hypothesis discharged**: the graph of the attracting fibre is forward-invariant under the
-iterate product semiflow whose base flows by the genuine nonlinear field, and `M_ε` sits within
-`defect / (1 - factor)` of the base section in the supremum metric. The base flow is honest data, not
-a translation, and the invariance half needs no base invertibility. -/
-theorem fenichel_persistence_generalDrift (slowFlow : Flow ℝ≥0 Y) (rate : ℝ) (c : E) (τ : ℝ≥0)
+/-- Graph invariance and/or a distance estimate for the displayed explicit flow
+and supplied contraction data. This does not assert general perturbed NHIM persistence. -/
+theorem graphTransform_discrete_invariant_and_dist_le_generalDrift (slowFlow : Flow ℝ≥0 Y) (rate : ℝ) (c : E) (τ : ℝ≥0)
     (hrate : 0 < rate) (hτ : 0 < (τ : ℝ)) :
     let G := contractGapData (Y := Y) (E := E) rate c τ hrate hτ
     IsInvariant (fun n : ℕ => (productContractFlow slowFlow rate c).toFun (n • τ))
@@ -242,18 +182,15 @@ theorem logisticDriftFlow_eq_curves (ε : ℝ) (x : ℝ) (t : ℝ≥0) :
     (logisticDriftFlow ε).toFun t x = logisticDriftCurves ε x (t : ℝ) :=
   (logisticDriftFlowData ε).choose_spec.choose_spec.2.2 x t
 
-/-- **Fenichel persistence over the genuinely nonlinear logistic-type base flow.** Specializing
-`fenichel_persistence_generalDrift` to the honest `exists_flow` semiflow `logisticDriftFlow` of the
-bounded Lipschitz nonlinear field `ε·sin y`: persistence holds over a base that flows by a genuinely
-nonlinear drift, not a translation, with the attracting fibre `M_ε = c` forward-invariant under the
-iterate product semiflow and within the `O(ε)` closeness ceiling of the base section. -/
-theorem fenichel_persistence_logisticDrift (ε : ℝ) (rate : ℝ) (c : ℝ) (τ : ℝ≥0)
+/-- Graph invariance and/or a distance estimate for the displayed explicit flow
+and supplied contraction data. This does not assert general perturbed NHIM persistence. -/
+theorem graphTransform_discrete_invariant_and_dist_le_logisticDrift (ε : ℝ) (rate : ℝ) (c : ℝ) (τ : ℝ≥0)
     (hrate : 0 < rate) (hτ : 0 < (τ : ℝ)) :
     let G := contractGapData (Y := ℝ) (E := ℝ) rate c τ hrate hτ
     IsInvariant (fun n : ℕ => (productContractFlow (logisticDriftFlow ε) rate c).toFun (n • τ))
         (graphSet (G.manifold : ℝ → ℝ)) ∧
       dist G.base G.manifold ≤ G.defect / (1 - G.factor) :=
-  fenichel_persistence_generalDrift (logisticDriftFlow ε) rate c τ hrate hτ
+  graphTransform_discrete_invariant_and_dist_le_generalDrift (logisticDriftFlow ε) rate c τ hrate hτ
 
 end LogisticInstance
 

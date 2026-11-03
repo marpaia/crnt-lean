@@ -1,4 +1,4 @@
-import CRNT.Dynamics.HirschConvergence
+import CRNT.Dynamics.LaSalleConvergence
 import CRNT.Dynamics.Monotone
 import CRNT.Dynamics.LaSalle
 import CRNT.Dynamics.CooperativeNetworks
@@ -11,80 +11,14 @@ import Mathlib.Topology.Connected.Clopen
 import Mathlib.Topology.Order.IntermediateValue
 
 /-!
-# Order-convexity of the ω-limit set of a bounded forward solution of a monotone system
+# Omega-limit topology and conditional order convexity
 
-This module is the second half of leaf **D14** (monotone systems and contraction for reaction
-networks).  The first half landed `CRNT.hirsch_generic_convergence`: the ω-limit set of a bounded
-forward trajectory of a *strongly monotone* field is a singleton, hence the trajectory converges
-to an equilibrium.  That theorem carried an extra hypothesis `hωoc` — the order-convexity of the
-ω-limit set — which was never used in its proof but which was supposed to be *derived* rather than
-assumed.
-
-This module derives the order-convexity, as far as the repository's infrastructure allows, and then
-re-packages the Hirsch theorem with the derived hypothesis.
-
-## What is proved here
-
-1. **Structure of the ω-limit set of a bounded forward trajectory**
-   (`omegaLimit_compact_of_absorbed`, `omegaLimit_connected_of_absorbed`,
-   `omegaLimit_forwardInvariant_of_absorbed`).  The connectedness statement is the classical one
-   (the ω-limit set of a *continuous* semiflow is an intersection of nested compact connected sets,
-   hence connected); it is proved here from scratch and is the main dynamical-systems input for
-   the order-theoretic argument.
-
-2. **Order-convexity of the equilibrium set of a monotone field** (`monotone_equilibrium_orderConvex`).
-   The repository already had this for *strongly* monotone fields
-   (`CRNT.stronglyMonotone_equilibrium_orderConvex`), but that proof only uses monotonicity; the
-   general statement is recorded here because it is what the order-convexity argument needs.
-
-3. **The order-theoretic lemma** (`omegaLimit_orderConvex_of_monotone_flow`): if the flow is
-   monotone, the ω-limit set consists of equilibria, the equilibrium set is order-convex and the
-   forward orbit is order-comparable with the test point, then the ω-limit set is order-convex.
-   The proof is the classical "sandwich" argument: a point `z` between two ω-limit points `p ≤ q`
-   which is comparable with the orbit at some time forces `z` to *be* one of the two ω-limit
-   points, because the comparability propagates along the orbit and the ω-limit set is closed.
-
-4. **Unconditional order-convexity for strongly monotone fields**
-   (`omegaLimit_orderConvex_of_stronglyMonotone`): if the field is strongly monotone and the
-   ω-limit set consists of equilibria, the ω-limit set is a *single* point — two distinct
-   equilibria contradict strong monotonicity — and a singleton is trivially order-convex.  No
-   comparability hypothesis on the orbit is needed here.
-
-5. **Hirsch's generic convergence with the derived hypothesis**
-   (`hirsch_generic_convergence_with_orderConvex`) and **without any order-convexity hypothesis**
-   (`hirsch_generic_convergence_of_monotone`), plus the mass-action specialisations
-   (`massAction_hirsch_convergence_of_cooperative`, `massAction_omegaLimit_orderConvex_of_cooperative`,
-   `massAction_omegaLimit_orderConvex_of_monotone_field`).
-
-The elementary helper `nnReal_exists_eq_add_of_le` (a tail of `ℝ≥0` is a translate of `Ici 0`) is
-used to compare the orbit of a monotone flow with an equilibrium at a later time.
-
-## The obstruction (what is *not* proved)
-
-The statement "a connected, forward-invariant subset of `ℝⁿ` which is the ω-limit set of a bounded
-trajectory of a monotone flow is order-convex" cannot be proved in the naive form: the identity
-flow on `ℝ²` is a monotone semiflow, and a compact, connected, forward-invariant set need not be
-order-convex (e.g. the "L-shaped" set `({x = 0} ∪ {y = 0}) ∩ [0, 1]²` contains `(0, 1)` and
-`(1, 0)` but not `(1/2, 1/2)` — although that particular set is itself order-convex, since no
-`p ≤ z ≤ q` with `p, q` in it fails).  What makes an ω-limit set special is
-that it is a *limit* set, and the classical resolution of the remaining case uses the *strong*
-order `≪` together with the openness of a strongly monotone flow (Hirsch–Smith, *Monotone
-Dynamical Systems*, Handbook of Differential Equations vol. 2; Smith 2017, Thm 2.1(b) "non-ordering
-of limit sets").  The repository has no flow-level "strong order" or "openness" predicate, so the
-general lemma is proved here under the explicit hypothesis `hcmp` (the orbit is order-comparable
-with the test point), which is exactly what the sandwich argument needs.  The hypothesis is
-discharged automatically whenever the field is strongly monotone, because then the ω-limit set is
-a single point (`omegaLimit_orderConvex_of_stronglyMonotone`).
-
-A second, purely algebraic obstruction is worth recording: the *equilibrium set* of a field is
-order-convex only when the field is **order-preserving**; the Kamke condition of a cooperative
-mass-action network is strictly weaker, and the zero set of a cooperative mass-action field need
-not be order-convex (the network `X → 2X` has field `f(x) = κ x` in the species `X` and zero set
-`{0} × ℝ`).  This is why `massAction_omegaLimit_orderConvex_of_monotone_field` assumes an
-order-preserving mass-action field, while `massAction_omegaLimit_orderConvex_of_cooperative`
-(a strongly monotone field, hence a singleton ω-limit set) needs no such assumption.
-
-Everything below is proved; there is no `sorry` and no additional axiom.
+Compactness, connectedness, and invariance of omega-limit sets, with additional
+order-convexity and convergence lemmas under their displayed hypotheses.
+The convergence wrappers use the LaSalle/unique-equilibrium argument of
+`LaSalleConvergence`, including its increasing-operator condition. They do not
+establish the classical generic convergence theorem for strongly monotone flows.
+Some order-convexity lemmas take order convexity as an explicit premise.
 -/
 
 open Set Filter Topology
@@ -265,7 +199,7 @@ omit [Fintype S] in
 `p`, `q` are equilibria with `p ≤ z ≤ q`, then `z` is an equilibrium as well: monotonicity gives
 `0 = f p ≤ f z ≤ f q = 0`.
 
-This is the hypothesis-free version of `CRNT.stronglyMonotone_equilibrium_orderConvex`, whose proof
+This is the hypothesis-free version of `CRNT.stronglyMonotoneOperator_equilibrium_orderConvex`, whose proof
 only ever used the monotonicity of the field. -/
 theorem monotone_equilibrium_orderConvex {f : Concentration S → Concentration S}
     (hmono : ∀ x y : Concentration S, x ≤ y → f x ≤ f y) (E : Set (Concentration S))
@@ -384,14 +318,14 @@ theorem omegaLimit_orderConvex_of_monotone_flow
 
 /-- **Order-convexity of the ω-limit set of a bounded trajectory of a strongly monotone field.**
 
-If the field `f` is strongly monotone (in the sense of `CRNT.StronglyMonotone`) and the ω-limit set
+If the field `f` is strongly monotone (in the sense of `CRNT.OrderPreservingStronglyMonotoneOperator`) and the ω-limit set
 of the trajectory consists of equilibria, then the ω-limit set is a *single* point — two distinct
 equilibria contradict strong monotonicity — and a singleton is trivially order-convex.  No
 comparability hypothesis on the orbit is needed here. -/
-theorem omegaLimit_orderConvex_of_stronglyMonotone
+theorem omegaLimit_orderConvex_of_stronglyMonotoneOperator
     [DecidableEq S]
     (f : Concentration S → Concentration S) (ϕ : Flow ℝ≥0 (Concentration S))
-    (hc : ℝ) (hsm : StronglyMonotone f hc) (hcpos : 0 < hc)
+    (hc : ℝ) (hsm : OrderPreservingStronglyMonotoneOperator f hc) (hcpos : 0 < hc)
     (x₀ : Concentration S) (K : Set (Concentration S)) (hK : IsCompact K)
     (habs : ∃ v ∈ (atTop : Filter ℝ≥0), closure (Set.image2 ϕ v {x₀}) ⊆ K)
     (hΩE : ∀ y ∈ omegaLimit atTop ϕ {x₀}, f y = 0) :
@@ -407,31 +341,31 @@ theorem omegaLimit_orderConvex_of_stronglyMonotone
   have hp0 : f p = 0 := hΩE p hp
   have hq0 : f q = 0 := hΩE q hq
   have hpq : p = q :=
-    stronglyMonotone_unique_equilibrium (f := f) (c := hc) (a := p) (b := q) hcpos hsm hp0 hq0
+    stronglyMonotoneOperator_unique_equilibrium (f := f) (c := hc) (a := p) (b := q) hcpos hsm hp0 hq0
   subst hpq
   have : z = p := le_antisymm hzq hpz
   rwa [this]
 
 end OrderConvexity
 
-section Hirsch
+section LaSalleWrappers
 
 variable {S : Type} [Fintype S] [DecidableEq S]
 
-/-- **Hirsch's generic convergence with the order-convexity of the ω-limit set *derived*.**
+/-- **LaSalle convergence with a unique equilibrium with the order-convexity of the ω-limit set *derived*.**
 
-This is `CRNT.hirsch_generic_convergence` with its `hωoc` hypothesis replaced by the order-convexity
+This is `CRNT.converges_of_lasalle_of_stronglyMonotoneOperator` with its `hωoc` hypothesis replaced by the order-convexity
 `omegaLimit_orderConvex_of_monotone_flow`, which is *proved* from the hypotheses `hΩE` (the
 ω-limit set consists of equilibria), `hEq` (the equilibrium set of the flow is order-convex) and
 `hcmp` (the orbit is order-comparable with the test point). -/
-theorem hirsch_generic_convergence_with_orderConvex
+theorem converges_of_lasalle_of_stronglyMonotoneOperator_with_orderConvex
     (ϕ : Flow ℝ≥0 (Concentration S)) (f : Concentration S → Concentration S)
     (V : Concentration S → ℝ) (hV : Continuous V) (x₀ : Concentration S)
     (K : Set (Concentration S)) (hK : IsCompact K)
     (habs : ∃ v ∈ (atTop : Filter ℝ≥0), closure (Set.image2 ϕ v {x₀}) ⊆ K)
     (hmonoV : ∀ s t : ℝ≥0, s ≤ t → V (ϕ t x₀) ≤ V (ϕ s x₀))
     (hVcrit : ∀ y ∈ K, (∀ t : ℝ≥0, V (ϕ t y) = V y) → f y = 0)
-    (hc : ℝ) (hsm : StronglyMonotone f hc) (hcpos : 0 < hc)
+    (hc : ℝ) (hsm : OrderPreservingStronglyMonotoneOperator f hc) (hcpos : 0 < hc)
     (hmonFlow : CRNT.Monotone.IsMonotoneFlow ϕ)
     -- the order-convexity of the ω-limit set is *derived* from the next three hypotheses
     (hΩE : ∀ y ∈ omegaLimit atTop ϕ {x₀}, ∀ t : ℝ≥0, ϕ t y = y)
@@ -444,25 +378,25 @@ theorem hirsch_generic_convergence_with_orderConvex
       a ∈ omegaLimit atTop ϕ {x₀} → b ∈ omegaLimit atTop ϕ {x₀} →
       a ≤ z → z ≤ b → z ∈ omegaLimit atTop ϕ {x₀} :=
     omegaLimit_orderConvex_of_monotone_flow ϕ hmonFlow x₀ K hK habs hΩE hEq hcmp
-  exact hirsch_generic_convergence ϕ f V hV x₀ K hK habs hmonoV hVcrit hc hsm hcpos hωoc hmonFlow
+  exact converges_of_lasalle_of_stronglyMonotoneOperator ϕ f V hV x₀ K hK habs hmonoV hVcrit hc hsm hcpos hωoc hmonFlow
 
-/-- **Hirsch's generic convergence without any order-convexity hypothesis.**
+/-- **LaSalle convergence with a unique equilibrium without any order-convexity hypothesis.**
 
-This is `CRNT.hirsch_generic_convergence` with the hypothesis `hωoc` (the order-convexity of the
+This is `CRNT.converges_of_lasalle_of_stronglyMonotoneOperator` with the hypothesis `hωoc` (the order-convexity of the
 ω-limit set) *removed*.  It is legitimate to remove it: the hypothesis was not used in the proof of
-`CRNT.hirsch_generic_convergence`, because the order-convexity of the ω-limit set is a
+`CRNT.converges_of_lasalle_of_stronglyMonotoneOperator`, because the order-convexity of the ω-limit set is a
 consequence of the LaSalle hypotheses (`hmonoV`, `hVcrit`), which make the ω-limit set a set of
 equilibria, together with strong monotonicity, which makes it a *singleton* — and a singleton is
-order-convex.  This is the classical content of Hirsch's generic convergence theorem for
+order-convex.  This is the classical content of LaSalle convergence with a unique equilibrium theorem for
 strongly monotone systems. -/
-theorem hirsch_generic_convergence_of_monotone
+theorem converges_of_lasalle_of_stronglyMonotoneOperator_of_monotone
     (ϕ : Flow ℝ≥0 (Concentration S)) (f : Concentration S → Concentration S)
     (V : Concentration S → ℝ) (hV : Continuous V) (x₀ : Concentration S)
     (K : Set (Concentration S)) (hK : IsCompact K)
     (habs : ∃ v ∈ (atTop : Filter ℝ≥0), closure (Set.image2 ϕ v {x₀}) ⊆ K)
     (hmonoV : ∀ s t : ℝ≥0, s ≤ t → V (ϕ t x₀) ≤ V (ϕ s x₀))
     (hVcrit : ∀ y ∈ K, (∀ t : ℝ≥0, V (ϕ t y) = V y) → f y = 0)
-    (hc : ℝ) (hsm : StronglyMonotone f hc) (hcpos : 0 < hc)
+    (hc : ℝ) (hsm : OrderPreservingStronglyMonotoneOperator f hc) (hcpos : 0 < hc)
     (hmonFlow : CRNT.Monotone.IsMonotoneFlow ϕ) :
     ∃ xstar : Concentration S, f xstar = 0 ∧
       Tendsto (fun t : ℝ≥0 => ϕ t x₀) atTop (𝓝 xstar) := by
@@ -473,20 +407,20 @@ theorem hirsch_generic_convergence_of_monotone
   have hωoc : ∀ a b z : Concentration S,
       a ∈ omegaLimit atTop ϕ {x₀} → b ∈ omegaLimit atTop ϕ {x₀} →
       a ≤ z → z ≤ b → z ∈ omegaLimit atTop ϕ {x₀} :=
-    omegaLimit_orderConvex_of_stronglyMonotone f ϕ hc hsm hcpos x₀ K hK habs hΩEf
-  exact hirsch_generic_convergence ϕ f V hV x₀ K hK habs hmonoV hVcrit hc hsm hcpos hωoc hmonFlow
+    omegaLimit_orderConvex_of_stronglyMonotoneOperator f ϕ hc hsm hcpos x₀ K hK habs hΩEf
+  exact converges_of_lasalle_of_stronglyMonotoneOperator ϕ f V hV x₀ K hK habs hmonoV hVcrit hc hsm hcpos hωoc hmonFlow
 
-end Hirsch
+end LaSalleWrappers
 
 section MassAction
 
 variable {S : Type} [Fintype S] [DecidableEq S]
 
-/-- **Hirsch's generic convergence for a cooperative mass-action network, without the
-order-convexity hypothesis.**  This is `CRNT.massAction_hirsch_convergence` with `hωoc` removed;
-see `hirsch_generic_convergence_of_monotone`. -/
-theorem massAction_hirsch_convergence_of_cooperative (N : Network S) (κ : N.RateConstants)
-    {c : ℝ} (hc : 0 < c) (hsm : StronglyMonotone (N.massActionVectorField κ) c)
+/-- **LaSalle convergence with a unique equilibrium for a cooperative mass-action network, without the
+order-convexity hypothesis.**  This is `CRNT.massAction_converges_of_lasalle_of_stronglyMonotoneOperator` with `hωoc` removed;
+see `converges_of_lasalle_of_stronglyMonotoneOperator_of_monotone`. -/
+theorem massAction_converges_of_lasalle_of_stronglyMonotoneOperator_of_cooperative (N : Network S) (κ : N.RateConstants)
+    {c : ℝ} (hc : 0 < c) (hsm : OrderPreservingStronglyMonotoneOperator (N.massActionVectorField κ) c)
     (ϕ : Flow ℝ≥0 (Concentration S)) (f : Concentration S → Concentration S)
     (V : Concentration S → ℝ) (hV : Continuous V) (x₀ : Concentration S)
     (K : Set (Concentration S)) (hK : IsCompact K)
@@ -497,18 +431,18 @@ theorem massAction_hirsch_convergence_of_cooperative (N : Network S) (κ : N.Rat
     (hf : f = N.massActionVectorField κ) :
     ∃ xstar : Concentration S, N.massActionVectorField κ xstar = 0 ∧
       Tendsto (fun t : ℝ≥0 => ϕ t x₀) atTop (𝓝 xstar) := by
-  have hsm' : StronglyMonotone f c := by rw [hf]; exact hsm
+  have hsm' : OrderPreservingStronglyMonotoneOperator f c := by rw [hf]; exact hsm
   obtain ⟨xstar, hxstar0, htend⟩ :=
-    hirsch_generic_convergence_of_monotone ϕ f V hV x₀ K hK habs hmonoV hVcrit c hsm' hc hmonFlow
+    converges_of_lasalle_of_stronglyMonotoneOperator_of_monotone ϕ f V hV x₀ K hK habs hmonoV hVcrit c hsm' hc hmonFlow
   refine ⟨xstar, ?_, htend⟩
   rw [hf] at hxstar0
   exact hxstar0
 
 /-- **The ω-limit set of a bounded trajectory of a cooperative mass-action network with a strongly
 monotone field is order-convex.**  No order-convexity hypothesis is needed: the ω-limit set is a
-single point (`omegaLimit_orderConvex_of_stronglyMonotone`). -/
+single point (`omegaLimit_orderConvex_of_stronglyMonotoneOperator`). -/
 theorem massAction_omegaLimit_orderConvex_of_cooperative (N : Network S) (κ : N.RateConstants)
-    {c : ℝ} (hc : 0 < c) (hsm : StronglyMonotone (N.massActionVectorField κ) c)
+    {c : ℝ} (hc : 0 < c) (hsm : OrderPreservingStronglyMonotoneOperator (N.massActionVectorField κ) c)
     (ϕ : Flow ℝ≥0 (Concentration S)) (x₀ : Concentration S) (K : Set (Concentration S))
     (hK : IsCompact K)
     (habs : ∃ v ∈ (atTop : Filter ℝ≥0), closure (Set.image2 ϕ v {x₀}) ⊆ K)
@@ -516,7 +450,7 @@ theorem massAction_omegaLimit_orderConvex_of_cooperative (N : Network S) (κ : N
     ∀ a b z : Concentration S,
       a ∈ omegaLimit atTop ϕ {x₀} → b ∈ omegaLimit atTop ϕ {x₀} →
       a ≤ z → z ≤ b → z ∈ omegaLimit atTop ϕ {x₀} :=
-  omegaLimit_orderConvex_of_stronglyMonotone (N.massActionVectorField κ) ϕ c hsm hc x₀ K hK habs hΩE
+  omegaLimit_orderConvex_of_stronglyMonotoneOperator (N.massActionVectorField κ) ϕ c hsm hc x₀ K hK habs hΩE
 
 /-- **The ω-limit set of a bounded trajectory of a mass-action network whose field is monotone is
 order-convex.**

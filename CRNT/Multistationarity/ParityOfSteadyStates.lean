@@ -4,103 +4,18 @@ import CRNT.Multistationarity.TwoReactionAtoms
 import CRNT.Open.Augmentation
 
 /-!
-# The parity of the number of positive steady states (Šošić–Sibuya)
+# Parity from a prescribed odd class degree
 
-This module formalizes the **parity theorem** of Šošić–Sibuya, *The number of steady states of a
-chemical network is odd*, Proc. Amer. Math. Soc. **134** (2006), 1835–1844, and adds the leaf
-**S19** ("the parity theorem: the number of positive steady states is odd") to the field map
-(`docs/field-map.md`).
+For finite nondegenerate zeros, with boundary zeros excluded, a signed count of
+odd total degree implies an odd number of positive steady states. Full openness
+supplies boundary exclusion, but does not supply the required total degree.
+For example `∅ → A`, `A → ∅`, `2A → 3A` at rates 1, 3, 2 has two simple
+positive equilibria. This counterexample is checked in `test.SemanticCorrespondence`.
 
-## The statement
-
-> Let `N` be a network, `κ` a choice of positive rate constants and `c` a compatibility class
-> representative.  Suppose that
->
-> * the zeros of the reduced field in the nonnegative part of the class are finite;
-> * the reduced field does not vanish on the class boundary (*no boundary steady states*);
-> * every positive zero of the reduced field is **nondegenerate**, i.e. the reduced Jacobian is
->   invertible there, so that the local degree of the steady-state map is `±1`;
-> * the **class degree** — the signed count of the zeros of the steady-state map in the class — is
->   **odd**.
->
-> Then the **number of positive steady states in the class is odd**.
-
-For a **fully open** network the last hypothesis is the Conradi–Feliu–Mincheva–Wiuf *total degree
-theorem*: the degree of the steady-state map on the class is `(-1)^s`, where `s` is the dimension
-of the class, and `(-1)^s` is odd.  This is the "odd degree" ingredient of Šošić–Sibuya.  It is
-carried as an explicit hypothesis here; see "What is *not* proved here" below.
-
-## The argument
-
-The relative class degree of the repository (`CRNT.Multistationarity.DegreeExistence`) is the
-**signed count** of the zeros of the reduced field in the nonnegative part of the class,
-
-```
-nonnegativeClassDegree κ c hfin = ∑ y ∈ hfin.toFinset, local degree of the field at y,
-```
-
-the summand being `sign (det (D (steadyStateMap) y))`, i.e. the sign of the reduced Jacobian
-determinant (`CRNT.Multistationarity.DegreeStructural`,
-`Network.localDegreeOn_steadyStateMap_singleton_eq_sign_reducedDet`).  Under the nondegeneracy
-hypothesis each summand is `+1` or `-1`, so
-
-```
-class degree = # {positive determinant} − # {negative determinant},
-count        = # {positive determinant} + # {negative determinant},
-```
-
-hence `count − class degree` is **even**: the parity of the number of positive steady states is
-the parity of the class degree.  This is the content of
-`Network.classDegree_eq_card_sub_two_mul_negCount` and
-`Network.card_positiveSteadyStates_odd`.
-
-Two further facts are needed for the *fully open* case and are proved here.
-
-* **A fully open network has no boundary steady state.**  The inflow pseudo-reaction `0 → s` makes
-  the field point *strictly inwards* on the coordinate face `x_s = 0`: at a nonnegative
-  concentration with `x_s = 0` the `s`-component of the field is at least the (positive) inflow
-  rate constant (`Network.fullyOpen_field_pos_of_nonneg_of_eq_zero`).  Hence the field does not
-  vanish at any boundary point (`Network.fullyOpen_noBoundarySteadyState`), and neither does the
-  reduced field on the class boundary (`Network.fullyOpen_steadyStateMap_ne_zero_on_classBoundary`).
-  The "no boundary steady states" hypothesis of Šošić–Sibuya is therefore *automatic* for fully
-  open networks.
-* **The class of a fully open network is the whole space.**  The stoichiometric subspace of the
-  fully open extension is `⊤` (`Network.stoichSubspace_fullyOpen_eq_top`), so the compatibility
-  class of `c` contains every concentration and the dimension of the class is `card S`.
-
-## What is *not* proved here
-
-The *total degree theorem* of Conradi–Feliu–Mincheva–Wiuf — that the class degree of a
-dissipative network is `(-1)^s` — is not proved here, exactly as in
-`CRNT.Multistationarity.DegreeMultistationarity` (where it is carried as the hypothesis `hdeg` of
-`Network.exists_two_positiveSteadyStates_of_classDegree_eq_pow_neg_one`).  The parity theorem of
-this module is the *consequence* of that theorem: an odd total degree forces an odd number of
-nondegenerate positive steady states.  The "counted with multiplicity" version of Šošić–Sibuya
-corresponds to the same statement with the local degrees counted with their multiplicities; the
-statement proved here counts *distinct* positive steady states under the nondegeneracy
-hypothesis, in which case the two agree.
-
-## Concrete instances
-
-* The purely linear flow network `emptyNet.fullyOpen` (`0 → s → 0` on every species) has exactly
-  one positive steady state, hence an odd number of them
-  (`Network.emptyNet_fullyOpen_card_positiveSteadyStates_eq_one`,
-  `Network.emptyNet_fullyOpen_card_positiveSteadyStates_odd`).
-* The two-species fully open network `∅ → A → ∅`, `∅ → B → ∅` (the instance
-  `CRNT.Multistationarity.DegreeExistence.DegreeExample`) has exactly one positive steady state,
-  and *every* hypothesis of the parity theorem is checked there: the zero set in the nonnegative
-  class is finite, the field does not vanish on the class boundary, the unique positive steady
-  state is nondegenerate (its reduced Jacobian determinant is `1`), and the class degree is `+1`,
-  hence odd (`CRNT.Network.DegreeExampleParity.card_positiveSteadyStates_odd`,
-  `CRNT.Network.DegreeExampleParity.card_positiveSteadyStates_eq_one`).
-
-## Relation to the field map
-
-The new leaf **S19** of `docs/field-map.md` is "The number of positive steady states of a fully
-open network is odd" (Šošić–Sibuya 2006).  It is the parity counterpart of **S18** ("bounds on
-the number of positive steady states", Bihan–Dickenstein–Giaroli 2020; Joshi–Shiu 2017), which
-bounds the number of positive steady states from above, and it uses the degree machinery of
-**M9** ("Brouwer degree and steady-state existence", Conradi–Feliu–Mincheva–Wiuf 2017).
+The total-degree theorem under dissipativity and boundary assumptions is not
+proved here. See Conradi–Feliu–Mincheva–Wiuf (2017),
+https://pmc.ncbi.nlm.nih.gov/articles/PMC5626113/ . An earlier attribution to
+"the conditional odd-degree argument 2006" lacked a verifiable source and has been removed.
 -/
 
 set_option maxHeartbeats 800000
@@ -289,7 +204,7 @@ theorem classDegree_eq_card_sub_two_mul_negCount
 
 /-- **The number of positive steady states of a class is odd when the class degree is odd.**
 
-This is the parity theorem of Šošić–Sibuya in the form supported by the repository: the class
+This is the parity theorem of the conditional odd-degree argument in the form supported by the repository: the class
 degree is the signed count of the zeros of the steady-state map in the class, and each
 nondegenerate zero contributes `±1`; hence the parity of the number of positive steady states is
 the parity of the class degree. -/
@@ -341,7 +256,7 @@ theorem exists_j_eq_two_mul_add_one_of_neg_one_pow (s : ℕ) :
 
 /-- **The parity theorem in the Conradi–Feliu–Mincheva–Wiuf form.**  If the class degree of the
 class of `c` is the total degree `(-1)^s` of the published theorem, then the number of positive
-steady states in the class is odd.  Since `(-1)^s` is odd for every `s`, this is the Šošić–Sibuya
+steady states in the class is odd.  Since `(-1)^s` is odd for every `s`, this is the the conditional odd-degree argument
 parity theorem: an odd total degree forces an odd number of nondegenerate positive steady
 states. -/
 theorem card_positiveSteadyStates_odd_of_classDegree_eq_pow_neg_one
@@ -457,7 +372,7 @@ theorem fullyOpen_field_pos_of_nonneg_of_eq_zero (N : Network S) (κ : N.fullyOp
 
 /-- **A fully open network has no boundary steady state.**  The field of a fully open network does
 not vanish at any nonnegative concentration which is not strictly positive.  This is the
-"no boundary steady states" hypothesis of Šošić–Sibuya, and it is *automatic* for fully open
+"no boundary steady states" hypothesis of the conditional odd-degree argument, and it is *automatic* for fully open
 networks. -/
 theorem fullyOpen_noBoundarySteadyState (N : Network S) (κ : N.fullyOpen.RateConstants)
     (x : Concentration S) (hx : x.Nonnegative) (hnpos : ¬ x.Positive) :
@@ -517,7 +432,7 @@ theorem fullyOpen_steadyStateMap_ne_zero_on_classBoundary (N : Network S)
 
 /-! ## The parity theorem for a fully open network -/
 
-/-- **The parity theorem for a fully open network (Šošić–Sibuya).**
+/-- **The parity theorem for a fully open network (the conditional odd-degree argument).**
 
 Let `N.fullyOpen` be the fully open extension of `N` with rate constants `κ`, and let `c` be a
 compatibility class representative.  Suppose that the zeros of the reduced field in the
@@ -526,7 +441,7 @@ class degree is the total degree `(-1)^{card S}` of the Conradi–Feliu–Minche
 dimension of the class of a fully open network is `card S`, because its stoichiometric subspace
 is the whole space).  Then the number of positive steady states in the class is **odd**.
 
-The "no boundary steady states" hypothesis of Šošić–Sibuya is *not* needed here: it is automatic
+The "no boundary steady states" hypothesis of the conditional odd-degree argument is *not* needed here: it is automatic
 for a fully open network, because the inflow pseudo-reactions make the field point strictly
 inwards on the coordinate faces (`Network.fullyOpen_steadyStateMap_ne_zero_on_classBoundary`). -/
 theorem fullyOpen_card_positiveSteadyStates_odd (N : Network S) (κ : N.fullyOpen.RateConstants)
@@ -595,7 +510,7 @@ theorem emptyNet_fullyOpen_card_positiveSteadyStates_eq_one
   omega
 
 /-- **The number of positive steady states of the fully open network without non-flow reactions is
-odd.**  This is the parity theorem of Šošić–Sibuya in the simplest fully open instance: the
+odd.**  This is the parity theorem of the conditional odd-degree argument in the simplest fully open instance: the
 purely linear flow network has exactly one positive steady state. -/
 theorem emptyNet_fullyOpen_card_positiveSteadyStates_odd
     (κ : emptyNet.fullyOpen.RateConstants) (T : Finset (Concentration S))

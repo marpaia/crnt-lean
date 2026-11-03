@@ -1,5 +1,6 @@
 -- Deriving handlers used by example and generated networks (`deriving Fintype`)
 import Mathlib.Tactic.DeriveFintype
+import CRNT.Multistationarity.ConcordanceBoundary
 
 -- General-purpose combinatorics (decidable undirected cycles; digraph excess function)
 import CRNT.Combinatorics.DecidableCycle
@@ -555,7 +556,7 @@ import CRNT.Translation.ReactionTranslation
 import CRNT.Design.ACRStandard
 import CRNT.Equilibria.ComplexBalanceStructure
 import CRNT.Flux.PSemiflow
-import CRNT.Algebra.SiphonIdeal
+import CRNT.Algebra.SiphonSupport
 import CRNT.Decomposition.ReactionPartition
 import CRNT.Design.GeneratedClosure
 import CRNT.Multistationarity.SignConstruction
@@ -1011,18 +1012,18 @@ import CRNT.Dynamics.SlowFast
 import CRNT.Algebra.CircuitDescartes
 import CRNT.Dynamics.HopfAveraging
 import CRNT.Dynamics.NormalFormCubic
-import CRNT.Dynamics.HirschConvergence
+import CRNT.Dynamics.LaSalleConvergence
 import CRNT.Stochastic.ExitMass
 import CRNT.Stochastic.EndotacticPositiveRecurrence
 import CRNT.Algebra.TropicalReduction
 import CRNT.Extensions.NonIsothermal
-import CRNT.Equilibria.MESSI
+import CRNT.Equilibria.SingletonSource
 import CRNT.Design.GeneralPlantRPA
 import CRNT.Multistationarity.DegreeExistence
 import CRNT.Oscillation.PlanarOscillationCriterion
 import CRNT.Multistationarity.MultistationarityRegion
 import CRNT.Stochastic.EndotacticTierPositiveRecurrence
-import CRNT.Computation.Semilinear
+import CRNT.Computation.PiecewiseNatAffine
 import CRNT.Dynamics.HopfLyapunovCalibration
 import CRNT.Extensions.ReactionDiffusion
 import CRNT.Extensions.DelaySemistability
@@ -1037,13 +1038,13 @@ import CRNT.Oscillation.TrappingRegion
 import CRNT.Multistationarity.DegreeMultistationarity
 import CRNT.Dynamics.OmegaLimitOrderConvex
 import CRNT.Stochastic.EndotacticTierDomination
-import CRNT.Oscillation.NoChaos
+import CRNT.Oscillation.MinimalSetClassification
 import CRNT.Design.GeneralPlantDrift
 import CRNT.Dynamics.EscapeDirection
 import CRNT.Deficiency.DeficiencyOneAlgorithmCorrectness
 import CRNT.Deficiency.ShelfFluxConstruction
 import CRNT.Multistationarity.ParityOfSteadyStates
-import CRNT.Computation.SemilinearRealization
+import CRNT.Computation.PiecewiseNatAffineRealization
 import CRNT.Multistationarity.MultistationarityRegionDescription
 import CRNT.Thermo.GibbsFreeEnergy
 import CRNT.Equilibria.NilpotentJacobian
@@ -1052,7 +1053,7 @@ import CRNT.Algebra.ExcludedCircuit
 import CRNT.Equilibria.KingAltman
 import CRNT.Multistationarity.MultiShelfConverse
 import CRNT.Stochastic.EndotacticFull
-import CRNT.Dynamics.MassActionHopf
+import CRNT.Dynamics.MassActionHopfTaylorData
 import CRNT.Dynamics.TikhonovTube
 import CRNT.Multistationarity.TotalDegree
 import CRNT.Multistationarity.MMatrixDeterminant
@@ -1091,7 +1092,7 @@ import CRNT.Dynamics.DelayComparison
 import CRNT.Multistationarity.MultiShelfMoments
 import CRNT.Extensions.ReactionDiffusionSpectrum
 import CRNT.Stochastic.CompensatedSecondMoment
-import CRNT.Computation.SemilinearMax
+import CRNT.Computation.PiecewiseNatAffineMax
 import CRNT.Algebra.TropicalDynamics
 import CRNT.Dynamics.DelayComparisonLattice
 import CRNT.Dynamics.DelayComparisonLocal

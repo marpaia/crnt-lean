@@ -1,4 +1,4 @@
-import CRNT.Computation.Semilinear
+import CRNT.Computation.PiecewiseNatAffine
 import Mathlib.Algebra.BigOperators.Fin
 import Mathlib.Algebra.BigOperators.Ring.Finset
 import Mathlib.Algebra.BigOperators.Group.Finset.Lemmas
@@ -8,98 +8,12 @@ import Mathlib.Tactic.Ring
 import Mathlib.Tactic.FinCases
 
 /-!
-# Realizing semilinear functions: the minimum of finitely many affine functions
+# Chemical realizations of affine minima
 
-This file realizes, by an explicit chemical reaction network, the class of **minima of
-finitely many affine functions** — the "min-of-affine" part of the piecewise-affine
-(notion of) semilinearity used in `CRNT.Computation.Semilinear`.
-
-## The class of functions covered
-
-Let `ps 0, …, ps k` be affine maps `ℕ^d → ℕ` (`CRNT.Computation.Affine`), and put
-
-* `minAffineVal ps x = min (ps 0 x, ps 1 x, …, ps k x)`.
-
-Then
-
-* **`minAffineCRN_stablyComputes`** : the network `minAffineCRN ps` **stably computes**
-  `minAffineVal ps`, i.e. it is a stable computation in the sense of
-  `CRNT.Computation.StablyComputes` (Chen–Doty–Soloveichik 2014): from the initial
-  configuration encoding `x`, every reachable configuration can reach an *output-stable*
-  configuration whose output count is `minAffineVal ps x`.
-
-The dimension `d` and the number of pieces `k+1` are arbitrary.  This is the
-"semilinear ⇒ stably computable" direction of the Chen–Doty–Soloveichik theorem for a
-substantial and clearly delimited class: the functions that are the pointwise minimum of
-finitely many affine maps.  It strictly generalizes the two worked examples of the
-repository: `CRNT.Computation.affineCRN_stablyComputes` (a *single* affine function) and
-`CRNT.Computation.minCRN_stablyComputes` (the minimum of two *numbers*).  Two
-corollaries are given:
-
-* `minTwoAffineCRN_stablyComputes` : the minimum of *two* affine maps of `ℕ^d → ℕ`;
-* `minList_semilinear` : the minimum of a list of affine maps is *semilinear* in the
-  sense of `CRNT.Computation.Semilinear`, so the class realized here is exactly of the
-  semilinear kind expected in leaf C2.
-
-## The construction
-
-Write `ps l = a l + ⟨m l, ·⟩` with `a l ∈ ℕ` and `m l : Fin d → ℕ`.  The network has
-
-* one *input* species `X_i` per coordinate `i` (holding `x i` molecules initially),
-* one *piece stream* species `P_r` (`r < k`), carrying the molecules of the piece `r+1`,
-* one *accumulator* species `Z_l` (`l ≤ k`): `Z_0` receives the molecules of the piece `0`,
-  `Z_k` is the output species, and
-* the reactions
-  * **conversion** `X_i → (ps 0).coeff i · Z_0 + ∑ r, (ps (r+1)).coeff i · P_r`
-    (one reaction per input species): it *reads* the input once and produces, in one go,
-    the molecules of every piece — this is what makes the fan-out to the `k+1` pieces
-    possible without duplicating the input (a duplication of the input is not available in
-    this framework);
-  * **chain** `Z_j + P_j → Z_{j+1}` (one reaction per `j < k`): it consumes one molecule
-    of the running minimum and one molecule of the next piece and produces one molecule of
-    the new running minimum.
-
-The chain is the heart of the construction.  The reaction `Z_j + P_j → Z_{j+1}` fires as
-long as both its source species are non-empty, so it fires exactly
-`min (T_j, T_{j+1})` times, where `T_j` is the total number of molecules ever produced
-for the piece `j`; the final content of `Z_k` is therefore `min_j T_j` — the minimum of
-the pieces.
-
-## The proof
-
-* **Termination.**  The potential `minAffinePotential` (the number of molecules still to
-  be processed, counted with their multiplicity) decreases by one at every reaction;
-  this is proved with the linear-invariant calculus of `CRNT.Computation.Semilinear`
-  (`potentialWeight_delta_conv`, `potentialWeight_delta_chain`, and the identity
-  `configSum_potential_eq` relating the potential to the weighted sum of the
-  configuration).
-
-* **Correctness.**  For each piece `l` the weight `pieceWeight ps l` is annihilated by
-  every reaction of the network (`pieceWeight_delta_conv`, `pieceWeight_delta_chain`), so
-  the weighted sum `configSum (pieceWeight ps l) c` is constant along a run
-  (`configSum_invariant`).  At a terminal configuration this weighted sum says, in
-  explicit form (`configSum_piece_zero`, `configSum_piece_succ`), that the running minimum
-  of the chain is bounded by the total of the next piece and is either the previous
-  running minimum or the total of the next piece; `chain_min` turns this into the
-  statement that the running minimum at the end is the minimum of all the piece totals.
-
-  The terminal conditions used are: all input species are empty (the conversion reaction
-  would be applicable otherwise) and, for each chain reaction, one of its two source
-  species is empty (`conv_applicable`, `chain_applicable`).
-
-## Relation to leaf C2 and to Chen–Doty–Soloveichik
-
-Leaf C2 of the field map asks for the semilinear characterization of stably computable
-functions.  This file provides the *sufficiency* direction for the min-of-affine class;
-the general statement (every piecewise-affine function over polyhedral regions is stably
-computable) is **not** proved here: it requires realizing the *choice* of a region inside
-a reaction network, which is the part that the present construction avoids by restricting
-to functions that are minima of affine pieces — there, the "choice" is performed by the
-consumption in the chain reaction, and the number of firings of the chain is exactly the
-minimum.  Note also that the notion of semilinearity used in
-`CRNT.Computation.Semilinear` is the piecewise-affine one (no congruences); the functions
-realized here are semilinear in that sense, and they are the classical "monomial piece"
-functions of Chen–Doty–Soloveichik.
+Explicit networks and stable-computation proofs for minima of natural-affine
+functions. These are sufficient constructions for a restricted family, not a
+realization theorem for every classical semilinear function or every function
+satisfying `PiecewiseNatAffine`.
 -/
 
 namespace CRNT
@@ -1249,12 +1163,12 @@ def listMin : List ℕ → ℕ
   | [] => 0
   | x :: xs => Nat.min x (listMin xs)
 
-/-- **The minimum of a list of affine functions is semilinear.**  Together with the main
-theorem this says that the functions realized here are exactly of the semilinear kind
-expected in leaf C2: they are minima of affine maps, hence semilinear in the sense of
-`CRNT.Computation.Semilinear`, and they are stably computable. -/
-theorem minList_semilinear {d : ℕ} : ∀ (ps : List (Affine d)),
-    Semilinear (fun x => listMin (ps.map (fun A => A.eval x))) := by
+/-- **The minimum of a list of affine functions is piecewiseNatAffine.**  Together with the main
+theorem this says that the functions realized here are exactly of the piecewiseNatAffine kind
+expected in leaf C2: they are minima of affine maps, hence piecewiseNatAffine in the sense of
+`CRNT.Computation.PiecewiseNatAffine`, and they are stably computable. -/
+theorem minList_piecewiseNatAffine {d : ℕ} : ∀ (ps : List (Affine d)),
+    PiecewiseNatAffine (fun x => listMin (ps.map (fun A => A.eval x))) := by
   intro ps
   induction ps with
   | nil =>
@@ -1262,12 +1176,12 @@ theorem minList_semilinear {d : ℕ} : ∀ (ps : List (Affine d)),
       funext x
       rfl
     rw [h]
-    simpa using (semilinear_of_affine 0 (fun _ => 0))
+    simpa using (piecewiseNatAffine_of_affine 0 (fun _ => 0))
   | cons A ps ih =>
-    have h1 : Semilinear (fun x => A.eval x) := semilinear_of_affine A.const A.coeff
-    have h2 : Semilinear (fun x => listMin (ps.map (fun B => B.eval x))) := ih
-    have h3 : Semilinear (fun x => Nat.min (A.eval x) (listMin (ps.map (fun B => B.eval x)))) :=
-      Semilinear.min h1 h2
+    have h1 : PiecewiseNatAffine (fun x => A.eval x) := piecewiseNatAffine_of_affine A.const A.coeff
+    have h2 : PiecewiseNatAffine (fun x => listMin (ps.map (fun B => B.eval x))) := ih
+    have h3 : PiecewiseNatAffine (fun x => Nat.min (A.eval x) (listMin (ps.map (fun B => B.eval x)))) :=
+      PiecewiseNatAffine.min h1 h2
     simpa only [List.map_cons, listMin] using h3
 
 end MinAffine

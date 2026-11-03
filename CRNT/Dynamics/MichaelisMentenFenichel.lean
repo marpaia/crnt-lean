@@ -2,56 +2,14 @@ import CRNT.Dynamics.FenichelPersistenceContracting
 import CRNT.Dynamics.MichaelisMentenCoupledContraction
 
 /-!
-# Fenichel persistence of the genuinely substrate-varying Michaelis–Menten slow manifold
+# Explicit base/fibre graph-transform examples
 
-This module closes Fenichel `ε`-persistence for the regularized Michaelis–Menten coupled slow–fast
-field. The persisted manifold genuinely *varies* over the substrate base — the fibre target is the
-substrate-dependent complex equilibrium `mmRegEquil Km Vmax s · e0`, a non-constant section — and the
-slaved-drift defect is the honest `O(ε)` velocity the slow coupling `ṡ = ε·g` applies to the moving
-graph, not the vanishing defect of a frozen target.
-
-The closed-form fast field over a frozen substrate base relaxes the complex coordinate `z` toward the
-*moving* target `c y` at exponential rate `rate`: `(y, z) ↦ (y, c y + e^{-rate·t}·(z - c y))`
-(`movingContractMap`). Unlike the constant-target instance of
-`CRNT.Dynamics.FenichelPersistenceContracting`, the attractor depends on the base point `y`, so its
-fixed-point section is the genuinely varying graph `y ↦ c y`. The semiflow assembles into a
-`Flow ℝ≥0 (Y × E)` (`movingContractFlow`) from the closed form — continuity, identity at time `0`,
-and the semigroup law from `e^{-rate·(s+t)} = e^{-rate·s}·e^{-rate·t}` — with no boundedness cutoff,
-the exponential pull being a global self-map at every forward time. Its time-`τ` map carries the graph
-of a section `σ` to the graph of the regraphed section `c + e^{-rate·τ}·(σ - c)`
-(`movingContract_allTimeRegraph`), discharging `flow_mapsTo` as a theorem about the explicit flow.
-
-On the substrate interval `Y = ↥(Set.Icc 0 s₀)` the equilibrium section
-`mmEquilSection rate hrate Km Vmax hKm s₀ = (s ↦ mmRegEquil Km Vmax s · e0)` is a genuine bounded
-continuous section `Y →ᵇ E` (continuity from the global `C¹` regularity of the regularized rate law,
-boundedness from compactness of the interval). Feeding it as the moving target builds the
-Michaelis–Menten `CoupledFlowGraphTransform` (`mmCoupledFlowGraphTransform`) whose persisted manifold
-is this varying equilibrium graph.
-
-The matching `GraphTransformData` (`mmFenichelData`) is the affine graph transform
-`op σ = c + e^{-rate·τ}·(σ - c)` on the bounded sections `Y →ᵇ E`, an exact supremum-metric
-contraction with factor `e^{-rate·τ} < 1` whose Banach fixed point is the equilibrium section `c`. Its
-recorded defect is the certified `O(ε)` slaved velocity `(L/rate)·(ε·G)` of
-`CRNT.Dynamics.MichaelisMentenSlowDriftSpeed`'s `mmRegSlavedVelocity_le_of_drift` — the speed at which
-the slow drift `ṡ = ε·g` carries the moving graph — so `manifold_dist_base_le` reads the honest `O(ε)`
-`C⁰`-closeness ceiling `‖M_ε − M_0‖_∞ ≤ (L/rate)·(ε·G)/(1 − e^{-rate·τ})`.
-
-Combining the two through `CRNT.Dynamics.FenichelPersistence`'s `fenichel_persistence`
-(`mmFenichelPersistence`) yields the two halves of Fenichel persistence for the Michaelis–Menten
-field with every hypothesis discharged: the graph of the substrate-varying equilibrium manifold is
-forward-invariant under the iterate coupled semiflow of the explicit moving-target contracting field,
-and it sits within the `O(ε)` slaved-velocity ceiling of the base section in the supremum metric.
-
-Defined by Fenichel, "Geometric singular perturbation theory for ordinary differential equations": a
-normally attracting invariant manifold of the unperturbed layer system persists, for small `ε`, as a
-nearby invariant manifold realized as the graph of the fixed-point section of the flow-then-regraph
-graph transform; here the fast fibre is normally attracting at rate `rate` and its target is the
-substrate-varying Michaelis–Menten quasi-steady-state level `Vmax·s/(Km+s)`, so the persisted
-manifold is the genuine moving equilibrium graph and the `O(ε)` defect is the slow-drift speed of that
-graph. The substrate-dependent target is the Michaelis–Menten/Briggs–Haldane quasi-steady-state level.
-
-Depends on:
-`CRNT.Dynamics.FenichelPersistenceContracting`, `CRNT.Dynamics.MichaelisMentenCoupledContraction`.
+The displayed base and fibre flows supply graph-transform data and yield their
+stated graph-invariance and fixed-point distance estimates. Michaelis–Menten
+sections use a contracting comparison flow with frozen substrate where defined.
+The hypotheses and actual flow in each theorem determine its scope. These
+examples do not establish general normally hyperbolic manifold persistence or
+transfer invariance to an unrelated coupled mass-action field.
 -/
 
 open Function Set
@@ -324,7 +282,7 @@ theorem mmFenichelPersistence (rate : ℝ) (hrate : 0 < rate) (Km Vmax : ℝ) (h
     IsInvariant (fun n : ℕ => F.flow.toFun (n • F.τ)) (graphSet (G'.manifold : SubstrateIcc s₀ → E)) ∧
       dist G'.base G'.manifold ≤ G'.defect / (1 - G'.factor) := by
   intro G' F
-  refine fenichel_persistence G' F ?_
+  refine graphTransform_discrete_invariant_and_dist_le G' F ?_
   have hman : (G'.manifold : SubstrateIcc s₀ →ᵇ E) = mmEquilSection Km Vmax hKm s₀ :=
     mmFenichelData_manifold rate hrate Km Vmax hKm s₀ τ hτ hL hε hG
   show (mmCoupledFlowGraphTransform rate Km Vmax hKm s₀ τ).op (G'.manifold : SubstrateIcc s₀ → E)

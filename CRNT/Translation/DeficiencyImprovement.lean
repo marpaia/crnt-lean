@@ -16,6 +16,11 @@ kinetic-complex data.  A certificate therefore carries an actual
 complex at every translated reaction source is the source complex selected by the chosen
 `KineticRepresentative`.  Kinetic data at complexes that never occur as reaction sources
 are intentionally not fabricated.
+
+`SteadyStateFaithfulOn` explicitly supplies the forward implication from original
+steady states to generalized complex balance. The later equivalence consumes
+that hypothesis; a general structural criterion deriving it is not proved here.
+
 -/
 
 namespace CRNT

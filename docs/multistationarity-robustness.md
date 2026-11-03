@@ -1,5 +1,7 @@
 # Multistationarity, robustness, and composition
 
+Concordance now has a boundary-inclusive injectivity equivalence for compatible nonnegative pairs with one positive member; the older `Injective` remains the positive-class restriction. Degree arguments use finite regular-zero signed counts; rate homotopies require intermediate regularity and the general dissipative total-degree theorem is missing. Parity is conditional on the total degree. DOA/ADA semantic real-feasibility equivalences do not implement finite published algorithms. Interconnection uniqueness assumes combined-field injectivity; general-plant adaptation retains certificate/integrability hypotheses.
+
 This document describes the top structural layer of the `CRNT` library: the questions that go
 beyond existence and uniqueness of equilibria. When can a network admit *several* positive steady
 states in one stoichiometric compatibility class? When is a species' concentration *robust* to the

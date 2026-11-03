@@ -1,5 +1,5 @@
 import CRNT.Equilibria.MatrixTreeCofactor
-import CRNT.Equilibria.MESSI
+import CRNT.Equilibria.SingletonSource
 import Mathlib.LinearAlgebra.Matrix.Determinant.Basic
 import Mathlib.Tactic.Linarith
 import Mathlib.Tactic.FieldSimp
@@ -24,8 +24,8 @@ complexes.  For such a network the mass-action field is **linear**
     = (total inflow into s) − (total outflow from s) ,
 ```
 
-so the steady state is the solution of a *linear* homogeneous system (`messi_vectorField_eq_linear`
-of `CRNT.Equilibria.MESSI`, used here through `uniFieldMatrix`).
+so the steady state is the solution of a *linear* homogeneous system (`singletonSource_vectorField_eq_linear`
+of `CRNT.Equilibria.SingletonSource`, used here through `uniFieldMatrix`).
 
 For a network whose reaction graph is **strongly connected** (in the language of the
 repository: *weakly reversible* with a *single linkage class*) the steady state is unique up to
@@ -162,8 +162,8 @@ theorem IsSingleton_of_eq_singletonComplex {y : Complex S} {i : S}
     rw [h]
     simp [singletonComplex, hj]
 
-/-- A unimolecular network is a MESSI network: every source complex is a singleton. -/
-theorem Unimolecular.messi (N : Network S) (h : N.Unimolecular) : N.MESSI := by
+/-- A unimolecular network is a SingletonSource network: every source complex is a singleton. -/
+theorem Unimolecular.singletonSource (N : Network S) (h : N.Unimolecular) : N.SingletonSource := by
   intro r
   obtain ⟨i, hi⟩ := (h r).source_singleton
   refine ⟨i, ?_⟩
@@ -185,14 +185,14 @@ theorem complex_eq_singleton_of_unimolecular (N : Network S) (h : N.Unimolecular
 /-- The **linear coefficient matrix** of the mass-action field of a unimolecular network: its
 `(s, t)`-entry is the coefficient of `x t` in the `s`-th component of the field. -/
 noncomputable def uniFieldMatrix (N : Network S) (κ : N.RateConstants) : Matrix S S ℝ :=
-  fun s t => messiCoeff N κ t s
+  fun s t => singletonSourceCoeff N κ t s
 
 /-- **The mass-action field of a unimolecular network is the linear map given by
 `uniFieldMatrix`.** -/
 theorem massActionVectorField_eq_uniFieldMatrix_mulVec (N : Network S) (κ : N.RateConstants)
     (h : N.Unimolecular) (x : Concentration S) :
     N.massActionVectorField κ x = N.uniFieldMatrix κ *ᵥ x := by
-  rw [N.messi_vectorField_eq_linear κ h.messi x]
+  rw [N.singletonSource_vectorField_eq_linear κ h.singletonSource x]
   funext s
   rfl
 
@@ -1353,7 +1353,7 @@ theorem field_Y (κ : Network.RateConstants N) (x : Concentration Species) :
   ring
 
 /-- **The steady states of `X ⇌ Y` are the points with `κ₁ x_X = κ₂ x_Y`.**  This is the
-specialisation of the MESSI theorem: the steady-state variety of a unimolecular network is
+specialisation of the SingletonSource theorem: the steady-state variety of a unimolecular network is
 a linear subspace, here the line through the origin of slope `κ₁/κ₂`. -/
 theorem steadyState_iff (κ : Network.RateConstants N) (x : Concentration Species) :
     N.IsMassActionSteadyState κ x ↔ κ.k fwd * x X = κ.k bwd * x Y := by

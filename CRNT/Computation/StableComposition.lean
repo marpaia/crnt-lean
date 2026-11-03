@@ -1,4 +1,4 @@
-import CRNT.Computation.SemilinearRealization
+import CRNT.Computation.PiecewiseNatAffineRealization
 import Mathlib.Data.Fintype.Sigma
 import Mathlib.Algebra.Order.BigOperators.Group.Finset
 import Mathlib.Tactic.Linarith
@@ -25,11 +25,11 @@ The classes realized in the repository so far are the elementary ones — `+`, `
 `scaleCRN_stablyComputes`, `maxCRN_stablyComputes`), the affine maps
 (`CRNT.Computation.affineCRN_stablyComputes`) and the *min-of-affine* family
 (`CRNT.Computation.MinAffine.minAffineCRN_stablyComputes`, together with
-`minList_semilinear` for the semilinearity of the class).  The corresponding
-*semilinear* characterization is `CRNT.Computation.Semilinear`: a function `ℕ^d → ℕ` is
-semilinear if `ℕ^d` is covered by finitely many regions on each of which the function is a
-fixed affine map.  Note that this notion of semilinearity is *weaker* than Presburger
-semilinearity: it carries no congruence conditions.
+`minList_piecewiseNatAffine` for the piecewiseNatAffineity of the class).  The corresponding
+*piecewiseNatAffine* characterization is `CRNT.Computation.PiecewiseNatAffine`: a function `ℕ^d → ℕ` is
+piecewiseNatAffine if `ℕ^d` is covered by finitely many regions on each of which the function is a
+fixed affine map.  Note that this notion of piecewiseNatAffineity is *weaker* than Presburger
+piecewiseNatAffineity: it carries no congruence conditions.
 
 ## What this file adds
 
@@ -71,12 +71,12 @@ molecule of an input species and produce a fixed target — is in
 ## What remains open
 
 The **full** Chen–Doty–Soloveichik theorem is *not* proved here.  It asserts that every
-semilinear function is stably computable (the realization direction, for *arbitrary*
-networks) and that every stably computable function is semilinear (the necessity
+piecewiseNatAffine function is stably computable (the realization direction, for *arbitrary*
+networks) and that every stably computable function is piecewiseNatAffine (the necessity
 direction, for arbitrary networks).  This file contributes the composition machinery that
 makes the realization direction systematic for the classes built so far; the necessity
 direction is known in the repository only under extra hypotheses (output-conserving
-networks: `CRNT.Computation.output_conserving_semilinear`).
+networks: `CRNT.Computation.output_conserving_piecewiseNatAffine`).
 -/
 
 namespace CRNT

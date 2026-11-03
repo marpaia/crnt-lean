@@ -14,93 +14,17 @@ import Mathlib.Tactic.FinCases
 import Mathlib.Data.Fintype.Card
 
 /-!
-# MESSI networks: linear steady-state varieties, convex cones of positive steady states,
-# and steady-state invariants
+# Singleton-source linear mass-action systems
 
-This file develops the structure theory of **MESSI networks** in the sense used here: a
-mass-action network in which **every reaction has a source complex of total molecularity
-one** (a *singleton* source: exactly one molecule of exactly one species).  Writing
-`σ(r)` for the species occurring in the source complex of the reaction `r`, the
-mass-action monomial of the source complex of `r` is then just `x (σ r)`, and the
-mass-action vector field becomes
+`Network.SingletonSource` requires every reaction source to be one molecule of
+one species. Products are unrestricted; for example `A → 2A` is allowed. The
+mass-action field is homogeneous linear. This module proves the resulting
+linear steady-state equations, convexity, and linear invariants.
 
-```
-f_κ(x)_s = ∑_r κ_r · x (σ r) · (y'_r(s) − [σ r = s])
-         = ∑_i c_{i,s}(κ) · x_i ,
-```
-
-a **linear** map of the concentration vector.  The steady-state condition is therefore the
-*linear* homogeneous system
-
-```
-∀ s,  ∑_i c_{i,s}(κ) · x_i = 0 ,      c_{i,s}(κ) := ∑_{r : σ(r) = i} κ_r · (y'_r(s) − [i = s]) ,
-```
-
-and the **steady-state variety `V` is a linear subspace of `ℝ^S`**.  (Being linear, `V` is a
-rational variety; when the equations have two terms, as in the reversible pair, it is a
-*binomial* — hence toric — variety in the sense of
-`CRNT.Network.HasToricSteadyStates`, `CRNT/Equilibria/ToricSteadyStates.lean`.  This is the
-content of the "linear elimination", "MESSI systems" and "rational parametrizations" items
-of field-map leaf **S17**.)
-
-Two structural consequences are formalized here:
-
-* **Key fact 1 (linear steady-state variety).**  The mass-action vector field of a MESSI
-  network is a *linear* map (`CRNT.Network.messi_vectorField_eq_linear`), so the
-  steady-state variety is a linear subspace (`CRNT.Network.messiVariety`,
-  `CRNT.Network.mem_messiVariety_iff`).
-* **Key fact 2 (convex cone of positive steady states).**  The positive steady states are
-  `V ∩ ℝ_{>0}^S`, hence a **convex cone**: the sum of two positive steady states is again
-  a positive steady state (`CRNT.Network.messi_steadyState_add`,
-  `CRNT.Network.messi_steadyState_smul`).
-* **Key fact 3 (no finite multistationarity).**  In a fixed stoichiometric class the
-  positive steady states form the intersection of the linear variety `V`, the affine class
-  `c + S(N)` and the open positive orthant, hence a convex set: it is empty, a singleton,
-  or infinite.  A MESSI network is therefore never *exactly* multistationary
-  (`CRNT.Network.messi_class_positiveSteadyStates_convex`,
-  `CRNT.Network.messi_no_exactly_two`).
-
-The **steady-state invariants** — the linear functionals that are constant on the
-steady-state variety, i.e. the *conservation laws of the steady-state variety* — are
-developed in the last section, together with two corrections of a widely repeated
-misstatement (see *Two corrections* below).
-
-Two concrete networks are worked out in `CRNT.Examples.MESSI`:
-
-* the reversible pair `X ⇌ Y`, whose steady-state variety is the line `κ₁ x_X = κ₂ x_Y`
-  and in which every stoichiometric class contains **exactly one** positive steady state;
-* the chain `X → Y → Z`, whose steady-state variety has **two** linear invariants while
-  the network has only **one** conservation law.
-
-## Naming
-
-The acronym MESSI is used here in the sense prescribed for this development ("every
-reaction has a source complex of total molecularity one"), which is the class of networks
-on which *linear elimination* applies.  Note that the acronym in Pérez Millán–Dickenstein
-(2018) stands for "Modifications of type Enzyme-Substrate or Swap with Intermediates", a
-different (though related) notion; the results below are the *linear-elimination* content
-of leaf S17, not a claim about that paper's MESSI systems.
-
-## Two corrections
-
-1. The **dual** condition on a weight vector `w` is *not* the condition for `w` to be a
-   steady-state invariant.  With `C_{s,i} = c_{i,s}(κ)` (so that `(C x)_s = ∑_i c_{i,s} x_i`
-   is the vector field) the two conditions are transposes of one another:
-   * `∀ s, ∑_i w i * c_{i,s} = 0` is `C w = 0`, i.e. `w` is a **steady state itself**
-     (`CRNT.Network.messi_steadyState_iff_weightedCoeff`);
-   * `∀ i, ∑_s w s * c_{i,s} = 0` is `Cᵀ w = 0`, and every **conservation law of the
-     network** satisfies it (`CRNT.Network.messi_conservationLaw_weightedCoeff`).
-   The linear functionals constant on the steady-state variety `V = ker C` are the image of
-   `Cᵀ`, i.e. the **rows** of `C`
-   (`CRNT.Network.messi_linearInvariant_iff`, `CRNT.Network.messi_linearInvariant_iff_rowSpace`).
-2. A **network conservation law need not be a steady-state invariant**, and vice versa:
-   the conservation laws lie in `ker Cᵀ` while the steady-state invariants lie in
-   `im Cᵀ = (ker Cᵀ)^⊥`, and the two spaces need not agree.  For the reversible pair
-   `X ⇌ Y` the network conservation law `(1,1)` is *not* constant on the steady states,
-   while `(κ₁, −κ₂)` *is* and is *not* a conservation law
-   (`CRNT.Examples.MESSI.invariantWeight_isSteadyStateInvariant`,
-   `CRNT.Examples.MESSI.invariantWeight_not_conservationLaw`,
-   `CRNT.Examples.MESSI.totalWeight_not_steadyStateInvariant`).
+This predicate is distinct from the partitioned MESSI class of Pérez Millán and
+Dickenstein. It has neither the intermediate/core partition nor the published
+complex restrictions, and does not imply conservativity. Full MESSI coverage is
+still incomplete. See `docs/semantic-audit-fixes.md`, R1.
 -/
 
 namespace CRNT
@@ -115,7 +39,7 @@ variable {S : Type} [DecidableEq S] [Fintype S]
 
 /-- A complex is the **singleton at `i`** if it consists of exactly one molecule of the
 species `i` and of nothing else.  This is the condition "total molecularity one" that a
-MESSI network imposes on every source complex. -/
+SingletonSource network imposes on every source complex. -/
 def IsSingleton (y : Complex S) (i : S) : Prop :=
   y i = 1 ∧ ∀ j, j ≠ i → y j = 0
 
@@ -161,26 +85,26 @@ theorem singletonComplex_ne {i j : S} (h : i ≠ j) : singletonComplex i ≠ sin
   intro hh
   exact h (singletonComplex_inj hh)
 
-/-- **A MESSI network**: every reaction has a source complex of total molecularity one,
+/-- **A SingletonSource network**: every reaction has a source complex of total molecularity one,
 i.e. a source that is a singleton complex. -/
-def MESSI (N : Network S) : Prop :=
+def SingletonSource (N : Network S) : Prop :=
   ∀ r : N.R, ∃ i : S, IsSingleton (N.reaction r).source i
 
-/-- The species occurring in the source complex of a reaction of a MESSI network. -/
-noncomputable def messiSourceSpecies (N : Network S) (hM : MESSI N) (r : N.R) : S :=
+/-- The species occurring in the source complex of a reaction of a SingletonSource network. -/
+noncomputable def singletonSourceSpecies (N : Network S) (hM : SingletonSource N) (r : N.R) : S :=
   Classical.choose (hM r)
 
 /-- The chosen source species really is the unique singleton species of the source
 complex. -/
-theorem messiSourceSpecies_isSingleton (N : Network S) (hM : MESSI N) (r : N.R) :
-    IsSingleton (N.reaction r).source (N.messiSourceSpecies hM r) :=
+theorem singletonSourceSpecies_isSingleton (N : Network S) (hM : SingletonSource N) (r : N.R) :
+    IsSingleton (N.reaction r).source (N.singletonSourceSpecies hM r) :=
   Classical.choose_spec (hM r)
 
-/-- The source complex of a reaction of a MESSI network is the singleton complex at the
+/-- The source complex of a reaction of a SingletonSource network is the singleton complex at the
 chosen source species. -/
-theorem messiSourceComplex_eq (N : Network S) (hM : MESSI N) (r : N.R) :
-    (N.reaction r).source = singletonComplex (N.messiSourceSpecies hM r) :=
-  (N.messiSourceSpecies_isSingleton hM r).eq_singletonComplex
+theorem singletonSourceComplex_eq (N : Network S) (hM : SingletonSource N) (r : N.R) :
+    (N.reaction r).source = singletonComplex (N.singletonSourceSpecies hM r) :=
+  (N.singletonSourceSpecies_isSingleton hM r).eq_singletonComplex
 
 /-! ## The monomial of a singleton source -/
 
@@ -202,33 +126,33 @@ theorem massActionMonomial_of_isSingleton (x : Concentration S) {y : Complex S} 
 /-! ## The coefficient matrix -/
 
 /-- The indicator of "the source complex of the reaction `r` is the singleton at `i`". -/
-def messiSourceIndicator (N : Network S) (r : N.R) (i : S) : ℝ :=
+def singletonSourceIndicator (N : Network S) (r : N.R) (i : S) : ℝ :=
   if (N.reaction r).source = singletonComplex i then 1 else 0
 
-/-- The coefficient `c_{i,s}(κ)` of the linear steady-state system of a MESSI network:
+/-- The coefficient `c_{i,s}(κ)` of the linear steady-state system of a SingletonSource network:
 
 `c_{i,s}(κ) = ∑_{r : σ(r) = i} κ_r · (y'_r(s) − [i = s])`.
 
-For a MESSI reaction with source species `i` the bracket is the entry of the reaction
+For a SingletonSource reaction with source species `i` the bracket is the entry of the reaction
 vector (`source s = [i = s]`), so equivalently
 
 `c_{i,s}(κ) = ∑_{r : σ(r) = i} κ_r · N.reactionVector r s`,
 
 which is the definition used here: it does not require choosing the source species. -/
-def messiCoeff (N : Network S) (κ : N.RateConstants) (i s : S) : ℝ :=
-  ∑ r : N.R, messiSourceIndicator N r i * (κ.k r * N.reactionVector r s)
+def singletonSourceCoeff (N : Network S) (κ : N.RateConstants) (i s : S) : ℝ :=
+  ∑ r : N.R, singletonSourceIndicator N r i * (κ.k r * N.reactionVector r s)
 
 /-- The coefficient `c_{i,s}(κ)` is zero unless `i` is the source species of some
 reaction. -/
-theorem messiCoeff_eq_zero_of_not_source (N : Network S) (κ : N.RateConstants)
+theorem singletonSourceCoeff_eq_zero_of_not_source (N : Network S) (κ : N.RateConstants)
     {i s : S} (hne : ∀ r : N.R, (N.reaction r).source ≠ singletonComplex i) :
-    messiCoeff N κ i s = 0 := by
+    singletonSourceCoeff N κ i s = 0 := by
   classical
-  unfold messiCoeff
+  unfold singletonSourceCoeff
   apply Finset.sum_eq_zero
   intro r _
-  have : messiSourceIndicator N r i = 0 := by
-    simp [messiSourceIndicator, hne r]
+  have : singletonSourceIndicator N r i = 0 := by
+    simp [singletonSourceIndicator, hne r]
   simp [this]
 
 /-! ## Linearity of the steady-state variety -/
@@ -256,27 +180,27 @@ theorem sum_eq_sum_fiber (N : Network S) (g : N.R → S) (f : N.R → ℝ) :
         exact Finset.sum_congr rfl fun r _ => (key r).symm
     _ = ∑ i : S, ∑ r : N.R, (if g r = i then 1 else 0) * f r := Finset.sum_comm
 
-/-- **The mass-action vector field of a MESSI network is linear.**  For a MESSI network the
+/-- **The mass-action vector field of a SingletonSource network is linear.**  For a SingletonSource network the
 mass-action monomial of the source complex of `r` is `x (σ r)`, and the vector field is
 the linear map `x ↦ fun s => ∑ i, c_{i,s}(κ) * x i`. -/
-theorem messi_vectorField_eq_linear (N : Network S) (κ : N.RateConstants) (hM : MESSI N)
+theorem singletonSource_vectorField_eq_linear (N : Network S) (κ : N.RateConstants) (hM : SingletonSource N)
     (x : Concentration S) :
-    N.massActionVectorField κ x = fun s => ∑ i, messiCoeff N κ i s * x i := by
+    N.massActionVectorField κ x = fun s => ∑ i, singletonSourceCoeff N κ i s * x i := by
   classical
-  set σ : N.R → S := fun r => N.messiSourceSpecies hM r with hσdef
+  set σ : N.R → S := fun r => N.singletonSourceSpecies hM r with hσdef
   have hσ : ∀ r, IsSingleton (N.reaction r).source (σ r) := by
     intro r
-    exact N.messiSourceSpecies_isSingleton hM r
+    exact N.singletonSourceSpecies_isSingleton hM r
   have hσeq : ∀ r, (N.reaction r).source = singletonComplex (σ r) := by
     intro r
     exact (hσ r).eq_singletonComplex
-  have hind : ∀ r i, messiSourceIndicator N r i = (if σ r = i then 1 else 0) := by
+  have hind : ∀ r i, singletonSourceIndicator N r i = (if σ r = i then 1 else 0) := by
     intro r i
     by_cases h : σ r = i
     · subst h
-      rw [messiSourceIndicator, hσeq r]
+      rw [singletonSourceIndicator, hσeq r]
       simp
-    · rw [messiSourceIndicator]
+    · rw [singletonSourceIndicator]
       have hne : ¬ ((N.reaction r).source = singletonComplex i) := by
         intro hh
         exact (h (singletonComplex_inj ((hσeq r).symm.trans hh))).elim
@@ -302,120 +226,120 @@ theorem messi_vectorField_eq_linear (N : Network S) (κ : N.RateConstants) (hM :
         refine Finset.sum_congr rfl fun i _ => ?_
         rw [Finset.mul_sum]
         exact Finset.sum_congr rfl fun r _ => by ring
-    _ = ∑ i : S, messiCoeff N κ i s * x i := by
+    _ = ∑ i : S, singletonSourceCoeff N κ i s * x i := by
         refine Finset.sum_congr rfl fun i _ => ?_
-        have hcoeff : messiCoeff N κ i s
+        have hcoeff : singletonSourceCoeff N κ i s
             = ∑ r : N.R, (if σ r = i then 1 else 0) * (κ.k r * N.reactionVector r s) := by
-          unfold messiCoeff
+          unfold singletonSourceCoeff
           refine Finset.sum_congr rfl fun r _ => ?_
           rw [hind r i]
         rw [hcoeff, Finset.sum_mul, Finset.mul_sum]
         exact Finset.sum_congr rfl fun r _ => by ring
 
-/-- **The steady states of a MESSI network are the zeros of a linear system.** -/
-theorem messi_steadyState_iff_linear (N : Network S) (κ : N.RateConstants) (hM : MESSI N)
+/-- **The steady states of a SingletonSource network are the zeros of a linear system.** -/
+theorem singletonSource_steadyState_iff_linear (N : Network S) (κ : N.RateConstants) (hM : SingletonSource N)
     (x : Concentration S) :
-    N.IsMassActionSteadyState κ x ↔ ∀ s, ∑ i, messiCoeff N κ i s * x i = 0 := by
+    N.IsMassActionSteadyState κ x ↔ ∀ s, ∑ i, singletonSourceCoeff N κ i s * x i = 0 := by
   unfold Network.IsMassActionSteadyState IsSteadyState
-  rw [messi_vectorField_eq_linear N κ hM x]
+  rw [singletonSource_vectorField_eq_linear N κ hM x]
 
-/-- The zero concentration is a steady state of a MESSI network (the steady-state variety
+/-- The zero concentration is a steady state of a SingletonSource network (the steady-state variety
 is a linear subspace, so it contains the origin). -/
-theorem messi_zero_isSteadyState (N : Network S) (κ : N.RateConstants) (hM : MESSI N) :
+theorem singletonSource_zero_isSteadyState (N : Network S) (κ : N.RateConstants) (hM : SingletonSource N) :
     N.IsMassActionSteadyState κ 0 := by
-  rw [messi_steadyState_iff_linear N κ hM]
+  rw [singletonSource_steadyState_iff_linear N κ hM]
   intro s
   simp
 
 /-! ## The steady states form a convex cone -/
 
-/-- **The sum of two steady states of a MESSI network is a steady state.**  Together with
-`messi_steadyState_smul` this says that the steady-state variety of a MESSI network is a
+/-- **The sum of two steady states of a SingletonSource network is a steady state.**  Together with
+`singletonSource_steadyState_smul` this says that the steady-state variety of a SingletonSource network is a
 linear subspace, and that the *positive* steady states form a convex cone. -/
-theorem messi_steadyState_add (N : Network S) (κ : N.RateConstants) (hM : MESSI N)
+theorem singletonSource_steadyState_add (N : Network S) (κ : N.RateConstants) (hM : SingletonSource N)
     {x y : Concentration S} (hx : N.IsMassActionSteadyState κ x)
     (hy : N.IsMassActionSteadyState κ y) :
     N.IsMassActionSteadyState κ (x + y) := by
-  rw [messi_steadyState_iff_linear N κ hM] at hx hy ⊢
+  rw [singletonSource_steadyState_iff_linear N κ hM] at hx hy ⊢
   intro s
-  have hsplit : (∑ i, messiCoeff N κ i s * (x i + y i))
-      = (∑ i, messiCoeff N κ i s * x i) + (∑ i, messiCoeff N κ i s * y i) := by
+  have hsplit : (∑ i, singletonSourceCoeff N κ i s * (x i + y i))
+      = (∑ i, singletonSourceCoeff N κ i s * x i) + (∑ i, singletonSourceCoeff N κ i s * y i) := by
     rw [← Finset.sum_add_distrib]
     exact Finset.sum_congr rfl fun i _ => by ring
   simp only [Pi.add_apply]
   rw [hsplit, hx s, hy s, add_zero]
 
-/-- **A scalar multiple of a steady state of a MESSI network is a steady state.**  In
+/-- **A scalar multiple of a steady state of a SingletonSource network is a steady state.**  In
 particular the steady-state variety is closed under nonnegative scaling, so the positive
 steady states form a cone. -/
-theorem messi_steadyState_smul (N : Network S) (κ : N.RateConstants) (hM : MESSI N)
+theorem singletonSource_steadyState_smul (N : Network S) (κ : N.RateConstants) (hM : SingletonSource N)
     {x : Concentration S} (hx : N.IsMassActionSteadyState κ x) (c : ℝ) :
     N.IsMassActionSteadyState κ (c • x) := by
-  rw [messi_steadyState_iff_linear N κ hM] at hx ⊢
+  rw [singletonSource_steadyState_iff_linear N κ hM] at hx ⊢
   intro s
-  have hsplit : (∑ i, messiCoeff N κ i s * (c * x i))
-      = c * (∑ i, messiCoeff N κ i s * x i) := by
+  have hsplit : (∑ i, singletonSourceCoeff N κ i s * (c * x i))
+      = c * (∑ i, singletonSourceCoeff N κ i s * x i) := by
     rw [Finset.mul_sum]
     exact Finset.sum_congr rfl fun i _ => by ring
   simp only [Pi.smul_apply, smul_eq_mul]
   rw [hsplit, hx s, mul_zero]
 
-/-- **The positive steady states of a MESSI network form a convex cone.**  The sum of two
+/-- **The positive steady states of a SingletonSource network form a convex cone.**  The sum of two
 positive steady states is a positive steady state. -/
-theorem messi_positiveSteadyState_add (N : Network S) (κ : N.RateConstants) (hM : MESSI N)
+theorem singletonSource_positiveSteadyState_add (N : Network S) (κ : N.RateConstants) (hM : SingletonSource N)
     {x y : Concentration S} (hx : x.Positive) (hxs : N.IsMassActionSteadyState κ x)
     (hy : y.Positive) (hys : N.IsMassActionSteadyState κ y) :
     (x + y).Positive ∧ N.IsMassActionSteadyState κ (x + y) := by
-  refine ⟨fun s => add_pos (hx s) (hy s), messi_steadyState_add N κ hM hxs hys⟩
+  refine ⟨fun s => add_pos (hx s) (hy s), singletonSource_steadyState_add N κ hM hxs hys⟩
 
-/-- **A positive scalar multiple of a positive steady state of a MESSI network is a
+/-- **A positive scalar multiple of a positive steady state of a SingletonSource network is a
 positive steady state.** -/
-theorem messi_positiveSteadyState_smul (N : Network S) (κ : N.RateConstants) (hM : MESSI N)
+theorem singletonSource_positiveSteadyState_smul (N : Network S) (κ : N.RateConstants) (hM : SingletonSource N)
     {x : Concentration S} (hx : x.Positive) (hxs : N.IsMassActionSteadyState κ x)
     {c : ℝ} (hc : 0 < c) : (c • x).Positive ∧ N.IsMassActionSteadyState κ (c • x) := by
-  refine ⟨fun s => mul_pos hc (hx s), messi_steadyState_smul N κ hM hxs c⟩
+  refine ⟨fun s => mul_pos hc (hx s), singletonSource_steadyState_smul N κ hM hxs c⟩
 
 /-! ## The steady-state variety as a linear subspace -/
 
-/-- **The steady-state variety of a MESSI network is a linear subspace** of `ℝ^S`: the set
+/-- **The steady-state variety of a SingletonSource network is a linear subspace** of `ℝ^S`: the set
 of concentrations at which the (linear) mass-action vector field vanishes. -/
-def messiVariety (N : Network S) (κ : N.RateConstants) : Submodule ℝ (S → ℝ) where
-  carrier := {x | ∀ s, ∑ i, messiCoeff N κ i s * x i = 0}
+def singletonSourceVariety (N : Network S) (κ : N.RateConstants) : Submodule ℝ (S → ℝ) where
+  carrier := {x | ∀ s, ∑ i, singletonSourceCoeff N κ i s * x i = 0}
   zero_mem' := by
     intro x
     simp
   add_mem' := by
     intro a b ha hb s
-    have hsplit : (∑ i, messiCoeff N κ i s * (a i + b i))
-        = (∑ i, messiCoeff N κ i s * a i) + (∑ i, messiCoeff N κ i s * b i) := by
+    have hsplit : (∑ i, singletonSourceCoeff N κ i s * (a i + b i))
+        = (∑ i, singletonSourceCoeff N κ i s * a i) + (∑ i, singletonSourceCoeff N κ i s * b i) := by
       rw [← Finset.sum_add_distrib]
       exact Finset.sum_congr rfl fun i _ => by ring
     simp only [Pi.add_apply]
     rw [hsplit, ha s, hb s, add_zero]
   smul_mem' := by
     intro c a ha s
-    have hsplit : (∑ i, messiCoeff N κ i s * (c * a i))
-        = c * (∑ i, messiCoeff N κ i s * a i) := by
+    have hsplit : (∑ i, singletonSourceCoeff N κ i s * (c * a i))
+        = c * (∑ i, singletonSourceCoeff N κ i s * a i) := by
       rw [Finset.mul_sum]
       exact Finset.sum_congr rfl fun i _ => by ring
     simp only [Pi.smul_apply, smul_eq_mul]
     rw [hsplit, ha s, mul_zero]
 
-/-- The steady-state variety of a MESSI network consists exactly of its steady states. -/
-theorem mem_messiVariety_iff (N : Network S) (κ : N.RateConstants) (hM : MESSI N)
-    (x : Concentration S) : x ∈ N.messiVariety κ ↔ N.IsMassActionSteadyState κ x := by
-  rw [messi_steadyState_iff_linear N κ hM]
+/-- The steady-state variety of a SingletonSource network consists exactly of its steady states. -/
+theorem mem_singletonSourceVariety_iff (N : Network S) (κ : N.RateConstants) (hM : SingletonSource N)
+    (x : Concentration S) : x ∈ N.singletonSourceVariety κ ↔ N.IsMassActionSteadyState κ x := by
+  rw [singletonSource_steadyState_iff_linear N κ hM]
   rfl
 
-/-- **The steady-state variety of a MESSI network is a linear subspace** of `ℝ^S`:
+/-- **The steady-state variety of a SingletonSource network is a linear subspace** of `ℝ^S`:
 it is closed under linear combinations of its elements.  Being linear, it is a *rational*
 variety, and in the two-term case a binomial — hence toric — one in the sense of
 `CRNT.Network.HasToricSteadyStates` (`CRNT/Equilibria/ToricSteadyStates.lean`).  This is
 the "rational parametrizations" content of leaf **S17**. -/
-theorem messiVariety_smul_add (N : Network S) (κ : N.RateConstants) {x y : Concentration S}
-    (hx : x ∈ N.messiVariety κ) (hy : y ∈ N.messiVariety κ) (c : ℝ) :
-    c • x + y ∈ N.messiVariety κ :=
-  (N.messiVariety κ).add_mem ((N.messiVariety κ).smul_mem c hx) hy
+theorem singletonSourceVariety_smul_add (N : Network S) (κ : N.RateConstants) {x y : Concentration S}
+    (hx : x ∈ N.singletonSourceVariety κ) (hy : y ∈ N.singletonSourceVariety κ) (c : ℝ) :
+    c • x + y ∈ N.singletonSourceVariety κ :=
+  (N.singletonSourceVariety κ).add_mem ((N.singletonSourceVariety κ).smul_mem c hx) hy
 
 /-! ## The positive steady states in a stoichiometric class -/
 
@@ -425,12 +349,12 @@ def PositiveSteadyStatesInClass (N : Network S) (κ : N.RateConstants)
     (c : Concentration S) : Set (Concentration S) :=
   {x | x.Positive ∧ N.IsMassActionSteadyState κ x ∧ (x - c) ∈ N.stoichSubspace}
 
-/-- **The positive steady states of a MESSI network in a fixed stoichiometric class form a
+/-- **The positive steady states of a SingletonSource network in a fixed stoichiometric class form a
 convex set.**  They are the intersection of the linear variety `V`, the affine class
 `c + S(N)` and the open positive orthant.  Hence they are empty, a singleton, or
-infinite: a MESSI network is never *exactly* multistationary. -/
-theorem messi_class_positiveSteadyStates_convex (N : Network S) (κ : N.RateConstants)
-    (hM : MESSI N) {c x y : Concentration S}
+infinite: a SingletonSource network is never *exactly* multistationary. -/
+theorem singletonSource_class_positiveSteadyStates_convex (N : Network S) (κ : N.RateConstants)
+    (hM : SingletonSource N) {c x y : Concentration S}
     (hx : x ∈ N.PositiveSteadyStatesInClass κ c)
     (hy : y ∈ N.PositiveSteadyStatesInClass κ c) {t : ℝ} (ht0 : 0 ≤ t) (ht1 : t ≤ 1) :
     ((1 - t) • x + t • y) ∈ N.PositiveSteadyStatesInClass κ c := by
@@ -448,9 +372,9 @@ theorem messi_class_positiveSteadyStates_convex (N : Network S) (κ : N.RateCons
       have htlt : t < 1 := lt_of_le_of_ne ht1 ht1'
       have honepos : 0 < 1 - t := by linarith
       exact add_pos (mul_pos honepos (hx s)) (mul_pos htpos (hy s))
-  · exact messi_steadyState_add N κ hM
-      (messi_steadyState_smul N κ hM hxs (1 - t))
-      (messi_steadyState_smul N κ hM hys t)
+  · exact singletonSource_steadyState_add N κ hM
+      (singletonSource_steadyState_smul N κ hM hxs (1 - t))
+      (singletonSource_steadyState_smul N κ hM hys t)
   · have hdecomp : ((1 - t) • x + t • y) - c
         = (1 - t) • (x - c) + t • (y - c) := by
       funext s
@@ -461,10 +385,10 @@ theorem messi_class_positiveSteadyStates_convex (N : Network S) (κ : N.RateCons
       (N.stoichSubspace.smul_mem (1 - t) hxc)
       (N.stoichSubspace.smul_mem t hyc)
 
-/-- **A MESSI network is never exactly multistationary.**  If two distinct positive steady
+/-- **A SingletonSource network is never exactly multistationary.**  If two distinct positive steady
 states lie in the same stoichiometric class, then they and their midpoint are three
 *distinct* positive steady states in that class. -/
-theorem messi_no_exactly_two (N : Network S) (κ : N.RateConstants) (hM : MESSI N)
+theorem singletonSource_no_exactly_two (N : Network S) (κ : N.RateConstants) (hM : SingletonSource N)
     {c x y : Concentration S} (hx : x ∈ N.PositiveSteadyStatesInClass κ c)
     (hy : y ∈ N.PositiveSteadyStatesInClass κ c) (hxy : x ≠ y) :
     x ∈ N.PositiveSteadyStatesInClass κ c ∧
@@ -475,7 +399,7 @@ theorem messi_no_exactly_two (N : Network S) (κ : N.RateConstants) (hM : MESSI 
   have hmid : (fun s => (x s + y s) / 2) ∈ N.PositiveSteadyStatesInClass κ c := by
     have hconv : ((1 : ℝ) - (1 / 2 : ℝ)) • x + (1 / 2 : ℝ) • y
         ∈ N.PositiveSteadyStatesInClass κ c :=
-      messi_class_positiveSteadyStates_convex N κ hM hx hy (t := 1 / 2) (by norm_num) (by norm_num)
+      singletonSource_class_positiveSteadyStates_convex N κ hM hx hy (t := 1 / 2) (by norm_num) (by norm_num)
     have heq : ((1 : ℝ) - (1 / 2 : ℝ)) • x + (1 / 2 : ℝ) • y = (fun s => (x s + y s) / 2) := by
       funext s
       simp only [Pi.smul_apply, Pi.add_apply, smul_eq_mul]
@@ -508,57 +432,57 @@ theorem messi_no_exactly_two (N : Network S) (κ : N.RateConstants) (hM : MESSI 
 
 /-- A linear functional `w` is a **steady-state invariant** of the network `N` at the rate
 constants `κ` when it takes the same value at every mass-action steady state.  For a
-MESSI network the steady states form a linear subspace containing `0`, so this is the
+SingletonSource network the steady states form a linear subspace containing `0`, so this is the
 same as saying that `w` annihilates the steady-state variety. -/
 def IsSteadyStateInvariant (N : Network S) (κ : N.RateConstants) (w : S → ℝ) : Prop :=
   ∀ x y : Concentration S, N.IsMassActionSteadyState κ x → N.IsMassActionSteadyState κ y →
     (∑ i, w i * x i) = (∑ i, w i * y i)
 
-/-- **The linear steady-state invariants of a MESSI network are the rows of the
+/-- **The linear steady-state invariants of a SingletonSource network are the rows of the
 coefficient matrix.**  A weight vector `w` is a steady-state invariant if and only if it
 is an `ℝ`-linear combination of the rows `(c_{i,s})_i` of the coefficient matrix; these
 are precisely the *conservation laws of the steady-state variety*. -/
-theorem messi_linearInvariant_iff (N : Network S) (κ : N.RateConstants) (hM : MESSI N)
+theorem singletonSource_linearInvariant_iff (N : Network S) (κ : N.RateConstants) (hM : SingletonSource N)
     (w : S → ℝ) :
     IsSteadyStateInvariant N κ w ↔
-      ∀ x : Concentration S, (∀ s, ∑ i, messiCoeff N κ i s * x i = 0) →
+      ∀ x : Concentration S, (∀ s, ∑ i, singletonSourceCoeff N κ i s * x i = 0) →
         (∑ i, w i * x i) = 0 := by
   constructor
   · intro h x hx
     have hx' : N.IsMassActionSteadyState κ x :=
-      (messi_steadyState_iff_linear N κ hM x).mpr hx
-    have h0 : N.IsMassActionSteadyState κ 0 := N.messi_zero_isSteadyState κ hM
+      (singletonSource_steadyState_iff_linear N κ hM x).mpr hx
+    have h0 : N.IsMassActionSteadyState κ 0 := N.singletonSource_zero_isSteadyState κ hM
     have hval := h x 0 hx' h0
     simpa using hval
   · intro h x y hx hy
-    have hx' : ∀ s, ∑ i, messiCoeff N κ i s * x i = 0 :=
-      (messi_steadyState_iff_linear N κ hM x).mp hx
-    have hy' : ∀ s, ∑ i, messiCoeff N κ i s * y i = 0 :=
-      (messi_steadyState_iff_linear N κ hM y).mp hy
+    have hx' : ∀ s, ∑ i, singletonSourceCoeff N κ i s * x i = 0 :=
+      (singletonSource_steadyState_iff_linear N κ hM x).mp hx
+    have hy' : ∀ s, ∑ i, singletonSourceCoeff N κ i s * y i = 0 :=
+      (singletonSource_steadyState_iff_linear N κ hM y).mp hy
     have hxv : (∑ i, w i * x i) = 0 := h x hx'
     have hyv : (∑ i, w i * y i) = 0 := h y hy'
     rw [hxv, hyv]
 
 /-- The space of steady-state invariants: the annihilator of the steady-state variety. -/
 def steadyStateInvariantSpace (N : Network S) (κ : N.RateConstants) : Submodule ℝ (S → ℝ) :=
-  orthSum (N.messiVariety κ)
+  orthSum (N.singletonSourceVariety κ)
 
-/-- A weight vector is a steady-state invariant of a MESSI network if and only if it lies
+/-- A weight vector is a steady-state invariant of a SingletonSource network if and only if it lies
 in the space of steady-state invariants. -/
-theorem messi_linearInvariant_mem_iff (N : Network S) (κ : N.RateConstants) (hM : MESSI N)
+theorem singletonSource_linearInvariant_mem_iff (N : Network S) (κ : N.RateConstants) (hM : SingletonSource N)
     (w : S → ℝ) :
     IsSteadyStateInvariant N κ w ↔ w ∈ N.steadyStateInvariantSpace κ := by
   rw [IsSteadyStateInvariant, steadyStateInvariantSpace, mem_orthSum]
   constructor
   · intro h x hx
     have hx' : N.IsMassActionSteadyState κ x :=
-      (messi_steadyState_iff_linear N κ hM x).mpr hx
-    have h0 : N.IsMassActionSteadyState κ 0 := N.messi_zero_isSteadyState κ hM
+      (singletonSource_steadyState_iff_linear N κ hM x).mpr hx
+    have h0 : N.IsMassActionSteadyState κ 0 := N.singletonSource_zero_isSteadyState κ hM
     have hval := h x 0 hx' h0
     simpa using hval
   · intro h x y hx hy
-    have hx' : x ∈ N.messiVariety κ := (mem_messiVariety_iff N κ hM x).mpr hx
-    have hy' : y ∈ N.messiVariety κ := (mem_messiVariety_iff N κ hM y).mpr hy
+    have hx' : x ∈ N.singletonSourceVariety κ := (mem_singletonSourceVariety_iff N κ hM x).mpr hx
+    have hy' : y ∈ N.singletonSourceVariety κ := (mem_singletonSourceVariety_iff N κ hM y).mpr hy
     have hxv : (∑ i, w i * x i) = 0 := h x hx'
     have hyv : (∑ i, w i * y i) = 0 := h y hy'
     rw [hxv, hyv]
@@ -566,38 +490,38 @@ theorem messi_linearInvariant_mem_iff (N : Network S) (κ : N.RateConstants) (hM
 /-- **The condition of the "dual" reading.**  The condition `∀ s, ∑ i, w i * c_{i,s} = 0`
 is the *transpose* of the conservation-law condition; it characterises the weight vectors
 that are themselves **steady states**, not the steady-state invariants. -/
-theorem messi_steadyState_iff_weightedCoeff (N : Network S) (κ : N.RateConstants)
-    (hM : MESSI N) (w : S → ℝ) :
-    (∀ s, ∑ i, w i * messiCoeff N κ i s = 0) ↔ N.IsMassActionSteadyState κ w := by
-  rw [messi_steadyState_iff_linear N κ hM]
+theorem singletonSource_steadyState_iff_weightedCoeff (N : Network S) (κ : N.RateConstants)
+    (hM : SingletonSource N) (w : S → ℝ) :
+    (∀ s, ∑ i, w i * singletonSourceCoeff N κ i s = 0) ↔ N.IsMassActionSteadyState κ w := by
+  rw [singletonSource_steadyState_iff_linear N κ hM]
   constructor
   · intro h s
-    have h' : (∑ i, w i * messiCoeff N κ i s) = 0 := h s
+    have h' : (∑ i, w i * singletonSourceCoeff N κ i s) = 0 := h s
     simpa [mul_comm] using h'
   · intro h s
-    have h' : (∑ i, messiCoeff N κ i s * w i) = 0 := h s
+    have h' : (∑ i, singletonSourceCoeff N κ i s * w i) = 0 := h s
     simpa [mul_comm] using h'
 
 /-- **The conservation laws of the network satisfy the transposed condition.**  If `w` is a
 conservation law of the network, then `∀ i, ∑ s, w s * c_{i,s} = 0`. -/
-theorem messi_conservationLaw_weightedCoeff (N : Network S) (κ : N.RateConstants)
-    (hM : MESSI N) {w : S → ℝ} (hw : w ∈ N.conservationLawSpace) :
-    ∀ i, (∑ s, w s * messiCoeff N κ i s) = 0 := by
+theorem singletonSource_conservationLaw_weightedCoeff (N : Network S) (κ : N.RateConstants)
+    (hM : SingletonSource N) {w : S → ℝ} (hw : w ∈ N.conservationLawSpace) :
+    ∀ i, (∑ s, w s * singletonSourceCoeff N κ i s) = 0 := by
   classical
-  set σ : N.R → S := fun r => N.messiSourceSpecies hM r with hσdef
+  set σ : N.R → S := fun r => N.singletonSourceSpecies hM r with hσdef
   have hσ : ∀ r, IsSingleton (N.reaction r).source (σ r) := by
     intro r
-    exact N.messiSourceSpecies_isSingleton hM r
+    exact N.singletonSourceSpecies_isSingleton hM r
   have hσeq : ∀ r, (N.reaction r).source = singletonComplex (σ r) := by
     intro r
     exact (hσ r).eq_singletonComplex
-  have hind : ∀ r i, messiSourceIndicator N r i = (if σ r = i then 1 else 0) := by
+  have hind : ∀ r i, singletonSourceIndicator N r i = (if σ r = i then 1 else 0) := by
     intro r i
     by_cases h : σ r = i
     · subst h
-      rw [messiSourceIndicator, hσeq r]
+      rw [singletonSourceIndicator, hσeq r]
       simp
-    · rw [messiSourceIndicator]
+    · rw [singletonSourceIndicator]
       have hne : ¬ ((N.reaction r).source = singletonComplex i) := by
         intro hh
         exact (h (singletonComplex_inj ((hσeq r).symm.trans hh))).elim
@@ -608,13 +532,13 @@ theorem messi_conservationLaw_weightedCoeff (N : Network S) (κ : N.RateConstant
     have hr := (mem_orthSum.mp hw) (N.reactionVector r) (N.reactionVector_mem_stoichSubspace r)
     simpa using hr
   intro i
-  have hexp : ∀ s, messiCoeff N κ i s
+  have hexp : ∀ s, singletonSourceCoeff N κ i s
       = ∑ r : N.R, (if σ r = i then 1 else 0) * (κ.k r * N.reactionVector r s) := by
     intro s
-    unfold messiCoeff
+    unfold singletonSourceCoeff
     refine Finset.sum_congr rfl fun r _ => ?_
     rw [hind r i]
-  calc (∑ s, w s * messiCoeff N κ i s)
+  calc (∑ s, w s * singletonSourceCoeff N κ i s)
       = ∑ s, ∑ r : N.R,
           w s * ((if σ r = i then 1 else 0) * (κ.k r * N.reactionVector r s)) := by
         refine Finset.sum_congr rfl fun s _ => ?_
@@ -641,24 +565,24 @@ theorem messi_conservationLaw_weightedCoeff (N : Network S) (κ : N.RateConstant
 
 /-! ### The invariants of the steady-state variety are the rows of the coefficient matrix -/
 
-/-- The **transpose of the coefficient matrix** of a MESSI network:
-`messiAdjoint κ c i = ∑ s, c s * c_{i,s}(κ)`. -/
-def messiAdjoint (N : Network S) (κ : N.RateConstants) (c : S → ℝ) (i : S) : ℝ :=
-  ∑ s, c s * messiCoeff N κ i s
+/-- The **transpose of the coefficient matrix** of a SingletonSource network:
+`singletonSourceAdjoint κ c i = ∑ s, c s * c_{i,s}(κ)`. -/
+def singletonSourceAdjoint (N : Network S) (κ : N.RateConstants) (c : S → ℝ) (i : S) : ℝ :=
+  ∑ s, c s * singletonSourceCoeff N κ i s
 
 /-- The transpose of the coefficient matrix, in coordinates. -/
-theorem messiAdjoint_eq (N : Network S) (κ : N.RateConstants) (c : S → ℝ) (i : S) :
-    N.messiAdjoint κ c i = ∑ s, c s * messiCoeff N κ i s := rfl
+theorem singletonSourceAdjoint_eq (N : Network S) (κ : N.RateConstants) (c : S → ℝ) (i : S) :
+    N.singletonSourceAdjoint κ c i = ∑ s, c s * singletonSourceCoeff N κ i s := rfl
 
 /-- The `s`-th unit vector of `ℝ^S`. -/
 def unitVector (s : S) : S → ℝ := fun j => if j = s then 1 else 0
 
 /-- The transpose of the coefficient matrix applied to a unit vector picks out the
 corresponding row of the matrix. -/
-theorem messiAdjoint_unitVector (N : Network S) (κ : N.RateConstants) (s i : S) :
-    N.messiAdjoint κ (unitVector s) i = messiCoeff N κ i s := by
-  unfold messiAdjoint
-  calc (∑ j, unitVector s j * messiCoeff N κ i j) = messiCoeff N κ i s := by
+theorem singletonSourceAdjoint_unitVector (N : Network S) (κ : N.RateConstants) (s i : S) :
+    N.singletonSourceAdjoint κ (unitVector s) i = singletonSourceCoeff N κ i s := by
+  unfold singletonSourceAdjoint
+  calc (∑ j, unitVector s j * singletonSourceCoeff N κ i j) = singletonSourceCoeff N κ i s := by
         rw [Finset.sum_eq_single s]
         · simp [unitVector]
         · intro j _ hj
@@ -666,15 +590,15 @@ theorem messiAdjoint_unitVector (N : Network S) (κ : N.RateConstants) (s i : S)
         · intro hh
           simp at hh
 
-/-- **The space of linear steady-state invariants of a MESSI network**: the span of the
+/-- **The space of linear steady-state invariants of a SingletonSource network**: the span of the
 rows `(c_{i,s})_i` of the coefficient matrix.  These are the *conservation laws of the
 steady-state variety*. -/
-def messiRowSpace (N : Network S) (κ : N.RateConstants) : Submodule ℝ (S → ℝ) where
-  carrier := {w | ∃ c : S → ℝ, ∀ i, w i = N.messiAdjoint κ c i}
+def singletonSourceRowSpace (N : Network S) (κ : N.RateConstants) : Submodule ℝ (S → ℝ) where
+  carrier := {w | ∃ c : S → ℝ, ∀ i, w i = N.singletonSourceAdjoint κ c i}
   zero_mem' := by
     refine ⟨0, ?_⟩
     intro i
-    simp [messiAdjoint]
+    simp [singletonSourceAdjoint]
   add_mem' := by
     intro w1 w2 h1 h2
     obtain ⟨c1, hc1⟩ := h1
@@ -683,7 +607,7 @@ def messiRowSpace (N : Network S) (κ : N.RateConstants) : Submodule ℝ (S → 
     intro i
     simp only [Pi.add_apply]
     rw [hc1 i, hc2 i]
-    simp only [messiAdjoint, Pi.add_apply, add_mul]
+    simp only [singletonSourceAdjoint, Pi.add_apply, add_mul]
     rw [Finset.sum_add_distrib]
   smul_mem' := by
     intro a w hw
@@ -692,13 +616,13 @@ def messiRowSpace (N : Network S) (κ : N.RateConstants) : Submodule ℝ (S → 
     intro i
     simp only [Pi.smul_apply, smul_eq_mul]
     rw [hc i]
-    simp only [messiAdjoint, Pi.smul_apply, smul_eq_mul]
+    simp only [singletonSourceAdjoint, Pi.smul_apply, smul_eq_mul]
     rw [Finset.mul_sum]
     exact Finset.sum_congr rfl fun j _ => by ring
 
 /-- **The steady-state variety is the annihilator of the row space.** -/
-theorem messi_variety_eq_orthSum_rowSpace (N : Network S) (κ : N.RateConstants) :
-    N.messiVariety κ = orthSum (N.messiRowSpace κ) := by
+theorem singletonSource_variety_eq_orthSum_rowSpace (N : Network S) (κ : N.RateConstants) :
+    N.singletonSourceVariety κ = orthSum (N.singletonSourceRowSpace κ) := by
   ext x
   constructor
   · intro hx
@@ -706,15 +630,15 @@ theorem messi_variety_eq_orthSum_rowSpace (N : Network S) (κ : N.RateConstants)
     intro w hw
     obtain ⟨c, hc⟩ := hw
     have hsum : (∑ i, x i * w i) = 0 := by
-      have hconv : (∑ i, x i * w i) = ∑ i, x i * N.messiAdjoint κ c i := by
+      have hconv : (∑ i, x i * w i) = ∑ i, x i * N.singletonSourceAdjoint κ c i := by
         refine Finset.sum_congr rfl fun i _ => ?_
         rw [hc i]
       rw [hconv]
-      simp only [messiAdjoint]
-      have hconv2 : (∑ i, x i * (∑ s, c s * messiCoeff N κ i s))
-          = ∑ s, c s * (∑ i, messiCoeff N κ i s * x i) := by
-        have h3 : (∑ i, x i * (∑ s, c s * messiCoeff N κ i s))
-            = ∑ i, ∑ s, x i * (c s * messiCoeff N κ i s) := by
+      simp only [singletonSourceAdjoint]
+      have hconv2 : (∑ i, x i * (∑ s, c s * singletonSourceCoeff N κ i s))
+          = ∑ s, c s * (∑ i, singletonSourceCoeff N κ i s * x i) := by
+        have h3 : (∑ i, x i * (∑ s, c s * singletonSourceCoeff N κ i s))
+            = ∑ i, ∑ s, x i * (c s * singletonSourceCoeff N κ i s) := by
           refine Finset.sum_congr rfl fun i _ => ?_
           rw [Finset.mul_sum]
         rw [h3, Finset.sum_comm]
@@ -726,65 +650,65 @@ theorem messi_variety_eq_orthSum_rowSpace (N : Network S) (κ : N.RateConstants)
       rw [hx s, mul_zero]
     exact hsum
   · intro hx s
-    have hmem : (fun i => messiCoeff N κ i s) ∈ N.messiRowSpace κ := by
+    have hmem : (fun i => singletonSourceCoeff N κ i s) ∈ N.singletonSourceRowSpace κ := by
       refine ⟨unitVector s, ?_⟩
       intro i
-      exact (messiAdjoint_unitVector N κ s i).symm
-    have h1 := hx (fun i => messiCoeff N κ i s) hmem
-    have hconv : (∑ i, x i * (fun i => messiCoeff N κ i s) i)
-        = (∑ i, messiCoeff N κ i s * x i) := by
+      exact (singletonSourceAdjoint_unitVector N κ s i).symm
+    have h1 := hx (fun i => singletonSourceCoeff N κ i s) hmem
+    have hconv : (∑ i, x i * (fun i => singletonSourceCoeff N κ i s) i)
+        = (∑ i, singletonSourceCoeff N κ i s * x i) := by
       refine Finset.sum_congr rfl fun i _ => ?_
       simp only
       ring
     rw [hconv] at h1
     exact h1
 
-/-- **The space of linear steady-state invariants of a MESSI network is the row space of
+/-- **The space of linear steady-state invariants of a SingletonSource network is the row space of
 the coefficient matrix.** -/
 theorem steadyStateInvariantSpace_eq_rowSpace (N : Network S) (κ : N.RateConstants) :
-    N.steadyStateInvariantSpace κ = N.messiRowSpace κ := by
-  rw [steadyStateInvariantSpace, messi_variety_eq_orthSum_rowSpace, orthSum_orthSum]
+    N.steadyStateInvariantSpace κ = N.singletonSourceRowSpace κ := by
+  rw [steadyStateInvariantSpace, singletonSource_variety_eq_orthSum_rowSpace, orthSum_orthSum]
 
-/-- **The linear steady-state invariants of a MESSI network are the rows of the
+/-- **The linear steady-state invariants of a SingletonSource network are the rows of the
 coefficient matrix.**  A weight vector `w` is a steady-state invariant if and only if it
 is an `ℝ`-linear combination of the rows `(c_{i,s})_i` of the coefficient matrix; these
 are precisely the *conservation laws of the steady-state variety*. -/
-theorem messi_linearInvariant_iff_rowSpace (N : Network S) (κ : N.RateConstants) (hM : MESSI N)
+theorem singletonSource_linearInvariant_iff_rowSpace (N : Network S) (κ : N.RateConstants) (hM : SingletonSource N)
     (w : S → ℝ) :
     IsSteadyStateInvariant N κ w ↔
-      ∃ c : S → ℝ, ∀ i, w i = ∑ s, c s * messiCoeff N κ i s := by
-  rw [messi_linearInvariant_mem_iff N κ hM, steadyStateInvariantSpace_eq_rowSpace]
+      ∃ c : S → ℝ, ∀ i, w i = ∑ s, c s * singletonSourceCoeff N κ i s := by
+  rw [singletonSource_linearInvariant_mem_iff N κ hM, steadyStateInvariantSpace_eq_rowSpace]
   constructor
   · intro h
     obtain ⟨c, hc⟩ := h
     refine ⟨c, fun i => ?_⟩
     rw [hc i]
-    exact (messiAdjoint_eq N κ c i).symm
+    exact (singletonSourceAdjoint_eq N κ c i).symm
   · rintro ⟨c, hc⟩
     refine ⟨c, ?_⟩
     intro i
     rw [hc i]
-    exact messiAdjoint_eq N κ c i
+    exact singletonSourceAdjoint_eq N κ c i
 
-/-- **Correction of a common slip.**  For a MESSI network the conservation laws of the
+/-- **Correction of a common slip.**  For a SingletonSource network the conservation laws of the
 *network* are the left null space of the coefficient matrix, whereas the steady-state
 invariants are the right null space's orthogonal complement; the two spaces need not
 coincide, and a conservation law need not be a steady-state invariant (see
-`CRNT.Examples.MESSI.twoState_conservationLaw_not_invariant`).
+`CRNT.Examples.SingletonSource.twoState_conservationLaw_not_invariant`).
 
 What *is* true is the transposed condition
-`CRNT.Network.messi_conservationLaw_weightedCoeff`, and the statement proved here: a
+`CRNT.Network.singletonSource_conservationLaw_weightedCoeff`, and the statement proved here: a
 conservation law of the network that annihilates the steady-state variety is a
 steady-state invariant. -/
-theorem messi_conservationLaw_mem_invariant (N : Network S) (κ : N.RateConstants)
-    (hM : MESSI N) {w : S → ℝ} (hw : w ∈ N.conservationLawSpace)
+theorem singletonSource_conservationLaw_mem_invariant (N : Network S) (κ : N.RateConstants)
+    (hM : SingletonSource N) {w : S → ℝ} (hw : w ∈ N.conservationLawSpace)
     (hann : ∀ x : Concentration S, N.IsMassActionSteadyState κ x → (∑ i, w i * x i) = 0) :
     IsSteadyStateInvariant N κ w := by
-  have htrans : ∀ i, (∑ s, w s * messiCoeff N κ i s) = 0 :=
-    messi_conservationLaw_weightedCoeff N κ hM hw
-  rw [messi_linearInvariant_iff N κ hM]
+  have htrans : ∀ i, (∑ s, w s * singletonSourceCoeff N κ i s) = 0 :=
+    singletonSource_conservationLaw_weightedCoeff N κ hM hw
+  rw [singletonSource_linearInvariant_iff N κ hM]
   intro x hx
-  exact hann x ((messi_steadyState_iff_linear N κ hM x).mpr hx)
+  exact hann x ((singletonSource_steadyState_iff_linear N κ hM x).mpr hx)
 
 
 end Network
@@ -793,17 +717,17 @@ end Network
 
 The two networks below witness the phenomena described above:
 
-* the reversible pair `X ⇌ Y` is a MESSI network whose steady-state variety is the line
+* the reversible pair `X ⇌ Y` is a SingletonSource network whose steady-state variety is the line
   `κ₁ x_X = κ₂ x_Y`; each stoichiometric class contains **exactly one** positive steady
   state, and the *steady-state invariants* of the variety (`(κ₁, −κ₂)`) differ from the
   *conservation laws* of the network (`(1,1)`);
-* the chain `X → Y → Z` is a MESSI network whose steady-state variety has **two**
+* the chain `X → Y → Z` is a SingletonSource network whose steady-state variety has **two**
   linear invariants, while the network has only **one** conservation law: the steady-state
   variety has strictly more invariants than the network has conservation laws.
 
 -/
 
-namespace Examples.MESSI
+namespace Examples.SingletonSource
 
 open CRNT
 open scoped BigOperators
@@ -865,9 +789,9 @@ theorem source_fwd : (N.reaction fwd).source = cX := rfl
 /-- The source of the backward channel is `Y`. -/
 theorem source_bwd : (N.reaction bwd).source = cY := rfl
 
-/-- **The reversible pair `X ⇌ Y` is a MESSI network**: both source complexes are
+/-- **The reversible pair `X ⇌ Y` is a SingletonSource network**: both source complexes are
 singletons. -/
-theorem N_messi : N.MESSI := by
+theorem N_singletonSource : N.SingletonSource := by
   intro r
   fin_cases r
   · refine ⟨X, ?_⟩
@@ -896,9 +820,9 @@ theorem reactionVector_bwd_Y : N.reactionVector bwd Y = -1 := by
   simp [N, rxn, cX, cY, Network.reactionVector]
 
 /-- The coefficient `c_{X,X}` of the linear steady-state system. -/
-theorem messiCoeff_XX (κ : Network.RateConstants N) :
-    Network.messiCoeff N κ X X = -(κ.k fwd) := by
-  unfold Network.messiCoeff Network.messiSourceIndicator
+theorem singletonSourceCoeff_XX (κ : Network.RateConstants N) :
+    Network.singletonSourceCoeff N κ X X = -(κ.k fwd) := by
+  unfold Network.singletonSourceCoeff Network.singletonSourceIndicator
   change (∑ r : Fin 2, (if (N.reaction r).source = Network.singletonComplex X then 1 else 0)
     * (κ.k r * N.reactionVector r X)) = _
   have hne : Network.singletonComplex Y ≠ Network.singletonComplex X :=
@@ -907,9 +831,9 @@ theorem messiCoeff_XX (κ : Network.RateConstants N) :
     Fin.sum_univ_two]
 
 /-- The coefficient `c_{X,Y}` of the linear steady-state system. -/
-theorem messiCoeff_XY (κ : Network.RateConstants N) :
-    Network.messiCoeff N κ X Y = κ.k fwd := by
-  unfold Network.messiCoeff Network.messiSourceIndicator
+theorem singletonSourceCoeff_XY (κ : Network.RateConstants N) :
+    Network.singletonSourceCoeff N κ X Y = κ.k fwd := by
+  unfold Network.singletonSourceCoeff Network.singletonSourceIndicator
   change (∑ r : Fin 2, (if (N.reaction r).source = Network.singletonComplex X then 1 else 0)
     * (κ.k r * N.reactionVector r Y)) = _
   have hne : Network.singletonComplex Y ≠ Network.singletonComplex X :=
@@ -918,9 +842,9 @@ theorem messiCoeff_XY (κ : Network.RateConstants N) :
     Fin.sum_univ_two]
 
 /-- The coefficient `c_{Y,X}` of the linear steady-state system. -/
-theorem messiCoeff_YX (κ : Network.RateConstants N) :
-    Network.messiCoeff N κ Y X = κ.k bwd := by
-  unfold Network.messiCoeff Network.messiSourceIndicator
+theorem singletonSourceCoeff_YX (κ : Network.RateConstants N) :
+    Network.singletonSourceCoeff N κ Y X = κ.k bwd := by
+  unfold Network.singletonSourceCoeff Network.singletonSourceIndicator
   change (∑ r : Fin 2, (if (N.reaction r).source = Network.singletonComplex Y then 1 else 0)
     * (κ.k r * N.reactionVector r X)) = _
   have hne : Network.singletonComplex X ≠ Network.singletonComplex Y :=
@@ -929,9 +853,9 @@ theorem messiCoeff_YX (κ : Network.RateConstants N) :
     Fin.sum_univ_two]
 
 /-- The coefficient `c_{Y,Y}` of the linear steady-state system. -/
-theorem messiCoeff_YY (κ : Network.RateConstants N) :
-    Network.messiCoeff N κ Y Y = -(κ.k bwd) := by
-  unfold Network.messiCoeff Network.messiSourceIndicator
+theorem singletonSourceCoeff_YY (κ : Network.RateConstants N) :
+    Network.singletonSourceCoeff N κ Y Y = -(κ.k bwd) := by
+  unfold Network.singletonSourceCoeff Network.singletonSourceIndicator
   change (∑ r : Fin 2, (if (N.reaction r).source = Network.singletonComplex Y then 1 else 0)
     * (κ.k r * N.reactionVector r Y)) = _
   have hne : Network.singletonComplex X ≠ Network.singletonComplex Y :=
@@ -940,24 +864,24 @@ theorem messiCoeff_YY (κ : Network.RateConstants N) :
     Fin.sum_univ_two]
 
 /-- **The steady states of `X ⇌ Y` are the points with `κ₁ x_X = κ₂ x_Y`.**  This is the
-specialisation of the MESSI theorem: the steady-state variety of a MESSI network is a
+specialisation of the SingletonSource theorem: the steady-state variety of a SingletonSource network is a
 linear subspace, here the line through the origin of slope `κ₁/κ₂`. -/
 theorem steadyState_iff (κ : Network.RateConstants N) (x : Concentration Species) :
     N.IsMassActionSteadyState κ x ↔ κ.k fwd * x X = κ.k bwd * x Y := by
-  rw [Network.messi_steadyState_iff_linear N κ N_messi x]
+  rw [Network.singletonSource_steadyState_iff_linear N κ N_singletonSource x]
   constructor
   · intro h
     have hX := h X
     have hY := h Y
-    simp only [Fin.sum_univ_two, messiCoeff_XX, messiCoeff_YX] at hX
-    simp only [Fin.sum_univ_two, messiCoeff_XY, messiCoeff_YY] at hY
+    simp only [Fin.sum_univ_two, singletonSourceCoeff_XX, singletonSourceCoeff_YX] at hX
+    simp only [Fin.sum_univ_two, singletonSourceCoeff_XY, singletonSourceCoeff_YY] at hY
     linarith
   · intro h
-    have hX : (∑ i, N.messiCoeff κ i X * x i) = 0 := by
-      simp only [Fin.sum_univ_two, messiCoeff_XX, messiCoeff_YX]
+    have hX : (∑ i, N.singletonSourceCoeff κ i X * x i) = 0 := by
+      simp only [Fin.sum_univ_two, singletonSourceCoeff_XX, singletonSourceCoeff_YX]
       linarith
-    have hY : (∑ i, N.messiCoeff κ i Y * x i) = 0 := by
-      simp only [Fin.sum_univ_two, messiCoeff_XY, messiCoeff_YY]
+    have hY : (∑ i, N.singletonSourceCoeff κ i Y * x i) = 0 := by
+      simp only [Fin.sum_univ_two, singletonSourceCoeff_XY, singletonSourceCoeff_YY]
       linarith
     intro s
     fin_cases s
@@ -1086,10 +1010,10 @@ steady-state variety `κ₁ x_X = κ₂ x_Y`, and hence is one of the *conservat
 steady-state variety*. -/
 theorem invariantWeight_isSteadyStateInvariant (κ : Network.RateConstants N) :
     Network.IsSteadyStateInvariant N κ (invariantWeight κ) := by
-  rw [Network.messi_linearInvariant_iff N κ N_messi]
+  rw [Network.singletonSource_linearInvariant_iff N κ N_singletonSource]
   intro x hx
   have hxy : κ.k fwd * x X = κ.k bwd * x Y :=
-    (steadyState_iff κ x).mp ((Network.messi_steadyState_iff_linear N κ N_messi x).mpr hx)
+    (steadyState_iff κ x).mp ((Network.singletonSource_steadyState_iff_linear N κ N_singletonSource x).mpr hx)
   simp [invariantWeight]
   linarith
 
@@ -1125,21 +1049,21 @@ theorem totalWeight_not_steadyStateInvariant (κ : Network.RateConstants N)
     (h₁ : 0 < κ.k fwd) (h₂ : 0 < κ.k bwd) :
     ¬ Network.IsSteadyStateInvariant N κ (fun s => if s = X then (1 : ℝ) else 1) := by
   intro hinv
-  have h := (Network.messi_linearInvariant_iff N κ N_messi _).mp hinv
+  have h := (Network.singletonSource_linearInvariant_iff N κ N_singletonSource _).mp hinv
   have hx : N.IsMassActionSteadyState κ (fun s => if s = X then κ.k bwd else κ.k fwd) := by
     refine (steadyState_iff κ _).2 ?_
     simp
     ring
-  have hlin : ∀ s, ∑ i, Network.messiCoeff N κ i s
+  have hlin : ∀ s, ∑ i, Network.singletonSourceCoeff N κ i s
       * (fun s => if s = X then κ.k bwd else κ.k fwd) i = 0 :=
-    (Network.messi_steadyState_iff_linear N κ N_messi _).mp hx
+    (Network.singletonSource_steadyState_iff_linear N κ N_singletonSource _).mp hx
   have hval := h _ hlin
   simp at hval
   linarith
 
 /-! ### The chain `X → Y → Z`: more invariants than conservation laws
 
-The chain `X → Y → Z` is a MESSI network whose steady-state variety is the line
+The chain `X → Y → Z` is a SingletonSource network whose steady-state variety is the line
 `{x_X = x_Y = 0}`.  That variety has **two** linear invariants (`w` with `w_Z = 0`),
 whereas the network has only **one** conservation law (`w_X = w_Y = w_Z`): here the
 steady-state variety really does have *strictly more* invariants than the network has
@@ -1199,8 +1123,8 @@ theorem source_r₁ : (N.reaction r₁).source = cX := rfl
 /-- The source of the second channel is `Y`. -/
 theorem source_r₂ : (N.reaction r₂).source = cY := rfl
 
-/-- **The chain `X → Y → Z` is a MESSI network.** -/
-theorem N_messi : N.MESSI := by
+/-- **The chain `X → Y → Z` is a SingletonSource network.** -/
+theorem N_singletonSource : N.SingletonSource := by
   intro r
   fin_cases r
   · refine ⟨X, ?_⟩
@@ -1309,81 +1233,81 @@ theorem cY_ne_cZ : cY ≠ cZ := by
   exact absurd (Network.singletonComplex_inj h) (by decide)
 
 /-- The coefficient `c_X,X` of the linear steady-state system of the chain. -/
-theorem messiCoeff_XX (κ : Network.RateConstants N) :
-    Network.messiCoeff N κ X X = -(κ.k r₁) := by
-  unfold Network.messiCoeff Network.messiSourceIndicator
+theorem singletonSourceCoeff_XX (κ : Network.RateConstants N) :
+    Network.singletonSourceCoeff N κ X X = -(κ.k r₁) := by
+  unfold Network.singletonSourceCoeff Network.singletonSourceIndicator
   change (∑ r : Fin 2, (if (N.reaction r).source = cX then 1 else 0)
     * (κ.k r * N.reactionVector r X)) = _
   simp [cX_X, cY_X, cZ_X, cY_ne_cX, N, rxn, Network.reactionVector, Reaction.vector,
     Fin.sum_univ_two]
 
 /-- The coefficient `c_X,Y` of the linear steady-state system of the chain. -/
-theorem messiCoeff_XY (κ : Network.RateConstants N) :
-    Network.messiCoeff N κ X Y = κ.k r₁ := by
-  unfold Network.messiCoeff Network.messiSourceIndicator
+theorem singletonSourceCoeff_XY (κ : Network.RateConstants N) :
+    Network.singletonSourceCoeff N κ X Y = κ.k r₁ := by
+  unfold Network.singletonSourceCoeff Network.singletonSourceIndicator
   change (∑ r : Fin 2, (if (N.reaction r).source = cX then 1 else 0)
     * (κ.k r * N.reactionVector r Y)) = _
   simp [cX_Y, cY_Y, cZ_Y, cY_ne_cX, N, rxn, Network.reactionVector, Reaction.vector,
     Fin.sum_univ_two]
 
 /-- The coefficient `c_X,Z` of the linear steady-state system of the chain. -/
-theorem messiCoeff_XZ (κ : Network.RateConstants N) :
-    Network.messiCoeff N κ X Z = 0 := by
-  unfold Network.messiCoeff Network.messiSourceIndicator
+theorem singletonSourceCoeff_XZ (κ : Network.RateConstants N) :
+    Network.singletonSourceCoeff N κ X Z = 0 := by
+  unfold Network.singletonSourceCoeff Network.singletonSourceIndicator
   change (∑ r : Fin 2, (if (N.reaction r).source = cX then 1 else 0)
     * (κ.k r * N.reactionVector r Z)) = _
   simp [cX_Z, cY_Z, cZ_Z, cY_ne_cX, N, rxn, Network.reactionVector, Reaction.vector,
     Fin.sum_univ_two]
 
 /-- The coefficient `c_Y,X` of the linear steady-state system of the chain. -/
-theorem messiCoeff_YX (κ : Network.RateConstants N) :
-    Network.messiCoeff N κ Y X = 0 := by
-  unfold Network.messiCoeff Network.messiSourceIndicator
+theorem singletonSourceCoeff_YX (κ : Network.RateConstants N) :
+    Network.singletonSourceCoeff N κ Y X = 0 := by
+  unfold Network.singletonSourceCoeff Network.singletonSourceIndicator
   change (∑ r : Fin 2, (if (N.reaction r).source = cY then 1 else 0)
     * (κ.k r * N.reactionVector r X)) = _
   simp [cX_X, cY_X, cZ_X, cX_ne_cY, N, rxn, Network.reactionVector, Reaction.vector,
     Fin.sum_univ_two]
 
 /-- The coefficient `c_Y,Y` of the linear steady-state system of the chain. -/
-theorem messiCoeff_YY (κ : Network.RateConstants N) :
-    Network.messiCoeff N κ Y Y = -(κ.k r₂) := by
-  unfold Network.messiCoeff Network.messiSourceIndicator
+theorem singletonSourceCoeff_YY (κ : Network.RateConstants N) :
+    Network.singletonSourceCoeff N κ Y Y = -(κ.k r₂) := by
+  unfold Network.singletonSourceCoeff Network.singletonSourceIndicator
   change (∑ r : Fin 2, (if (N.reaction r).source = cY then 1 else 0)
     * (κ.k r * N.reactionVector r Y)) = _
   simp [cX_Y, cY_Y, cZ_Y, cX_ne_cY, N, rxn, Network.reactionVector, Reaction.vector,
     Fin.sum_univ_two]
 
 /-- The coefficient `c_Y,Z` of the linear steady-state system of the chain. -/
-theorem messiCoeff_YZ (κ : Network.RateConstants N) :
-    Network.messiCoeff N κ Y Z = κ.k r₂ := by
-  unfold Network.messiCoeff Network.messiSourceIndicator
+theorem singletonSourceCoeff_YZ (κ : Network.RateConstants N) :
+    Network.singletonSourceCoeff N κ Y Z = κ.k r₂ := by
+  unfold Network.singletonSourceCoeff Network.singletonSourceIndicator
   change (∑ r : Fin 2, (if (N.reaction r).source = cY then 1 else 0)
     * (κ.k r * N.reactionVector r Z)) = _
   simp [cX_Z, cY_Z, cZ_Z, cX_ne_cY, N, rxn, Network.reactionVector, Reaction.vector,
     Fin.sum_univ_two]
 
 /-- The coefficient `c_Z,X` of the linear steady-state system of the chain. -/
-theorem messiCoeff_ZX (κ : Network.RateConstants N) :
-    Network.messiCoeff N κ Z X = 0 := by
-  unfold Network.messiCoeff Network.messiSourceIndicator
+theorem singletonSourceCoeff_ZX (κ : Network.RateConstants N) :
+    Network.singletonSourceCoeff N κ Z X = 0 := by
+  unfold Network.singletonSourceCoeff Network.singletonSourceIndicator
   change (∑ r : Fin 2, (if (N.reaction r).source = cZ then 1 else 0)
     * (κ.k r * N.reactionVector r X)) = _
   simp [cX_X, cY_X, cZ_X, cX_ne_cZ, cY_ne_cZ, N, rxn, Network.reactionVector, Reaction.vector,
     Fin.sum_univ_two]
 
 /-- The coefficient `c_Z,Y` of the linear steady-state system of the chain. -/
-theorem messiCoeff_ZY (κ : Network.RateConstants N) :
-    Network.messiCoeff N κ Z Y = 0 := by
-  unfold Network.messiCoeff Network.messiSourceIndicator
+theorem singletonSourceCoeff_ZY (κ : Network.RateConstants N) :
+    Network.singletonSourceCoeff N κ Z Y = 0 := by
+  unfold Network.singletonSourceCoeff Network.singletonSourceIndicator
   change (∑ r : Fin 2, (if (N.reaction r).source = cZ then 1 else 0)
     * (κ.k r * N.reactionVector r Y)) = _
   simp [cX_Y, cY_Y, cZ_Y, cX_ne_cZ, cY_ne_cZ, N, rxn, Network.reactionVector, Reaction.vector,
     Fin.sum_univ_two]
 
 /-- The coefficient `c_Z,Z` of the linear steady-state system of the chain. -/
-theorem messiCoeff_ZZ (κ : Network.RateConstants N) :
-    Network.messiCoeff N κ Z Z = 0 := by
-  unfold Network.messiCoeff Network.messiSourceIndicator
+theorem singletonSourceCoeff_ZZ (κ : Network.RateConstants N) :
+    Network.singletonSourceCoeff N κ Z Z = 0 := by
+  unfold Network.singletonSourceCoeff Network.singletonSourceIndicator
   change (∑ r : Fin 2, (if (N.reaction r).source = cZ then 1 else 0)
     * (κ.k r * N.reactionVector r Z)) = _
   simp [cX_Z, cY_Z, cZ_Z, cX_ne_cZ, cY_ne_cZ, N, rxn, Network.reactionVector, Reaction.vector,
@@ -1439,13 +1363,13 @@ The variety is a line (the `Z` coordinate is free), and the chain has no positiv
 state at all, as every species is eventually drained. -/
 theorem steadyState_iff (κ : Network.RateConstants N) (x : Concentration Species) :
     N.IsMassActionSteadyState κ x ↔ x X = 0 ∧ x Y = 0 := by
-  rw [Network.messi_steadyState_iff_linear N κ N_messi x]
+  rw [Network.singletonSource_steadyState_iff_linear N κ N_singletonSource x]
   constructor
   · intro h
     have hX := h X
     have hY := h Y
-    simp only [Fin.sum_univ_three, messiCoeff_XX, messiCoeff_YX, messiCoeff_ZX] at hX
-    simp only [Fin.sum_univ_three, messiCoeff_XY, messiCoeff_YY, messiCoeff_ZY] at hY
+    simp only [Fin.sum_univ_three, singletonSourceCoeff_XX, singletonSourceCoeff_YX, singletonSourceCoeff_ZX] at hX
+    simp only [Fin.sum_univ_three, singletonSourceCoeff_XY, singletonSourceCoeff_YY, singletonSourceCoeff_ZY] at hY
     have hpos₁ : 0 < κ.k r₁ := κ.positive r₁
     have hpos₂ : 0 < κ.k r₂ := κ.positive r₂
     have hX0 : x 0 = 0 := by
@@ -1466,14 +1390,14 @@ theorem steadyState_iff (κ : Network.RateConstants N) (x : Concentration Specie
     have hxY0 : x 1 = 0 := h.2
     intro s
     fin_cases s
-    · show (∑ i, Network.messiCoeff N κ i X * x i) = 0
-      simp only [Fin.sum_univ_three, messiCoeff_XX, messiCoeff_YX, messiCoeff_ZX, zero_mul]
+    · show (∑ i, Network.singletonSourceCoeff N κ i X * x i) = 0
+      simp only [Fin.sum_univ_three, singletonSourceCoeff_XX, singletonSourceCoeff_YX, singletonSourceCoeff_ZX, zero_mul]
       linear_combination (-κ.k r₁) * hxX0
-    · show (∑ i, Network.messiCoeff N κ i Y * x i) = 0
-      simp only [Fin.sum_univ_three, messiCoeff_XY, messiCoeff_YY, messiCoeff_ZY, zero_mul]
+    · show (∑ i, Network.singletonSourceCoeff N κ i Y * x i) = 0
+      simp only [Fin.sum_univ_three, singletonSourceCoeff_XY, singletonSourceCoeff_YY, singletonSourceCoeff_ZY, zero_mul]
       linear_combination (κ.k r₁) * hxX0 + (-κ.k r₂) * hxY0
-    · show (∑ i, Network.messiCoeff N κ i Z * x i) = 0
-      simp only [Fin.sum_univ_three, messiCoeff_XZ, messiCoeff_YZ, messiCoeff_ZZ, zero_mul]
+    · show (∑ i, Network.singletonSourceCoeff N κ i Z * x i) = 0
+      simp only [Fin.sum_univ_three, singletonSourceCoeff_XZ, singletonSourceCoeff_YZ, singletonSourceCoeff_ZZ, zero_mul]
       linear_combination (κ.k r₂) * hxY0
 
 /-- **The conservation laws of the chain `X → Y → Z` are the vectors with
@@ -1513,14 +1437,14 @@ theorem conservationLaw_iff (w : Concentration Species) :
 conservation law of the network. -/
 theorem steadyStateInvariant_iff (κ : Network.RateConstants N) (w : Concentration Species) :
     Network.IsSteadyStateInvariant N κ w ↔ w Z = 0 := by
-  rw [Network.messi_linearInvariant_iff N κ N_messi]
+  rw [Network.singletonSource_linearInvariant_iff N κ N_singletonSource]
   constructor
   · intro h
     have hx : N.IsMassActionSteadyState κ (Network.unitVector Z) := by
       refine (steadyState_iff κ _).2 ⟨?_, ?_⟩
       · simp [unitVector_Z_X]
       · simp [unitVector_Z_Y]
-    have hval := h _ ((Network.messi_steadyState_iff_linear N κ N_messi _).mp hx)
+    have hval := h _ ((Network.singletonSource_steadyState_iff_linear N κ N_singletonSource _).mp hx)
     simp only [Fin.sum_univ_three] at hval
     simp only [unitVector_Z_X, unitVector_Z_Y, unitVector_Z_Z] at hval
     have h2 : w 2 = 0 := by linarith
@@ -1528,7 +1452,7 @@ theorem steadyStateInvariant_iff (κ : Network.RateConstants N) (w : Concentrati
     exact h2'
   · intro h x hx
     have hx' : x 0 = 0 ∧ x 1 = 0 := (steadyState_iff κ x).mp
-      ((Network.messi_steadyState_iff_linear N κ N_messi x).mpr hx)
+      ((Network.singletonSource_steadyState_iff_linear N κ N_singletonSource x).mpr hx)
     simp only [Fin.sum_univ_three]
     have hz : w 2 = 0 := h
     simp [hx'.1, hx'.2, hz]
@@ -1559,7 +1483,7 @@ theorem more_invariants_than_conservationLaws (κ : Network.RateConstants N) :
 
 end Chain
 
-end Examples.MESSI
+end Examples.SingletonSource
 
 
 

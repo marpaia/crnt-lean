@@ -1,42 +1,12 @@
 import CRNT.Multistationarity.DegreeProperConstant
 
 /-!
-# Homotopy invariance of the regular-value degree
+# Conditional homotopy invariance of a regular-zero signed count
 
-A `C¹` homotopy `H : ℝ × E → E` deforms its initial slice `H(0, ·)` into its final slice
-`H(1, ·)` through the family of slice maps `H(s, ·)`. When a fixed value `y` is a regular value
-of every slice along the deformation — finite preimage, all preimage points nondegenerate — the
-regular-value degree at `y` is the same for every slice:
-
-`regularDegree (H(0, ·)) y = regularDegree (H(1, ·)) y`.
-
-This is the defining property of the topological degree: it is invariant under deformation of the
-map. It is the gateway from the finite, regular-value primitive to the full Brouwer degree and to
-the steady-state existence arguments that run a one-parameter family of maps and read off a
-preserved nonzero degree.
-
-The proof is parameter local-constancy plus connectedness. The map `s ↦ regularDegree (H(s, ·)) y`
-is locally constant in the parameter `s`: at a regular slice `s₀` the preimage points of `H(s₀, ·)`
-are finitely many nondegenerate solutions, each confined to its own inverse-function
-neighbourhood; as `s` varies the slice preimage stays a disjoint cover by those same
-neighbourhoods, with each local degree pinned to the orientation sign of its slice point, so the
-signed count does not change. A locally constant function on the connected interval `[0, 1]` takes
-the same value at `0` and at `1` (`IsLocallyConstant.apply_eq_of_isPreconnected`).
-
-The parameter degree-stability engine `regularDegree_param_eq_of_disjointCover` is the parameter
-analogue of `eventually_regularDegree_eq`: it consumes, at the moving parameter `s`, a disjoint
-cover of the slice preimage whose per-piece local degrees are the orientation signs of the slice
-`s₀` points, and returns the constant signed count. The eventual facts it consumes — the disjoint
-cover and the per-piece sign — are the honest analytic input, derived for each slice from the
-inverse function theorem exactly as on the value side, and carried here as data on the parameter.
-
-* `regularDegree_param_eq_of_disjointCover` — parameter degree-stability from a disjoint cover with
-  per-piece orientation signs.
-* `regularDegree_homotopy_invariant_of_eventually` — invariance from parameter local-constancy
-  packaged as an eventual disjoint-cover-with-signs hypothesis on a neighbourhood of each slice.
-* `regularDegree_homotopy_invariant` — the headline: equal regular-value degree at the endpoint
-  slices `H(0, ·)` and `H(1, ·)`.
-
+The parameter-local-constancy argument consumes disjoint-cover/local-sign data
+(or the corresponding packaged hypotheses) at every slice. The degree here is
+a finite signed count at regular zeros. This is not general degree invariance
+through singular slices; total degree under dissipativity remains incomplete.
 -/
 
 namespace CRNT

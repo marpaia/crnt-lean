@@ -1,104 +1,13 @@
 import CRNT.Equilibria.JacobianSpectrumEigen
 
 /-!
-# The Perron--Frobenius theorem for primitive nonnegative matrices
+# Primitive-matrix nonnilpotence and conditional Perron bounds
 
-This module is the spectral counterpart of `CRNT.Equilibria.NilpotentJacobian`: it records the
-Perron--Frobenius theory of **nonnegative** matrices in the form that the Horn--Jackson
-nilpotent-Jacobian criterion needs, and it states precisely which parts of the classical
-theorem are within reach of Mathlib.
-
-## The classical theorem
-
-For a nonnegative matrix `A` (entrywise `≥ 0`) the Perron--Frobenius theorem
-(Gantmacher, *The Theory of Matrices*, Chapter VIII; Horn--Jackson, *Generalized Perron--Frobenius
-Theorem*, 1974) says:
-
-* **PF1 (the Perron root).**  If `A` is *primitive* — entrywise nonnegative with a strictly
-  positive power `A ^ k` — then `A` has a **positive real** eigenvalue `ρ > 0`, the *Perron root*;
-  `ρ` is the spectral radius of `A` and it is a *simple* eigenvalue.
-* **PF2 (the Perron vector).**  `ρ` has a **strictly positive** eigenvector.
-* **PF3 (dominance).**  Every other eigenvalue `μ` of `A` satisfies `|μ| < ρ`.
-
-In the applied form used by Horn--Jackson (and by Craciun, *Chemical reaction network theory*,
-Chapter 4) the only input is the weaker statement "a nonnegative matrix with a strictly positive
-power is **not nilpotent**": a nilpotent matrix has all its eigenvalues equal to zero, so a
-nonnegative matrix with a strictly positive power — whose powers cannot vanish — has a nonzero
-eigenvalue.  This is the Perron--Frobenius step of the *nilpotent-Jacobian criterion*: at a
-complex-balanced equilibrium of a non-trivial network the mass-action Jacobian is not nilpotent.
-
-## What Mathlib provides, and what it does not
-
-Mathlib provides
-
-* `Matrix.IsPrimitive` — entrywise nonnegative with a strictly positive power — and
-  `Matrix.IsIrreducible` — entrywise nonnegative with strongly connected support digraph;
-* `Matrix.charpoly` and the bridge `Module.End.hasEigenvalue_iff_isRoot_charpoly`, so that the
-  eigenvalues of a matrix are named by `Module.End.HasEigenvalue` and are the roots of its
-  characteristic polynomial;
-* `Analysis.Matrix.Spectrum`, the spectral theory of **symmetric** (Hermitian) matrices;
-* the Banach-algebra `spectralRadius` of `Analysis.Normed.Algebra.Spectrum`, which does apply to a
-  matrix read as an element of the Banach algebra `Matrix n n ℂ`.  It is, however, not connected
-  in Mathlib to the *matrix* eigenvalue theory (`Module.End.HasEigenvalue`), and the
-  Collatz--Wielandt theory of nonnegative matrices is absent.
-
-Mathlib does **not** provide a Perron--Frobenius theorem: there is no Perron root, no
-characterisation of the spectral radius of a nonnegative matrix, no Collatz--Wielandt theorem,
-and no theorem asserting that a primitive matrix has a positive real eigenvalue.  The classical
-proofs of PF1 use either Brouwer's fixed point theorem (on the simplex), the
-Collatz--Wielandt minimax characterisation of the spectral radius, or the Gelfand formula; none
-of these is available in Mathlib in a usable form.
-
-## What this module adds
-
-The campaign's `CRNT.Equilibria.JacobianSpectrumEigen.lean` proved the *eigenvalue formulation*
-of the criterion — a complex matrix is nilpotent if and only if all of its eigenvalues vanish —
-and the primitive and irreducible forms of the "not nilpotent" step.  This module adds
-
-* the Perron--Frobenius step for an **arbitrary** primitive matrix
-  (`CRNT.Network.not_isNilpotent_of_isPrimitive`), in the eigenvalue form
-  (`CRNT.Network.exists_eigenvalue_ne_zero_of_isPrimitive`) and in the characteristic-polynomial
-  form (`CRNT.Network.exists_root_ne_zero_charpoly_of_isPrimitive`);
-* the **Collatz--Wielandt bounds**, in the only form that Mathlib allows: for a nonnegative matrix
-  `A`, a strictly positive vector `v` and a real eigenvalue `μ` admitting a strictly positive
-  eigenvector `w`, one has `c ≤ μ ≤ d` whenever `c * v ≤ A *ᵥ v ≤ d * v`
-  (`CRNT.Network.collatz_wielandt_bounds`); for a **primitive** matrix the classical statement
-  `min_i (A *ᵥ v) i / v i ≤ μ ≤ max_i (A *ᵥ v) i / v i` follows, with a *strictly positive*
-  lower bound (`CRNT.Network.collatz_wielandt_bounds_of_isPrimitive`,
-  `CRNT.Network.ratioMin_pos_of_isPrimitive`);
-* the **positivity of a Perron-type eigenvalue**: a nonzero nonnegative matrix whose real
-  eigenvalue `μ` admits a strictly positive eigenvector has `μ > 0`
-  (`CRNT.Network.pos_of_nonneg_of_pos_eigenvector`);
-* the **classical Horn--Jackson conclusion in the eigenvalue form** for the mass-action Jacobian
-  (`CRNT.Network.exists_eigenvalue_ne_zero_massActionJacobian_of_isPrimitive`): at a positive
-  complex-balanced equilibrium of a network with at least two complexes and a primitive weighted
-  adjacency matrix, the mass-action Jacobian has a **nonzero complex eigenvalue** (and hence is
-  not nilpotent);
-* a **counterexample** (`CRNT.Examples.PrimitiveMatrix`) showing that the naive form of PF1/PF3
-  one sometimes quotes — "a primitive nonnegative matrix has no zero eigenvalue, hence is
-  invertible" — is **false**: the `2 × 2` all-ones matrix is primitive and singular, and `0` is one
-  of its eigenvalues.  Primitivity excludes nilpotence, not singularity.
-
-## What remains out of reach
-
-* **PF1 in its classical form** (a *positive real* eigenvalue equal to the spectral radius) is
-  **not** proved here; only the weaker "a primitive matrix has a *nonzero* eigenvalue" is, together
-  with the conditional statement "a Perron-type eigenvalue, i.e. a real eigenvalue admitting a
-  strictly positive eigenvector, is positive".
-* **PF2** (the *existence* of a strictly positive eigenvector for the Perron root) is **not**
-  proved.
-* **PF3** (dominance: `|μ| < ρ` for the other eigenvalues) is **not** proved.
-* The reason is mathematical, not a matter of convenience: all classical proofs of PF1 for a
-  primitive matrix pass through a compactness/fixed-point argument (Brouwer on the simplex, or
-  the Collatz--Wielandt minimax characterisation of the spectral radius), and Mathlib has
-  neither a Perron root nor a spectral-radius object for nonnegative matrices.  What is proved
-  here is exactly the part of the classical theory that does *not* need the spectral radius: the
-  non-nilpotence step, the Collatz--Wielandt inequalities, and the positivity of a Perron-type
-  eigenvalue.
-
-Depends on: `CRNT.Equilibria.JacobianSpectrumEigen` (and hence
-`CRNT.Equilibria.JacobianSpectrum`), Mathlib `LinearAlgebra.Eigenspace.Charpoly`,
-`LinearAlgebra.Matrix.Irreducible.Defs`.
+The proved components include nonnilpotence of a primitive nonnegative matrix,
+a nonzero eigenvalue, and bounds using a supplied positive eigenpair. This file
+does not establish existence of the positive Perron root/eigenvector with full
+algebraic simplicity and spectral dominance. The column-stochastic theory in
+`CRNT.LinearAlgebra.PerronFrobenius` has its own separate scope.
 -/
 
 namespace CRNT

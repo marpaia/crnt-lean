@@ -5,126 +5,14 @@ import CRNT.Dynamics.MassActionField
 import CRNT.Equilibria.CompatibilityClassGeometry
 
 /-!
-# Degree theory and the existence of positive steady states in dimension `s ≥ 2`
+# Steady-state consequences of a finite signed degree count
 
-This module formalizes the degree-theoretic existence argument of
-Conradi–Feliu–Mincheva–Wiuf for mass-action steady states in a stoichiometric
-compatibility class of dimension `s = stoichRank N ≥ 2`.
-
-## The mathematical argument
-
-Fix a network `N`, positive rate constants `κ`, and a class representative `x₀`.
-Write `S(N)` for the stoichiometric subspace and `s = dim S(N)`.  The affine chart
-`affineChart x₀ : ℝ^s → x₀ + S(N)` identifies the compatibility class of `x₀` with
-`ℝ^s`.  In these coordinates the mass-action field becomes the **reduced field**
-
-`steadyStateMap κ x₀ y = stoichProj (massActionVectorField κ (affineChart x₀ y))`,
-
-a self-map of `ℝ^s` whose zeros are exactly the mass-action steady states of the class.
-Equivalently, on the ambient concentration space the affine map
-`classSteadyStateMap κ x₀ x = π(x + F(x))` (where `π` is the projection onto the
-class) has exactly the steady states of the class as its fixed points; the two
-formulations are related by `classSteadyStateMap_chartCoord` and
-`isMassActionSteadyState_iff_fixed_classSteadyStateMap` below.
-
-The degree of the steady-state map on the **nonnegative part** of the class is
-the relative regular-value degree
-
-`nonnegativeClassDegree κ x₀ = localDegreeOn (steadyStateMap κ x₀) 0 (nonnegativeClassRegion x₀)`
-
-of `LocalDegreeOn`, i.e. the signed count of the zeros inside the chart image of the
-nonnegative class.  The relative formulation is essential: mass-action fields generally
-have infinite zero sets away from the region of interest (for example on coordinate
-faces), so the global `regularDegree` is not available.  See the docstring of
-`CRNT.Multistationarity.LocalDegreeOn`.  Compactness of the nonnegative class is used
-only for homotopy invariance (item 3 below); the existence principle of item 2 needs no
-compactness assumption, since `localDegreeOn` is defined on any region with a finite
-zero set.
-
-The two degree-theoretic facts we use are:
-
-* **Nonzero degree forces a zero.**  If the relative degree of the steady-state map on
-  the nonnegative class is nonzero, then the map vanishes somewhere in that class
-  (`exists_zero_of_nonnegativeClassDegree_ne_zero`, from
-  `exists_mem_of_localDegreeOn_ne_zero`).  If, in addition, the field is nonzero on
-  the boundary (`classBoundary`), the zero cannot lie on the boundary and is therefore
-  strictly positive (`exists_positive_of_nonnegativeClassDegree_ne_zero`).  This is the
-  `s ≥ 2` form of the rank-one intermediate-value argument already proved in the
-  rank-one modules.
-* **Degree is invariant under homotopies avoiding zero on the boundary.**  We use the
-  unconditional relative homotopy invariance of `ParametrizedLocalDegree`
-  (`localDegreeOn_homotopy_invariant`), which itself supplies the analytic input that
-  `DegreeHomotopyInvariant.regularDegree_homotopy_invariant` carries as the hypothesis
-  `hloc` (an eventual disjoint-cover-with-orientation-signs statement for every slice).
-  The per-point local constancy behind `hloc` is
-  `DegreeLocallyConstant.eventually_regularDegree_eq`, refined to slices in
-  `ParametrizedLocalDegree.exists_eventually_localDegreeOn_eq`; the confinement half is
-  `eventually_forall_mem_of_slice_zeros_subset`.  The classical degree-theoretic phrasing
-  is also recorded here: if a map avoids zero on a compact convex set, it is homotopic to
-  a constant nonzero map (by composing with the contraction of the convex set), whose
-  degree at `0` is zero.  Hence a nonzero degree forces a zero.  This is
-  `localDegreeOn_eq_zero_of_avoids_zero` and
-  `exists_mem_closure_of_localDegreeOn_ne_zero`.
-
-## Independence of the rate constants
-
-Item 3 is `positiveClassDegree_rate_independent_of_linearFunctional` (with the more
-general relative form `positiveClassDegree_rate_independent` and the nonnegative version
-`nonnegativeClassDegree_rate_independent`): if two rate vectors have the same strict sign
-on the boundary of the class in the sense that both fields satisfy `ℓ > 0` on
-`classBoundary` for a continuous linear functional `ℓ`, then the linear interpolation
-`(1-t) F_κ + t F_{κ'}` never vanishes on the boundary, and homotopy invariance gives
-equality of the class degrees.  The interpolation of the fields is exactly the
-steady-state map of the convexly interpolated positive rate vector
-`(1-t) κ + t κ'`: `massActionVectorField_interpolate` proves that mass action is
-affine-linear in the rates, `steadyStateMap_interpolate` transports this to the reduced
-field, and `steadyStateHomotopy_eq_rateConstantsInterpolate` records the identification.
-The half-space hypothesis is the precise algebraic content of "the field points strictly
-inward on the boundary for both rate vectors, and the sign is preserved": the inward cone
-of the orthant is convex, so a common strict separating functional suffices; convex
-combinations of positive values stay positive.  This is discharged in
-`steadyStateHomotopy_ne_zero_on_classBoundary` and
-`positiveClassRegion_boundary_avoidance_of_linearFunctional`.
-
-This is the **structural** part of the criterion: the degree is a property of the
-network and the sign pattern of the boundary field, not of the numerical rate constants.
-It reduces the `s ≥ 2` nonzero-degree hypothesis to *checking a sign condition on the
-boundary* and computing the degree of a reference map (for instance an invertible
-linear map, or the identity).
-
-## What is proved and what remains
-
-Proved here:
-
-* the class-projected steady-state map, its chart-coordinate form, and the equivalence
-  between steady states, zeros of the reduced field, and fixed points of the class map;
-* the relative class degree and its existence principle, with the boundary-to-positivity
-  step;
-* the homotopy-to-a-constant form of the nonzero-degree existence argument
-  (`localDegreeOn_eq_zero_of_avoids_zero`,
-  `exists_mem_closure_of_localDegreeOn_ne_zero`);
-* homotopy invariance of the class degree along the rate-constant interpolation, under
-  the boundary sign condition and the standard nondegeneracy/finiteness hypotheses on
-  the interpolated slices (`positiveClassDegree_rate_independent`,
-  `nonnegativeClassDegree_rate_independent`,
-  `positiveClassDegree_rate_independent_of_linearFunctional`), together with the
-  consequence `exists_positiveSteadyState_of_rate_independent_degree`;
-* a concrete fully open two-species network (`DegreeExample.N`) with `stoichRank = 2`,
-  where the reduced field is the invertible affine map `y ↦ b - y`, the degree is
-  exactly `1` (`DegreeExample.nonnegativeClassDegree_eq_one`; in particular nonzero,
-  `DegreeExample.nonnegativeClassDegree_ne_zero`), every hypothesis of the existence
-  theorem is checked, and `DegreeExample.exists_positive_steady_state` yields a positive
-  steady state.
-
-What remains of the "structural criteria for a nonzero degree in dimension `s ≥ 2`":
-the degree of the reduced field still has to be *computed* for the network at hand.
-This module reduces that to (i) a boundary sign/nonvanishing condition and (ii) the
-degree of a reference map joined to the steady-state field by a homotopy, but it does
-not provide a general algorithm or a general structural formula (for example in terms
-of stoichiometric coefficients, SR-graph signs, or a toric/Bernstein mixed volume) for
-that reference degree.  The analytic hypotheses `hreg` (nondegeneracy of the
-interpolated zeros) and `hfin` (finiteness inside the region) are also carried
-explicitly; they are standard generic conditions but are not discharged here.
+The reduced field is represented in stoichiometric coordinates. A finite signed
+count which is nonzero supplies a zero, and boundary exclusion makes it positive.
+The rate-independence results require compact containment, boundary avoidance,
+and regularity of every intermediate zero, as displayed in their signatures.
+They do not cover homotopies through degenerate zeros or prove the general
+Brouwer total-degree theorem under dissipativity.
 -/
 
 namespace CRNT

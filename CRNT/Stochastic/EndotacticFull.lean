@@ -1,115 +1,17 @@
 import CRNT.Stochastic.EndotacticTierDomination
 
 /-!
-# The full Anderson--Cappelletti--Kim--Nguyen theorem: the deterministic hypothesis, the sharp
-# count-lattice condition, and the one-species case
+# Restricted stochastic count-lattice criteria and the one-species case
 
-This module attacks the last remaining gap of leaf **P7** (positive recurrence and
-non-explosivity of stochastic mass-action systems on infinite state spaces).  The field map
-records the gap as follows:
+Structural consequences of strong endotacticity, falling-factorial comparison
+obstructions, and the one-species drift argument. Count-tier matching assumptions
+are extra hypotheses for the several-species transfer. Recurrence statements
+retain their irreducibility assumptions.
 
-> "The remaining gap is the full ACK theorem for an arbitrary strongly endotactic network:
-> on the count lattice the domination of lower-tier monomials by top-tier ones fails along
-> escape directions."
-
-The previous module `CRNT.Stochastic.EndotacticTierDomination` **refuted** the route the field
-map proposes (for the strongly endotactic network `0 → A`, `A → 0`, `0 → B`, `B → 0` the top
-tier does not dominate a lower tier along the escape direction) and replaced it by the
-**balance** condition: an ascending reaction with a nonempty source complex is cancelled by a
-descending reaction with the *same* source complex.
-
-This module goes further, in three steps.
-
-## 1. The deterministic hypothesis, read off precisely
-
-`CRNT.Network.StronglyEndotacticStd` says
-
-* `Endotactic`: for every direction `w` and every `w`-maximal source `y`, every reaction out of
-  `y` satisfies `wRate w r ≤ 0`, i.e. no reaction out of the `w`-maximal face ascends the tier
-  potential;
-* *strong*: for every stoichiometrically active direction `w` there is a `w`-maximal reaction
-  with `wRate w r < 0`.
-
-This module extracts the *reaction-wise* consequences that the count-lattice transfer needs
-(`StronglyEndotacticStd.le_of_maxSource`, `StronglyEndotacticStd.exists_maxSource_descending`,
-`StronglyEndotacticStd.target_le_source_of_maxSource`,
-`StronglyEndotacticStd.not_maxSource_of_produced`,
-`StronglyEndotacticStd.exists_source_more_of_species`):
-
-> **A reaction that produces a species `s` cannot sit at the maximal `s`-content of the network;
-> there is always a competing reaction whose source contains strictly more molecules of `s`.**
-
-This is the deterministic shadow of the "escape direction" obstruction: a reaction that produces
-`s` cannot be the last word about `s`.  What the deterministic hypothesis does *not* say is that
-the competing reaction descends the tier potential, or that it has the same source complex.
-
-## 2. The sharp count-lattice comparison
-
-The count-lattice analogue of the mass-action monomial is the falling factorial
-`countDescFactorial y n = ∏_s (n s).descFactorial (y s)`.  This module gives the **exact**
-characterisation of the comparison that the field map's route needs
-(`countDescFactorial_dominates_iff`):
-
-> `(∀ n, z ≤ n → countDescFactorial y n ≥ countDescFactorial z n)  ↔  y = z`.
-
-So on the count lattice the "top-tier monomial dominates the lower-tier monomials" step is
-possible **only when the two complexes coincide**; there is no weaker sufficient condition.
-The reason is the truncation obstruction: the falling factorial of a complex that is not enabled
-vanishes, and a *distinct* complex is not enabled on the whole region where the other one is.
-
-The companion statement (`countDescFactorial_no_uniform_domination`) says that a *distinct*
-complex can never dominate `y` by a uniform factor on the region where `y` is enabled.
-
-**Consequence.** The "same source complex" requirement in
-`CRNT.Network.CountTierBalance.partner` is *forced*, not an arbitrary modelling choice: on a
-count lattice, a single descending reaction can cancel an ascending reaction on the whole
-enabled region of the ascending reaction only if the two reactions have the same source complex
-(`partner_same_source`, `CountTierBalance.partner_same_source`).
-
-## 3. A new positive case: the Anderson--Cappelletti--Kim--Nguyen theorem for one species
-
-The truncation obstruction disappears in the **one-species** case: there the failure set of the
-comparison is finite, and the matching condition "the descending partner has a source complex
-of at least the molecularity of the ascending one" is enough.
-
-This module proves the ACK theorem for **every strongly endotactic one-species network**
-(`OneSpecies.nonExplosion`, `OneSpecies.positiveRecurrence`, `OneSpecies.geometricErgodic`):
-the stochastic mass-action chain of such a network is non-explosive, and — as soon as the
-embedded jump chain is irreducible — it is positively recurrent with a strictly positive
-stationary law and is geometrically ergodic.
-
-The mechanism is explicit: with the tier direction `w = 1` (the total-count direction) the
-top tier is the maximal molecularity `X^m`; every ascending reaction has source `X^i` with
-`i < m`, and the strictly descending reaction out of `X^m` has a falling factorial of degree
-`m`, one degree higher than any ascending reaction.  The drift is therefore
-`Q V (n) ≤ C · n^{↓(m-1)} - β · n^{↓m}`, a *superlinear* negative drift, and
-`OneSpecies.drift_le` turns it into the multiplicative Foster--Lyapunov bound
-`Q V (n) ≤ -θ · V (n) + K` used by the Foster--Lyapunov and Meyn--Tweedie machinery of
-`CRNT.Stochastic.MinimalSemigroupKrylovBogoliubov` and `CRNT.Stochastic.HarrisTheorem`.
-
-The single hypothesis that is *not* implied by strong endotacticity is that some reaction
-changes the number of molecules (`hact`); if no reaction does, the total count is conserved and
-the chain is confined to a finite level set.
-
-## 4. What remains open
-
-The full ACK theorem for an arbitrary strongly endotactic network with several species needs,
-on top of the deterministic hypothesis, a count-lattice *matching* that the deterministic
-hypothesis does not deliver:
-
-* **(BAL)** for every ascending reaction with a nonempty source complex, a descending reaction
-  with the **same** source complex and enough rate capacity — §2 shows that no other choice is
-  possible on the count lattice;
-* **(INWARD)** for every species, a strictly descending top-tier reaction supported on that
-  species alone, which produces the strictly negative drift in every coordinate.
-
-§1 shows that the deterministic hypothesis delivers the *reaction-wise* shadow of the first
-condition (a producing reaction always has a competitor with more of the produced species) but
-not the matching itself; §2 shows that the matching cannot be weakened.  The one-species case
-(§3) is the case in which the matching can be dispensed with, because the truncation
-obstruction has an empty escape direction.
-
-Depends on: `CRNT.Stochastic.EndotacticTierDomination`.
+There is no universal several-species strong-endotactic recurrence/non-explosion
+theorem: the unrestricted assertion is false (Anderson–Cappelletti–Kim–Nguyen,
+arXiv:1808.05328, Examples 3.1–3.2). This module's name is historical and does not
+indicate completion of that false general assertion.
 -/
 
 open Filter Topology

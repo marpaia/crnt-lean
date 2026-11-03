@@ -4,122 +4,15 @@ import CRNT.Oscillation.RankTwoPlanar
 import CRNT.Dynamics.MinimalInvariant
 
 /-!
-# No chaos in the plane: the Poincaré–Bendixson classification as a restriction on planar
-# mass-action systems
+# Conditional classification of minimal planar omega-limit subsets
 
-This module formalizes the **"no chaos in the plane"** half of leaf D18 of the field map
-(*"existence of oscillations; chaos"*).
-
-The classical result is the **Poincaré–Bendixson theorem** and its immediate corollary for
-two-dimensional flows.
-
-> **Theorem (Poincaré–Bendixson).**  Let `F : ℝ² → ℝ²` be a `C¹` vector field, let `x : ℝ → ℝ²`
-> be an exact solution whose positive semi-orbit is precompact, and let `Ω = ω(x)` be its
-> ω-limit set.  Then `Ω` is built out of equilibria and periodic orbits; in particular, in the
-> equilibrium-free case, every *minimal* compact invariant subset of `Ω` is the geometric
-> image of a periodic orbit.
-
-> **Corollary (no chaos in the plane).**  A planar flow has no *chaotic* minimal invariant
-> set: no minimal compact invariant set of a planar flow is a fractal ("strange") attractor —
-> a Solenoid, a Plykin attractor, a Smale horseshoe — because every such minimal set is a
-> periodic orbit (or an equilibrium).  This is the structural content behind the slogan
-> "there is no chaos in the plane": a minimal set which is Devaney-chaotic, or which carries
-> positive topological entropy, is a minimal set which is neither an equilibrium nor a
-> periodic orbit, and such sets do not exist in the plane.  (The corresponding statement for
-> ω-limit sets *as a whole* — as opposed to their minimal subsets — needs the Jordan
-> refinement described below.)
-
-The point of the present module is *not* to reprove the planar topology.  The universal planar
-kernel is already factored out in `CRNT.Oscillation.PlanarPoincareBendixson` as the structure
-
-* `CRNT.Planar.PoincareBendixsonKernelBundle`
-
-whose three fields are the *universal* planar-topological inputs still open in this
-repository: the `C¹` dependence of the flow on the initial point
-(`CanonicalFlowRegularityTarget`), the Jordan separation theorem
-(`SimplePlanarLoop.JordanSeparationTarget`) and the straight-edge local-side lemma
-(`StraightEdgeJordanSideTarget`).  None of them mentions a reaction network, a rate constant
-or a trapping region.  What this module adds is
-
-* the **"no chaos" vocabulary** (`IsEquilibrium`, `LiesOnPeriodicOrbit`, `IsPeriodicOrbitSet`,
-  `IsEquilibriumSet`, `IsRegularMinimalSet`, `IsChaoticMinimalSet`, `IsChaoticOmegaSet`,
-  `IsRegularOmegaSet`), which makes the negative statement precise;
-* the **upgrading theorem** `eq_orbitSet_of_minimal_invariant_subset`: a minimal nonempty
-  compact closed invariant subset of the ω-limit set of a trapped planar `C¹` orbit is
-  *exactly* the geometric image of a periodic orbit (the repository's
-  `PoincareBendixsonOmegaClassificationTarget` only says that such a subset *contains* one);
-* the **"no chaos in the plane" theorem** `omegaSet_not_chaotic`: the ω-limit set of a trapped
-  planar `C¹` orbit contains no chaotic minimal invariant set;
-* the **corollaries** `omegaSet_contains_periodicOrbit`, `omegaSet_infinite` and
-  `omegaSet_has_periodic_structure`: the long-time behaviour of a planar system is a periodic
-  orbit, never a finite set of equilibria and never a fractal attractor;
-* the **application to mass-action systems**: a rank-two (equivalently, planar) mass-action
-  network has no chaotic ω-limit set, and — when the ω-limit set lies in the positive chart
-  region — its long-time behaviour is a positive mass-action periodic orbit;
-* the **instances**: the Lotka network `A → 2A`, `A + B → 2B`, `B → 0`.
-
-## The mathematics
-
-The upgrading theorem is the standard "minimal set" form of Poincaré–Bendixson.  Let `Ω` be
-the ω-limit set of a trapped planar orbit and let `C ⊆ Ω` be a minimal nonempty compact closed
-invariant subset.  By the repository's kernel, `C` contains the geometric image `Γ` of a
-periodic trajectory `P`.  Two facts close the argument.
-
-1. **The flow through a point of `Γ` runs along `Γ`.**  The trajectory `P.orbit` and the
-   trajectory of the *flow* through `P.orbit s` solve the same autonomous equation with the
-   same initial value; by uniqueness of solutions (`globalSolutionUnique_of_locallyLipschitz`,
-   the `C¹` hypothesis) they coincide.  Hence the forward orbit of `P.orbit s` is contained in
-   `Γ`, and so the ω-limit set of `P.orbit s` is contained in `Γ` (which is closed).
-2. **Minimality.**  The ω-limit set of `P.orbit s` is a nonempty compact closed invariant subset
-   of `C` (it is contained in `C` because `C` is closed and invariant, and `P.orbit s ∈ C`).
-   By minimality of `C` it *equals* `C`.
-
-Combining 1 and 2, `C ⊆ Γ ⊆ C`, so `C = Γ`: the minimal invariant set is the periodic orbit
-itself.
-
-## What is proved here, and what is not
-
-Proved here:
-
-* the "no chaos" vocabulary and the **no-chaos theorem** for planar ω-limit sets
-  (`CRNT.Planar.omegaSet_not_chaotic`);
-* the upgrading theorem above (minimal invariant sets are periodic orbits);
-* the ω-limit set of a trapped planar orbit is infinite, contains a nonconstant periodic orbit,
-  and every minimal compact invariant subset of it is a periodic orbit;
-* the rank-two (planar) mass-action application, including the lifting of the planar periodic
-  orbit to a positive mass-action periodic orbit;
-* the Lotka instance: the canonical trapped Lotka orbit has a non-chaotic ω-limit set, and the
-  Lotka network has a positive periodic orbit.
-
-Not proved here (and stated as such in the docstrings):
-
-* the **Jordan refinement** of the classification: that the ω-limit set is a *single* periodic
-  orbit, or a *finite* union of periodic orbits, and that every ω-limit point lies on a
-  periodic orbit.  The classical proof of these uses the annular-region argument, i.e. the
-  Jordan separation theorem in the strong form the repository still lists as an open universal
-  input (`SimplePlanarLoop.JordanSeparationTarget`).  The pointwise reading of the
-  classification is isolated in the predicate `IsRegularOmegaSet` and is *proved* here for the
-  minimal subsets of the ω-limit set (`exists_periodicOrbit_through_of_minimal_subset`).
-* the treatment of ω-limit sets which *contain* equilibria: `CRNT.Planar.FlowTrappingData`
-  requires an equilibrium-free trapping region, so the equilibrium case (heteroclinic orbits)
-  is not covered.  The `IsRegularMinimalSet` predicate is stated so that the equilibrium
-  case fits in as soon as the trapping data is generalized.
-* the `C¹` regularity of the *reduced* planar field of a rank-two network is left as an
-  explicit hypothesis (`hsmooth`), as it is in
-  `CRNT.Network.hasPositivePeriodicOrbit_of_rankTwo_poincareBendixson`; the `C¹` regularity of
-  the mass-action field itself is discharged in `CRNT.Oscillation.massAction_contDiff_planar`.
-
-## Relation to leaf D18
-
-Leaf D18 asks for "general structural criteria for oscillation and chaos".  The
-*no-oscillation* half is `CRNT.Oscillation.PlanarOscillationCriterion` (an order-preserving or
-Kamke planar field has no nonconstant periodic orbit, hence a cooperative planar mass-action
-network never oscillates).  This module supplies the complementary *no-chaos* half: a
-structural criterion which rules out chaotic long-time behaviour for **every** planar
-mass-action network, at the level of the ω-limit set.
-
-Depends on: `CRNT.Oscillation.PlanarPoincareBendixson`, `CRNT.Oscillation.TrappingRegion`,
-`CRNT.Dynamics.MinimalInvariant`.
+Given a `PoincareBendixsonKernelBundle`, suitable trapping/regularity data, and
+exclusion of equilibria, compact minimal invariant subsets are periodic orbit
+sets. The kernel bundle is an explicit hypothesis and is not constructed here.
+`IsNonregularMinimalSet` means failure of the local equilibrium/periodic-set
+classification; it is not a definition of entropy, Devaney chaos, or horseshoes.
+The Lotka instances remain conditional on the bundle when they invoke it.
+The independent explicit Lotka periodic-orbit construction is elsewhere.
 -/
 
 namespace CRNT
@@ -131,7 +24,7 @@ open scoped BigOperators NNReal Topology
 
 variable {field : Phase2 → Phase2}
 
-/-! ## The vocabulary of "no chaos" -/
+/-! ## Equilibrium and periodic minimal-set predicates -/
 
 /-- **An equilibrium of the planar field.** -/
 def IsEquilibrium (field : Phase2 → Phase2) (x : Phase2) : Prop :=
@@ -158,24 +51,17 @@ invariant set of a planar flow. -/
 def IsRegularMinimalSet (field : Phase2 → Phase2) (C : Set Phase2) : Prop :=
   IsEquilibriumSet field C ∨ IsPeriodicOrbitSet field C
 
-/-- **A chaotic minimal invariant set.**
-
-It is neither an equilibrium nor a periodic orbit: the hallmark of a "strange" (fractal)
-attractor such as a Solenoid, a Plykin attractor or a Smale horseshoe.  The predicate is meant
-to be used for *minimal* compact invariant sets, where it is exactly the negation of the
-Poincaré–Bendixson classification. -/
-def IsChaoticMinimalSet (field : Phase2 → Phase2) (C : Set Phase2) : Prop :=
+/-- Conditional equilibrium/periodic minimal-set classification. The kernel bundle
+and trapping hypotheses are explicit; nonregularity uses the predicates in this module. -/
+def IsNonregularMinimalSet (field : Phase2 → Phase2) (C : Set Phase2) : Prop :=
   ¬ IsRegularMinimalSet field C
 
-/-- **A chaotic ω-limit set.**
-
-The ω-limit set contains a *minimal* nonempty compact closed invariant subset which is neither
-an equilibrium nor a periodic orbit.  This is the precise shape of "the long-time behaviour of
-this planar system is chaotic". -/
-def IsChaoticOmegaSet (field : Phase2 → Phase2) (ϕ : Flow ℝ≥0 Phase2) (Ω : Set Phase2) : Prop :=
+/-- Conditional equilibrium/periodic minimal-set classification. The kernel bundle
+and trapping hypotheses are explicit; nonregularity uses the predicates in this module. -/
+def HasNonregularMinimalSubset (field : Phase2 → Phase2) (ϕ : Flow ℝ≥0 Phase2) (Ω : Set Phase2) : Prop :=
   ∃ C ⊆ Ω, C.Nonempty ∧ IsCompact C ∧ IsClosed C ∧ IsInvariant ϕ C ∧
     Minimal (fun E => E.Nonempty ∧ IsCompact E ∧ IsClosed E ∧ IsInvariant ϕ E) C ∧
-    IsChaoticMinimalSet field C
+    IsNonregularMinimalSet field C
 
 /-- **A regular ω-limit set, pointwise.**  Every ω-limit point is an equilibrium of the field or
 lies on a periodic orbit.  This is the pointwise reading of the Poincaré–Bendixson
@@ -392,20 +278,11 @@ theorem eq_orbitSet_of_minimal_invariant_subset
 
 /-! ## "No chaos in the plane" -/
 
-/-- **No chaos in the plane.**
-
-The ω-limit set of a trapped orbit of a `C¹` planar flow contains no chaotic minimal invariant
-set: every minimal nonempty compact closed invariant subset of it is the geometric image of a
-nonconstant periodic trajectory.  In particular the ω-limit set cannot be a fractal ("strange")
-attractor — a Solenoid, a Plykin attractor, a Smale horseshoe — and no *minimal* compact
-invariant set of a planar flow can be Devaney-chaotic or carry positive topological entropy:
-such a set would be a minimal set which is neither an equilibrium nor a periodic orbit.
-
-The only hypothesis which is not *proved* in this repository is the universal planar kernel
-bundle `K`; see the module docstring. -/
-theorem omegaSet_not_chaotic (K : PoincareBendixsonKernelBundle) {field : Phase2 → Phase2}
+/-- Conditional equilibrium/periodic minimal-set classification. The kernel bundle
+and trapping hypotheses are explicit; nonregularity uses the predicates in this module. -/
+theorem omegaSet_no_nonregular_minimal_subset (K : PoincareBendixsonKernelBundle) {field : Phase2 → Phase2}
     (D : FlowTrappingData field) (hsmooth : ContDiff ℝ 1 field) :
-    ¬ IsChaoticOmegaSet field D.flow D.omegaSet := by
+    ¬ HasNonregularMinimalSubset field D.flow D.omegaSet := by
   rintro ⟨C, hCsub, hCne, hCcpt, hCcl, hCinv, hCmin, hchaos⟩
   obtain ⟨P, hP⟩ :=
     eq_orbitSet_of_minimal_invariant_subset K D hsmooth hCne hCcpt hCcl hCinv hCsub hCmin
@@ -430,14 +307,8 @@ theorem omegaSet_infinite (K : PoincareBendixsonKernelBundle) {field : Phase2 �
   obtain ⟨P, hP⟩ := omegaSet_contains_periodicOrbit K D hsmooth
   exact (orbitSet_infinite_of_nonconstant P).mono hP
 
-/-- **The long-time behaviour of a planar `C¹` system is periodic, not chaotic.**
-
-The three conclusions together are the "no chaos in the plane" reading of the
-Poincaré–Bendixson classification:
-
-* the ω-limit set is infinite;
-* it contains a nonconstant periodic orbit;
-* every minimal compact invariant subset of it is a periodic orbit. -/
+/-- Conditional equilibrium/periodic minimal-set classification. The kernel bundle
+and trapping hypotheses are explicit; nonregularity uses the predicates in this module. -/
 theorem omegaSet_has_periodic_structure (K : PoincareBendixsonKernelBundle)
     {field : Phase2 → Phase2} (D : FlowTrappingData field) (hsmooth : ContDiff ℝ 1 field) :
     D.omegaSet.Infinite ∧ (∃ P : PeriodicTrajectory field, P.orbitSet ⊆ D.omegaSet) ∧
@@ -499,41 +370,18 @@ open scoped BigOperators NNReal Topology
 
 variable {S : Type} [DecidableEq S] [Fintype S]
 
-/-- **No chaos in a rank-two mass-action system.**
-
-A mass-action network of stoichiometric rank two is a planar system: its reduced field is a
-`C¹` vector field on the plane (`CRNT.Network.rankTwoReducedField`), and the planar
-Poincaré–Bendixson kernel applies to it.  The conclusion is that the ω-limit set of a trapped
-orbit of the reduced field contains no chaotic minimal invariant set: the long-time behaviour
-of the network is an equilibrium or a periodic orbit, never a strange attractor.
-
-The hypotheses are
-
-* `K` — the universal planar kernel bundle (the *universal* planar-topological inputs of
-  leaf D18: the `C¹` dependence of the flow on the initial point, the Jordan separation
-  theorem and the straight-edge local-side lemma);
-* `h` — the stoichiometric rank is two;
-* `D` — trapping data for the reduced planar field: a compact, equilibrium-free trapping
-  region and a forward flow;
-* `hsmooth` — the `C¹` regularity of the reduced field.
-
-For the *mass-action* field itself the `C¹` regularity is discharged in
-`CRNT.Oscillation.massAction_contDiff_planar`; the regularity of the reduced field follows from
-`CRNT.Network.reducedField_contDiff` together with the (linear) transport to the planar phase
-space, and is left as an explicit hypothesis here, as in
-`CRNT.Network.hasPositivePeriodicOrbit_of_rankTwo_poincareBendixson`. -/
-theorem rankTwo_omegaSet_not_chaotic
+/-- Conditional equilibrium/periodic minimal-set classification. The kernel bundle
+and trapping hypotheses are explicit; nonregularity uses the predicates in this module. -/
+theorem rankTwo_omegaSet_no_nonregular_minimal_subset
     (K : Planar.PoincareBendixsonKernelBundle) (N : Network S) (h : N.stoichRank = 2)
     (κ : N.RateConstants) (x₀ : Concentration S)
     (D : Planar.FlowTrappingData (N.rankTwoReducedField h κ x₀))
     (hsmooth : ContDiff ℝ 1 (N.rankTwoReducedField h κ x₀)) :
-    ¬ Planar.IsChaoticOmegaSet (N.rankTwoReducedField h κ x₀) D.flow D.omegaSet :=
-  Planar.omegaSet_not_chaotic K D hsmooth
+    ¬ Planar.HasNonregularMinimalSubset (N.rankTwoReducedField h κ x₀) D.flow D.omegaSet :=
+  Planar.omegaSet_no_nonregular_minimal_subset K D hsmooth
 
-/-- **The long-time behaviour of a rank-two mass-action system is periodic, not chaotic.**
-
-The three conclusions of `CRNT.Planar.omegaSet_has_periodic_structure`, specialized to the
-reduced planar field of a rank-two mass-action network. -/
+/-- Conditional equilibrium/periodic minimal-set classification. The kernel bundle
+and trapping hypotheses are explicit; nonregularity uses the predicates in this module. -/
 theorem rankTwo_omegaSet_has_periodic_structure
     (K : Planar.PoincareBendixsonKernelBundle) (N : Network S) (h : N.stoichRank = 2)
     (κ : N.RateConstants) (x₀ : Concentration S)
@@ -563,42 +411,33 @@ theorem rankTwo_hasPositivePeriodicOrbit
   N.hasPositivePeriodicOrbit_of_rankTwo_poincareBendixson K.omegaClassification h κ x₀ D hsmooth
     hpositive
 
-/-- **A rank-two mass-action network has no chaotic ω-limit set.**  This is the "no chaos in
-the plane" criterion for chemical reaction networks, in the language of the repository's
-oscillation layer. -/
-theorem rankTwo_noChaos (K : Planar.PoincareBendixsonKernelBundle) (N : Network S)
+/-- Conditional equilibrium/periodic minimal-set classification. The kernel bundle
+and trapping hypotheses are explicit; nonregularity uses the predicates in this module. -/
+theorem rankTwo_no_nonregular_minimal_subset (K : Planar.PoincareBendixsonKernelBundle) (N : Network S)
     (h : N.stoichRank = 2) (κ : N.RateConstants) (x₀ : Concentration S)
     (D : Planar.FlowTrappingData (N.rankTwoReducedField h κ x₀))
     (hsmooth : ContDiff ℝ 1 (N.rankTwoReducedField h κ x₀)) :
-    ¬ Planar.IsChaoticOmegaSet (N.rankTwoReducedField h κ x₀) D.flow D.omegaSet :=
-  rankTwo_omegaSet_not_chaotic K N h κ x₀ D hsmooth
+    ¬ Planar.HasNonregularMinimalSubset (N.rankTwoReducedField h κ x₀) D.flow D.omegaSet :=
+  rankTwo_omegaSet_no_nonregular_minimal_subset K N h κ x₀ D hsmooth
 
 /-! ## The instance: the Lotka network -/
 
-/-- **The Lotka network has no chaotic ω-limit set.**
-
-The Lotka network `A → 2A`, `A + B → 2B`, `B → 0` is the planar mass-action network of the
-repository.  Its planar field is the cut-off mass-action field `lotkaClampedField`, which is
-`C¹`; the trapping data are certified in `CRNT.Oscillation.lotka_flowTrappingData`.  Hence the
-ω-limit set of a trapped Lotka orbit contains no chaotic minimal invariant set. -/
-theorem lotka_omegaSet_not_chaotic (K : Planar.PoincareBendixsonKernelBundle)
+/-- Conditional equilibrium/periodic minimal-set classification. The kernel bundle
+and trapping hypotheses are explicit; nonregularity uses the predicates in this module. -/
+theorem lotka_omegaSet_no_nonregular_minimal_subset (K : Planar.PoincareBendixsonKernelBundle)
     (κ : Examples.Lotka.N.RateConstants) (lo hi : ℝ)
     (D : Planar.FlowTrappingData (lotkaClampedField κ lo hi)) :
-    ¬ Planar.IsChaoticOmegaSet (lotkaClampedField κ lo hi) D.flow D.omegaSet :=
-  Planar.omegaSet_not_chaotic K D (contDiff_lotkaClampedField κ lo hi)
+    ¬ Planar.HasNonregularMinimalSubset (lotkaClampedField κ lo hi) D.flow D.omegaSet :=
+  Planar.omegaSet_no_nonregular_minimal_subset K D (contDiff_lotkaClampedField κ lo hi)
 
-/-- **The canonical trapped Lotka orbit has a non-chaotic ω-limit set.**
-
-The canonical trapping data of the Lotka network are the ones certified in
-`CRNT.Oscillation.lotka_flowTrappingData`: the level set of the first integral through the
-canonical seed, together with a cut-off box containing it.  The conclusion is that the
-ω-limit set of that orbit is not chaotic. -/
-theorem lotka_canonical_omegaSet_not_chaotic
+/-- Conditional equilibrium/periodic minimal-set classification. The kernel bundle
+and trapping hypotheses are explicit; nonregularity uses the predicates in this module. -/
+theorem lotka_canonical_no_nonregular_minimal_subset
     (K : Planar.PoincareBendixsonKernelBundle) (κ : Examples.Lotka.N.RateConstants)
     (h0 : 0 < κ.k Examples.Lotka.grow) (h1 : 0 < κ.k Examples.Lotka.prey)
     (h2 : 0 < κ.k Examples.Lotka.decay) :
     ∃ (lo hi : ℝ) (D : Planar.FlowTrappingData (lotkaClampedField κ lo hi)),
-      ¬ Planar.IsChaoticOmegaSet (lotkaClampedField κ lo hi) D.flow D.omegaSet := by
+      ¬ Planar.HasNonregularMinimalSubset (lotkaClampedField κ lo hi) D.flow D.omegaSet := by
   -- the level set of the first integral through the canonical seed
   set c : ℝ := Examples.Lotka.firstIntegral κ (lotkaSeed κ) with hc
   have hp₀ : (lotkaSeed κ).Positive := lotkaSeed_pos κ h1 h2 h0
@@ -622,28 +461,19 @@ theorem lotka_canonical_omegaSet_not_chaotic
   -- the trapping data
   obtain ⟨D, _hDregion⟩ := exists_lotka_flowTrappingData κ h0 h1 h2 (lotkaSeed κ) hp₀ c
     (by simp [c]) hc' lo hi hlo hle hK
-  exact ⟨lo, hi, D, lotka_omegaSet_not_chaotic K κ lo hi D⟩
+  exact ⟨lo, hi, D, lotka_omegaSet_no_nonregular_minimal_subset K κ lo hi D⟩
 
-/-- **The long-time behaviour of the Lotka network is a periodic orbit, and its ω-limit set is
-not chaotic.**
-
-This is the concrete instance of leaf D18's "no chaos" half: for the Lotka network, the
-canonical trapped orbit has an ω-limit set which
-
-* contains a positive mass-action periodic orbit of the network (by
-  `CRNT.Oscillation.lotka_hasPositivePeriodicOrbit_of_trappingRegion`),
-* and contains no chaotic minimal invariant set.
-
-The only hypothesis which is *not* discharged here is the universal planar kernel bundle `K`. -/
+/-- Conditional equilibrium/periodic minimal-set classification. The kernel bundle
+and trapping hypotheses are explicit; nonregularity uses the predicates in this module. -/
 theorem lotka_longTimeBehaviour_is_periodicOrbit
     (K : Planar.PoincareBendixsonKernelBundle) (κ : Examples.Lotka.N.RateConstants)
     (h0 : 0 < κ.k Examples.Lotka.grow) (h1 : 0 < κ.k Examples.Lotka.prey)
     (h2 : 0 < κ.k Examples.Lotka.decay) :
     Examples.Lotka.N.HasPositivePeriodicOrbit κ ∧
       (∃ (lo hi : ℝ) (D : Planar.FlowTrappingData (lotkaClampedField κ lo hi)),
-        ¬ Planar.IsChaoticOmegaSet (lotkaClampedField κ lo hi) D.flow D.omegaSet) := by
+        ¬ Planar.HasNonregularMinimalSubset (lotkaClampedField κ lo hi) D.flow D.omegaSet) := by
   refine ⟨lotka_hasPositivePeriodicOrbit_of_trappingRegion K κ h0 h1 h2, ?_⟩
-  exact lotka_canonical_omegaSet_not_chaotic K κ h0 h1 h2
+  exact lotka_canonical_no_nonregular_minimal_subset K κ h0 h1 h2
 
 end Oscillation
 end CRNT

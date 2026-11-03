@@ -12,113 +12,16 @@ import Mathlib.Algebra.Polynomial.Eval.Defs
 import Mathlib.Algebra.Polynomial.Roots
 
 /-!
-# Mixed volumes and the Bernstein–Kushnirenko–Khovanskii bound (leaf A3)
+# Determinant mixed-volume expressions and restricted root bounds
 
-Leaf **A3** of the field map ("real root bounds and mixed volumes") asks for two things: the
-**mixed volume** of convex bodies, and the **Bernstein–Kushnirenko–Khovanskii (BKK) bound** on the
-number of solutions of a polynomial system in terms of the mixed volumes of its Newton polytopes.
-`CRNT.Algebra.ExcludedCircuit` has already delivered the *interval* version of the mixed volume
-(`CRNT.ExcludedCircuit.mixedVolumeIntervals`) and the two univariate BKK bounds
-(`card_pos_roots_le_natDegree`, `card_common_pos_roots_le_mixedVolume`).  This file provides the
-mixed volume of **zonotopes** (Minkowski sums of segments) with its classical properties, together
-with BKK bounds whose mixed volume is computed exactly.
+`mixedVolume` is defined algebraically from lists of zonotope generators as a
+sum of absolute determinants. Additivity and homogeneity follow for this
+expression. A general identification with Lebesgue volume of the represented
+zonotope body is not established here.
 
-## 1. The mixed volume
-
-For convex bodies `K₁, …, Kₙ ⊆ ℝⁿ` the **volume polynomial**
-
-```
-Vol(t₁ K₁ + ⋯ + tₙ Kₙ) = ∑_{|I| = n} c_I t^I
-```
-
-is a polynomial of degree `≤ n` in the parameters `t₁, …, tₙ` (the classical *volume polynomial
-theorem*).  Its coefficients are the **mixed volumes** `V(K_{i₁}, …, K_{iₙ})`, normalized so that
-`V(K, …, K) = Vol K`; in the Bernstein–Kushnirenko–Khovanskii normalization
-`MV(K₁, …, Kₙ) = n! V(K₁, …, Kₙ)` one has `MV(K, …, K) = n! Vol K`.
-
-Two classical properties of the mixed volume are the *defining* ones, and they are what the BKK
-bound uses:
-
-* **Minkowski additivity**: the mixed volume is additive in an argument that occurs *once*;
-* **homogeneity**: `MV(c K₁, …, c Kₙ) = cⁿ MV(K₁, …, Kₙ)`.
-
-Both are proved below (`mixedVolume_add`, `mixedVolume_smul`).
-
-## 2. What is proved here, and how
-
-The *volume polynomial theorem* for arbitrary convex bodies is a deep classical result (it follows
-from the Brunn–Minkowski theory); it is **not** re-proved in this file.  What *is* proved here is
-the mixed volume **explicitly**, for the class of **zonotopes** (Minkowski sums of segments), where
-the classical formula is a determinant sum:
-
-> For zonotopes `Z₁, …, Zₙ` with generators `G₁, …, Gₙ`,
-> `MV(Z₁, …, Zₙ) = ∑_{(v₁, …, vₙ) ∈ G₁ × ⋯ × Gₙ} |det (v₁ … vₙ)|`.
-
-This formula is *classical* (it is Shephard's formula for the volume of a zonotope, applied to the
-volume polynomial); it is used here as the definition, and the classical properties (additivity,
-homogeneity) are **proved from it**.  For `n` identical zonotopes it reads `MV(Z, …, Z) = n! Vol Z`,
-the classical volume formula of a zonotope.
-
-The restriction to zonotopes is *not* a restriction on the BKK bounds proved below: the Newton
-polytopes occurring there are **segments** (and products of segments), i.e. degenerate zonotopes.
-
-## 3. The BKK bound
-
-The classical Bernstein–Kushnirenko–Khovanskii theorem says:
-
-> If a system of `n` polynomials in `n` variables has Newton polytopes `K₁, …, Kₙ`, then the
-> number of isolated solutions (counted with multiplicity) is at most `MV(K₁, …, Kₙ)`.
-
-The instances proved here are:
-
-* `card_pos_roots_le_mixedVolume`: the number of *distinct positive roots* of a nonzero univariate
-  polynomial is at most the mixed volume of its Newton polytope, i.e. at most the **length** of the
-  Newton polytope — the sharp one-dimensional BKK bound;
-* `card_solutions_le_mixedVolume`: the number of positive solutions of a system in *separated
-  variables* `p₁(x₁) = 0, …, pₙ(xₙ) = 0` is at most the product of the mixed volumes of the Newton
-  polytopes of the equations, i.e. at most `∏ᵢ len pᵢ` — a genuine multivariate instance;
-* `card_common_pos_roots_le_mixedVolume`: the **Bézout bound** for two univariate polynomials, i.e.
-  the number of distinct common positive roots is at most `deg P · deg Q`, the mixed volume of the
-  two Newton polytopes in the one-dimensional (product of lengths) convention;
-* `card_common_pos_roots_le_newtonLength`: the same bound sharpened by the Newton polytopes, the
-  number of common positive roots being at most the *smaller* of the two Newton polytope lengths.
-
-For a system in separated variables the Newton polytope of `pᵢ` is the segment `[0, len pᵢ]` lying
-on the `i`-th coordinate axis (this is `newtonPolytopeAxis`), and the mixed volume of these `n`
-segments is the product of their lengths — the classical determinant computation
-`|det (ℓ₀e₀, …, ℓₙ₋₁eₙ₋₁)| = ∏ᵢ ℓᵢ`; the bound proved below is the product of the (univariate)
-mixed volumes of the Newton polytopes, which is exactly that number.
-
-The **simplex** case is made explicit: the standard simplex `Δ₁ = [0, 1]` of `ℝ¹` is the Newton
-polytope of the polynomial `1 + X`, the Newton polytope of a *dense* polynomial of degree `d` is the
-`d`-fold Minkowski sum of `Δ₁`, and the mixed volume of that sum is `d`
-(`mixedVolume_simplex_pow`, `newtonLength_eq_natDegree_of_dense`).
-
-## 4. Relation to leaf A3, and what is still missing
-
-Proved here: the mixed volume of zonotopes with its two classical properties (Minkowski additivity
-and homogeneity), the Newton polytope of a univariate polynomial, the sharp univariate BKK bound,
-the BKK bound for systems in separated variables (a genuine multivariate instance), the Bézout
-bound for two univariate polynomials, and the simplex normalization of all of these.
-
-The results of `CRNT.Algebra.ExcludedCircuit` are *not* re-proved here: this file works with the
-Newton polytope of a polynomial (the segment spanned by its smallest and largest exponents) rather
-than with the degree alone, and so *strengthens* the degree bound `card_pos_roots_le_natDegree` to
-the Newton-polytope bound `card_pos_roots_le_mixedVolume`; the Bézout bound
-`card_common_pos_roots_le_mixedVolume` is the same statement as
-`CRNT.ExcludedCircuit.card_common_pos_roots_le_mixedVolume`, in the one-dimensional
-(product of lengths) convention for the mixed volume of two segments of `ℝ¹`.
-
-Still missing (and *not* claimed here):
-
-* the **volume polynomial theorem** for arbitrary convex bodies (and hence the mixed volume of
-  arbitrary polytopes given by their vertices), which is the classical Brunn–Minkowski theory;
-* the **mixed volume of arbitrary convex bodies**: the mixed volume is defined here only for
-  zonotopes, and the classical determinant formula is used as the definition;
-* the **BKK bound in the general case** (`n` Newton polytopes in `ℝⁿ`, general sparse systems);
-  only the univariate and the separated-variables instances are proved;
-* the **multivariate Bézout bound** `deg P · deg Q` for two polynomials in several variables
-  (in dimension one it is proved above).
+The polynomial root bounds count distinct positive roots in one variable or
+solutions of separated-variable systems, with the displayed support assumptions.
+They do not prove the general sparse BKK theorem with multiplicities.
 -/
 
 open scoped BigOperators
@@ -276,8 +179,8 @@ def mvSum : List (Fin n → ℝ) → List (Zonotope n) → ℝ
 Bernstein–Kushnirenko–Khovanskii normalization: `MV(Z₀, …, Z_{n-1}) = ∑ |det (v₀ … v_{n-1})|`,
 the sum running over all choices of one generator `vᵢ` from each zonotope.
 
-This is the classical mixed volume of zonotopes; for `n` identical zonotopes it is `n! Vol Z`, the
-classical volume formula of a zonotope. -/
+This defines the determinant expression. A general bridge to the Lebesgue volume
+of the represented zonotope body is not proved here. -/
 def mixedVolumeList (Z : List (Zonotope n)) : ℝ :=
   mvSum [] Z
 

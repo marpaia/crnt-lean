@@ -6,33 +6,18 @@ import CRNT.Stochastic.JumpReachabilityLift
 import CRNT.Geometry.EndotacticGlobal
 
 /-!
-# Positive recurrence and non-explosion for endotactic networks (ACK 2020)
+# Recurrence and non-explosion from explicit linear Lyapunov data
 
-This module formalizes the stochastic counterpart of the deterministic permanence
-theorem for strongly endotactic mass-action networks (Anderson–Cappelletti–Kim–Nguyen
-2020): a strongly endotactic stochastic mass-action system is positive recurrent (with
-a unique stationary distribution on the reachable class) and non-explosive.
+`LinearLyapunovData` supplies positive weights, a multiplicative generator drift
+bound, and a jump-chain Foster bound. These hypotheses yield the stated
+non-explosion, recurrence, and convergence conclusions, with irreducibility and
+other premises where displayed. Immigration/death gives a concrete instance.
 
-## Scope (honest statement)
-
-The full deterministic tier machinery (`TierDescending`, `TierRealizesDirection`, …) lives on
-the *continuous* orthant.  Transferring it verbatim to the count lattice would require a
-tier function on `S → ℕ` whose drift is constant-negative outside a finite set; the
-repository's tier objects are not yet in a form that makes that transfer a one-line
-extension.  What is proved here is the **restricted but honest fallback** identified in
-the task: networks that admit a **positive linear weight** `w : S → ℝ` (so that
-`V n = ∑_s w_s (n s)` is a linear Lyapunov function on the count lattice) with a
-**multiplicative inward drift**
-
-`Q V (n) ≤ −ε V (n) + K`      (`ε > 0`, `K ≥ 0`)
-
-for the mass-action generator.  From this, a constant-negative drift outside a finite
-sublevel set follows, and Foster's theorem, Harris' theorem and the minimal-semigroup
-drift criterion give recurrence and non-explosion.  The concrete instance
-`CRNT.Examples.EndotacticBirthDeath` (the reaction pair `0 → X`, `X → 0`) is strongly
-endotactic and discharges every hypothesis.
-
-All statements are proved by `lean`; there are no placeholders or axioms.
+Strong endotacticity alone does not imply these stochastic conclusions in
+several species. Anderson–Cappelletti–Kim–Nguyen, arXiv:1808.05328, Examples
+3.1–3.2, give transient/explosive strongly endotactic examples. Accordingly the
+Lyapunov data here are substantive additional assumptions, not a missing routine
+transfer from deterministic permanence.
 -/
 
 open Filter Topology
@@ -69,7 +54,7 @@ theorem linearObservable_nonneg {w : S → ℝ} (hw : ∀ s, 0 < w s) (n : S →
   Finset.sum_nonneg fun s _ => mul_nonneg (hw s).le (Nat.cast_nonneg _)
 
 /-- **(1) Constant drift outside a finite set**, derived from the multiplicative bound. -/
-theorem endotactic_constant_drift (N : Network S) (κ : RateConstants N)
+theorem constant_drift_of_linearLyapunovData (N : Network S) (κ : RateConstants N)
     (d : LinearLyapunovData N κ) :
     ∃ c : ℝ, 0 < c ∧ ∃ C : Set (S → ℕ), C.Finite ∧
       ∀ n ∉ C, N.observableGenerator κ (linearObservable d.w) n ≤ -c := by
@@ -85,7 +70,7 @@ theorem endotactic_constant_drift (N : Network S) (κ : RateConstants N)
     linarith
 
 /-- **(2a) Foster hitting time** for the embedded jump chain. -/
-theorem foster_hitting_time_of_endotactic (N : Network S) (κ : RateConstants N)
+theorem foster_hitting_time_of_linearLyapunovData (N : Network S) (κ : RateConstants N)
     (d : LinearLyapunovData N κ) [DecidablePred (· ∈ d.C)] (x : S → ℕ) :
     (∀ m, ∑ k ∈ Finset.range m, (N.jumpChain κ).survival d.C k x ≤
         1 + (N.jumpChain κ).expect (linearObservable d.w) x / d.εJ) ∧
@@ -95,7 +80,7 @@ theorem foster_hitting_time_of_endotactic (N : Network S) (κ : RateConstants N)
     d.hεJ d.hdriftJ x
 
 /-- **(3) Non-explosion** from the multiplicative drift (affine form). -/
-theorem nonExplosion_of_endotactic (N : Network S) (κ : RateConstants N)
+theorem nonExplosion_of_linearLyapunovData (N : Network S) (κ : RateConstants N)
     (d : LinearLyapunovData N κ) {t : ℝ} (ht : 0 ≤ t) (n : S → ℕ) :
     HasSum (fun m => N.transition κ t n m) 1 := by
   classical
@@ -107,7 +92,7 @@ theorem nonExplosion_of_endotactic (N : Network S) (κ : RateConstants N)
       linarith [mul_nonneg d.hε.le (linearObservable_nonneg d.hw m)]) ht n
 
 /-- **(3') Non-explosion** via a positive weight increased only by monomolecular steps. -/
-theorem nonExplosion_of_endotactic_of_weight (N : Network S) (κ : RateConstants N)
+theorem nonExplosion_of_weight_bound (N : Network S) (κ : RateConstants N)
     (w : S → ℝ) (hw : ∀ s, 0 < w s)
     (hmol : ∀ r, 0 < ∑ s, w s * N.reactionVector r s →
       ∑ s, (N.reaction r).source s ≤ 1)
@@ -116,7 +101,7 @@ theorem nonExplosion_of_endotactic_of_weight (N : Network S) (κ : RateConstants
   N.hasSum_transition_one_of_weight κ w hw hmol ht n
 
 /-- **(2b) Geometric ergodicity / positive recurrence** from the multiplicative drift. -/
-theorem positiveRecurrence_of_endotactic (N : Network S) (κ : RateConstants N)
+theorem positiveRecurrence_of_linearLyapunovData (N : Network S) (κ : RateConstants N)
     (d : LinearLyapunovData N κ)
     (hirr : ∀ a b : S → ℕ, (N.jumpSystem κ).ReachPos a b) :
     ∃ π : (S → ℕ) → ℝ, (∀ b, 0 ≤ π b) ∧ HasSum π 1 ∧
@@ -142,7 +127,7 @@ theorem positiveRecurrence_of_endotactic (N : Network S) (κ : RateConstants N)
   exact (N.jumpSystem κ).geometric_ergodic V hV0 hfinV d.hε d.hK hdrift hstoch hirr
 
 /-- Analogue of `tendsto_transition_self_pos_of_recurrent` (conservative setting). -/
-theorem tendsto_transition_self_pos_of_endotactic (N : Network S) (κ : RateConstants N)
+theorem tendsto_transition_self_pos_of_linearLyapunovData (N : Network S) (κ : RateConstants N)
     (hcons : N.IsConservative) {b : S → ℕ}
     (hrec : ∀ m, (N.jumpSystem κ).ReachPos b m → (N.jumpSystem κ).ReachPos m b) :
     ∃ p : ℝ, 0 < p ∧ Tendsto (fun t => N.transition κ t b b) atTop (𝓝 p) :=
@@ -359,7 +344,7 @@ noncomputable def data (κ : net.RateConstants) : LinearLyapunovData net κ wher
 theorem nonExplosion (κ : net.RateConstants) {t : ℝ} (ht : 0 ≤ t)
     (n : Fin 1 → ℕ) :
     HasSum (fun m => net.transition κ t n m) 1 :=
-  nonExplosion_of_endotactic net κ (data κ) ht n
+  nonExplosion_of_linearLyapunovData net κ (data κ) ht n
 
 /-- Positive recurrence (geometric ergodicity) for the birth-death instance. -/
 theorem positiveRecurrence (κ : net.RateConstants) :
@@ -369,7 +354,7 @@ theorem positiveRecurrence (κ : net.RateConstants) :
         ∑' m, |net.transition κ t a m - π m| *
             (1 + β * linearObservable (fun _ => 1) m) ≤
           C₀ * (1 + linearObservable (fun _ => 1) a) * ρ ^ ⌊t⌋₊ := by
-  refine positiveRecurrence_of_endotactic net κ (data κ) (fun a b => reachPos κ a b)
+  refine positiveRecurrence_of_linearLyapunovData net κ (data κ) (fun a b => reachPos κ a b)
 
 end EndotacticBirthDeath
 end Examples

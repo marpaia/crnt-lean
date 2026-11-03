@@ -99,7 +99,16 @@ open Set Filter
 
 variable {S : Type} [DecidableEq S] [Fintype S]
 
-/-! ## A general affine field -/
+/-!
+# Conditional degree/parity consequences and restricted total-degree examples
+
+The finite signed-count arguments use the displayed boundary, regularity,
+finiteness and total-degree inputs. Explicit affine/rank-restricted computations
+are available where stated. Full openness alone does not force odd parity; the
+general total-degree theorem under dissipativity and boundary conditions remains
+incomplete. See `ParityOfSteadyStates` and `test.SemanticCorrespondence`.
+An earlier parity attribution with no verifiable source has been removed.
+-/
 
 /-- **A general affine field with an invertible linear part.** -/
 structure AffineFieldGeneral (N : Network S) (κ : N.RateConstants) where
@@ -542,12 +551,7 @@ theorem fullyOpen_exists_positiveSteadyState_of_affineLinear
     funext s
     exact hy s
 
-/-- **The parity theorem in the general affine case.**  The number of positive steady states in
-the class of `c` is odd: the class degree is the sign of the determinant of the linear part at
-infinity, which is `±1`, and the "no boundary steady states" hypothesis of Šošić–Sibuya is
-automatic for fully open networks.
-
-This is leaf **S19** in the general affine case, with the total-degree hypothesis discharged. -/
+/-- Conditional degree/parity consequence under the hypotheses displayed below. -/
 theorem fullyOpen_card_positiveSteadyStates_odd_of_affineLinear
     (N : Network S) (κ : N.fullyOpen.RateConstants) (c : Concentration S)
     (h : AffineFieldGeneral N.fullyOpen κ)

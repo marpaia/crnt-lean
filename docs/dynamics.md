@@ -1,5 +1,7 @@
 # Kinetics and dynamics
 
+The increasing-operator convergence result is a LaSalle/uniqueness theorem, not Hirsch generic convergence. Mass-action Hopf data give a periodic branch of the cubic truncation, with original-field transfer incomplete. Graph-transform fixed points give discrete invariance; all-time invariance uses time-indexed operators or explicit flows. General Fenichel persistence remains incomplete.
+
 This document describes the second layer of the `CRNT` library: the passage from the discrete
 reaction-network structure of [`foundations.md`](foundations.md) to continuous dynamics. A
 network plus a rate law gives a vector field `ẋ = f(x)`; this layer builds that field, factors it
@@ -286,24 +288,23 @@ under a contraction-rate bound, Lipschitz continuity and continuity (`manifoldMa
 
 **Graph-transform persistence.** `GraphTransform` builds the Lyapunov–Perron graph transform on
 bounded sections `Y →ᵇ E`: `GraphTransformData` packages the supremum-metric contraction whose
-Banach fixed point `manifold = M_ε` is the persisted manifold, with `O(ε)` `C⁰`-closeness to the
+Banach fixed point `manifold` has a fixed-point distance bound from the
 base section (`manifold_dist_base_le`) and the spectral-gap constructor `ofSpectralGap`.
 `FenichelPersistence` ties a fixed-point section of the flow-then-regraph operator
-(`CoupledFlowGraphTransform`) to forward-invariance of its graph under the coupled semiflow
-(`fenichel_persistence`). Two concrete instances discharge the operator-from-flow hypothesis from an
+(`CoupledFlowGraphTransform`) to discrete forward-invariance of its graph under the sampled coupled semiflow
+(`graphTransform_discrete_invariant_and_dist_le`). Two concrete instances discharge the operator-from-flow hypothesis from an
 explicit field:
 
 - `FenichelPersistenceConcrete`: the bounded constant fast-drift field `ż = v` whose flow comes from
   `ODE.exists_flow`; its persisted manifold is the zero section, exact only at vanishing drift
-  (`fenichel_persistence_constDrift`).
+  (`graphTransform_discrete_invariant_and_dist_le_constDrift`).
 - `FenichelPersistenceContracting`: the contracting fast fibre `ż = −rate·(z − c)` whose
   closed-form exponential flow `(y, z) ↦ (y, c + e^{−rate·t}·(z − c))` is built directly as a
   `Flow`; the graph transform is an honest contraction with factor `e^{−rate·τ} < 1` and the
-  persisted manifold is the genuine attracting fibre `z = c`, a non-trivial moving manifold
-  (`fenichel_persistence_contracting`).
+  persisted manifold is the genuine attracting fibre `z = c`, an explicit constant graph
+  (`graphTransform_discrete_invariant_and_dist_le_contracting`).
 
-The smoothness/existence of `h` from data via a parametrised implicit-function theorem remains out of
-scope.
+For all-time invariance, `FlowGraphTransformFamily.op t` carries a graph at time `t`; a graph fixed by every operator is invariant. The contracting example proves the time-zero operator is identity and the time-one operator is not identity. General perturbed NHIM persistence remains incomplete.
 
 **Michaelis–Menten** instantiates this machinery on the enzyme system `E + S ⇌ ES → E + P`:
 

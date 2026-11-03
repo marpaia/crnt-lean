@@ -53,12 +53,17 @@ theorem birthGenerable_of_zeroSourceReaction (N : Network S)
 theorem zero_not_absorbing_of_birthExhaustive (N : Network S) [Nonempty S]
     (hbirth : N.BirthExhaustive) : ¬ N.IsAbsorbingCount (fun _ => 0) := by
   have exists_zeroSource_of_birthGenerable :
-      ∀ {s : S}, N.BirthGenerable s → ∃ r : N.R, (N.reaction r).source = 0 := by
+      ∀ {s : S}, N.BirthGenerable s →
+        ∃ r : N.R, (N.reaction r).source = 0 ∧ (N.reaction r).target ≠ 0 := by
     intro s hs
     induction hs with
     | ofReaction r s htgt hsrc ih =>
         by_cases hz : (N.reaction r).source = 0
-        · exact ⟨r, hz⟩
+        · refine ⟨r, hz, ?_⟩
+          intro ht
+          have heq := congrFun ht s
+          change (N.reaction r).target s = 0 at heq
+          omega
         · have hex : ∃ t : S, 0 < (N.reaction r).source t := by
             by_contra hnone
             push_neg at hnone
@@ -70,8 +75,8 @@ theorem zero_not_absorbing_of_birthExhaustive (N : Network S) [Nonempty S]
           obtain ⟨t, ht⟩ := hex
           exact ih t ht
   let s : S := Classical.choice inferInstance
-  obtain ⟨r, hr⟩ := exists_zeroSource_of_birthGenerable (hbirth s)
-  exact N.zero_not_absorbing_of_zeroSourceReaction hr
+  obtain ⟨r, hr, ht⟩ := exists_zeroSource_of_birthGenerable (hbirth s)
+  exact N.zero_not_absorbing_of_zeroSourceReaction hr ht
 
 /-- Whole-orthant stochastic irreducibility. -/
 def CountLatticeIrreducible (N : Network S) : Prop :=
